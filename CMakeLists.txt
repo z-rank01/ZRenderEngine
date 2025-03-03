@@ -12,7 +12,7 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 # 设置 vcpkg 清单模式
-# set(VCPKG_MANIFEST_MODE ON)
+set(VCPKG_MANIFEST_MODE ON)
 
 # 查找依赖
 find_package(Vulkan REQUIRED)
