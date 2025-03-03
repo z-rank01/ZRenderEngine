@@ -35,9 +35,29 @@
         "group": "build"                  // 属于 "build" 组（非默认）
       },
       {
-        "label": "vcpkg: initialize",     // 初始化 vcpkg 任务
+        "label": "vcpkg: initialize", // 初始化 vcpkg 任务
         "type": "shell",
-        "command": "${workspaceFolder}/vcpkg/bootstrap-vcpkg.${input:bootstrapScript}",
+        "command": "git clone git@github.com:microsoft/vcpkg.git && ${workspaceFolder}/vcpkg/bootstrap-vcpkg.bat",
+        "options": {
+          "shell": {
+            "executable": "cmd.exe",
+            "args": ["/d", "/c"]
+          }
+        },
+        "group": "none",
+        "problemMatcher": []
+      },
+      {
+        "label": "vcpkg: initialize baseline",    // 初始化 vcpkg 基准线任务 
+        "type": "shell", 
+        "command": "${workspaceFolder}/vcpkg/vcpkg x-update-baseline --add-initial-baseline", 
+        "options": {}, 
+        "group": "none"
+      }, 
+      {
+        "label": "vcpkg: update baseline",        // 更新 vcpkg 基准线任务
+        "type": "shell",
+        "command": "${workspaceFolder}/vcpkg/vcpkg x-update-baseline",
         "options": {
           "cwd": "${workspaceFolder}"
         },
@@ -68,21 +88,21 @@
         "group": "none",
         "problemMatcher": []
       },
-      // {
-      //   "label": "vcpkg: install dependencies (manifest)",  // 清单模式安装依赖库任务
-      //   "type": "shell",
-      //   "command": "${workspaceFolder}/vcpkg/vcpkg",
-      //   "args": [
-      //     "install",
-      //     "--triplet",
-      //     "${input:vcpkgTriplet}"
-      //   ],
-      //   "options": {
-      //     "cwd": "${workspaceFolder}"
-      //   },
-      //   "group": "none",
-      //   "problemMatcher": []
-      // }
+      {
+        "label": "vcpkg: install dependencies (manifest)",  // 清单模式安装依赖库任务
+        "type": "shell",
+        "command": "${workspaceFolder}/vcpkg/vcpkg",
+        "args": [
+          "install",
+          "--triplet",
+          "${input:vcpkgTriplet}"
+        ],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "group": "none",
+        "problemMatcher": []
+      }
     ],
     "inputs": [                           // 定义动态输入参数
       {

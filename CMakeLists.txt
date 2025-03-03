@@ -18,12 +18,12 @@ set(VCPKG_MANIFEST_MODE ON)
 find_package(Vulkan REQUIRED)
 find_package(vk-bootstrap CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
-find_package(SDL2 CONFIG REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(fastgltf CONFIG REQUIRED)
-# STB 是仅头文件库，通常不需要 find_package
+find_package(Stb REQUIRED)
 
 # 添加可执行文件
 add_executable(Test src/test.cpp)
@@ -34,7 +34,7 @@ target_link_libraries(Test
     Vulkan::Vulkan
     vk-bootstrap::vk-bootstrap
     GPUOpen::VulkanMemoryAllocator
-    SDL2::SDL2 SDL2::SDL2main
+    SDL3::SDL3
     glm::glm
     fmt::fmt
     imgui::imgui

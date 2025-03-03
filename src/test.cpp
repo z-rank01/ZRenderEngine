@@ -14,7 +14,7 @@ int main() {
     std::cout << "Hello, World!" << '\n';
 
     std::cout << "\nChecking CMake version:" << '\n';
-    std::system("\tcmake --version");
+    std::system("cmake --version");
 
     std::cout << "\nPackages has been installed." << '\n';
 

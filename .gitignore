@@ -8,6 +8,7 @@
 
 # vcpkg
 /vcpkg/
+/vcpkg_installed/
 
 # 系统文件
 *.user
