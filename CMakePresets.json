@@ -1,0 +1,55 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON", 
+        "CMAKE_CXX_STANDARD": "17", 
+        "CMAKE_MAKE_PROGRAM": "C:/Program Files/Ninja/ninja.exe"
+      }
+    },
+    {
+      "name": "windows-clang",
+      "inherits": "base",
+      "displayName": "Windows Clang",
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-windows-clang"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang.exe",
+        "CMAKE_CXX_COMPILER": "C:/Program Files/LLVM/bin/clang++.exe", 
+        "CMAKE_RC_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe"
+      }
+    },
+    {
+      "name": "macos-clang",
+      "inherits": "base",
+      "displayName": "macOS Clang",
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-osx"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/opt/homebrew/opt/llvm/bin/clang",
+        "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++"
+      }
+    },
+    {
+      "name": "linux-clang",
+      "inherits": "base",
+      "displayName": "Linux Clang",
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-linux"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/usr/bin/clang",
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++"
+      }
+    }
+  ]
+}

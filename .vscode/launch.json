@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "type": "lldb",
+        "request": "launch",
+        "name": "Launch Program",
+        "program": "${workspaceFolder}/build/${input:executableName}.exe",
+        "args": [],
+        "cwd": "${workspaceFolder}",
+        "stopAtEntry": false
+      }
+    ],
+    "inputs": [
+      {
+        "type": "promptString",
+        "id": "executableName",
+        "description": "Enter executable name (without .exe)",
+        "default": "main"
+      }
+    ]
+  }

@@ -1,0 +1,17 @@
+{
+    "cmake.configureOnOpen": true,
+    "cmake.configureSettings": {
+        "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    },
+    // 禁用 VS Code 默认的 C++ 插件（避免与 Clangd 冲突）
+    "C_Cpp.intelliSenseEngine": "disabled",
+    // 配置 Clangd
+    "clangd.arguments": [
+        "--background-index",
+        "--clang-tidy",
+        "--query-driver=clang++", 
+        "--header-insertion=iwyu",
+        "--completion-style=detailed",
+        "--pretty"
+    ]
+}
