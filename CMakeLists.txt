@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Test LANGUAGES CXX)
+project(VulkanEngine LANGUAGES CXX)
 
 # 启用 C++20 标准
 set(CMAKE_CXX_STANDARD 20)
@@ -26,27 +26,27 @@ find_package(fastgltf CONFIG REQUIRED)
 find_package(Stb REQUIRED)
 
 # 添加可执行文件
-add_executable(Test src/test.cpp)
+add_executable(VulkanEngine src/main.cpp)
 
 # 链接库
-target_link_libraries(Test
+target_link_libraries(VulkanEngine
   PRIVATE
     Vulkan::Vulkan
     vk-bootstrap::vk-bootstrap
     GPUOpen::VulkanMemoryAllocator
     SDL3::SDL3
     glm::glm
-    fmt::fmt
+    fmt::fmt-header-only
     imgui::imgui
     fastgltf::fastgltf
 )
 
 # 包含目录
-target_include_directories(Test
+target_include_directories(VulkanEngine
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/installed/${VCPKG_TARGET_TRIPLET}/include # STB 头文件路径
 )
 
 # 定义宏以使用 Vulkan 动态加载
-target_compile_definitions(Test PRIVATE VK_NO_PROTOTYPES)
+target_compile_definitions(VulkanEngine PRIVATE VK_NO_PROTOTYPES)
