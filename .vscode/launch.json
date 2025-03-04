@@ -1,26 +1,25 @@
 {
-    "version": "0.2.0",
-    "configurations": [
-      {
-        "type": "lldb",
-        "request": "launch",
-        "name": "Launch Program",
-        "program": "${workspaceFolder}/build/${input:executableName}.exe",
-        "args": [],
-        "cwd": "${workspaceFolder}/build",
-        "stopOnEntry": true,
-        "console": "integratedTerminal",
-        "env": {
-          "PATH": "${env:PATH};${workspaceFolder}/build"
-        }
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "cppvsdbg",
+      "request": "launch",
+      "name": "Launch Program",
+      "program": "${workspaceFolder}/build/${input:executableName}.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/build",
+      "stopOnEntry": true,
+      "env": {
+        "PATH": "${env:PATH};${workspaceFolder}/build"
       }
-    ],
-    "inputs": [
-      {
-        "type": "promptString",
-        "id": "executableName",
-        "description": "Enter executable name (without .exe)",
-        "default": "VulkanEngine"
-      }
-    ]
-  }
+    }
+  ],
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "executableName",
+      "description": "Enter executable name (without .exe)",
+      "default": "VulkanEngine"
+    }
+  ]
+}

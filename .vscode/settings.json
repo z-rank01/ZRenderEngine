@@ -9,9 +9,14 @@
     "clangd.arguments": [
         "--background-index",
         "--clang-tidy",
-        "--query-driver=clang++", 
+        "--query-driver=clang++",
         "--header-insertion=iwyu",
         "--completion-style=detailed",
         "--pretty"
-    ]
+    ],
+    "editor.formatOnSave": true,
+    "clang-format.executable": "C:/Program Files/LLVM/bin/clang-format.exe",
+    "lldb.showDisassembly": "auto",
+    "lldb.dereferencePointers": true,
+    "lldb.consoleMode": "commands", 
 }

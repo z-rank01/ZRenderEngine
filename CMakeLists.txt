@@ -5,6 +5,19 @@ project(VulkanEngine LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 配置 clang-tidy
+find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+if(CLANG_TIDY_EXE)
+    set(CMAKE_CXX_CLANG_TIDY 
+        ${CLANG_TIDY_EXE};
+        -extra-arg=-Wno-unknown-warning-option;
+        -p=${CMAKE_BINARY_DIR}
+    )
+    message(STATUS "Using clang-tidy: ${CLANG_TIDY_EXE}")
+else()
+    message(WARNING "clang-tidy not found!")
+endif()
+
 # 设置 vcpkg 工具链文件（如果未通过命令行指定）
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
   set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
@@ -25,8 +38,20 @@ find_package(imgui CONFIG REQUIRED)
 find_package(fastgltf CONFIG REQUIRED)
 find_package(Stb REQUIRED)
 
+# 设置源文件
+set(SOURCES
+    src/main.cpp
+    src/vulkan_engine.cpp
+)
+
+# 设置头文件
+set(HEADERS
+    src/vulkan_engine.h
+    src/vulkan_structure.h
+)
+
 # 添加可执行文件
-add_executable(VulkanEngine src/main.cpp)
+add_executable(VulkanEngine ${SOURCES} ${HEADERS})
 
 # 链接库
 target_link_libraries(VulkanEngine
@@ -50,3 +75,10 @@ target_include_directories(VulkanEngine
 
 # 定义宏以使用 Vulkan 动态加载
 target_compile_definitions(VulkanEngine PRIVATE VK_NO_PROTOTYPES)
+
+# 设置 IDE 中的源文件分组
+source_group(
+    TREE ${CMAKE_CURRENT_SOURCE_DIR}
+    PREFIX ""
+    FILES ${SOURCES} ${HEADERS}
+)
