@@ -1,6 +1,8 @@
 #pragma once
 
 #include "vulkan_structure.h"
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 
 enum class EWindowState : std::uint8_t
 {
@@ -46,11 +48,12 @@ public:
     void Draw();
     void Shutdown();
 
-    static auto GetInstance() -> VulkanEngine*;
+    static VulkanEngine& GetInstance();
 
 private:
     EWindowState engineState_;
     ERenderState renderState_;
     SEngineConfig engineConfig_;
-    struct SDL_Window* window_;
+    SDL_Window* window_;
+    SDL_Renderer* renderer_;
 };

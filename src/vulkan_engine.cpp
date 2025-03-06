@@ -1,16 +1,16 @@
 #pragma once
 
 #include "vulkan_engine.h"
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_vulkan.h>
+// #include <SDL3/SDL.h>
+// #include <SDL3/SDL_vulkan.h>
 #include <chrono>
 #include <thread>
 
-static VulkanEngine* instance;
+VulkanEngine* instance = nullptr;
 
-VulkanEngine* VulkanEngine::GetInstance()
+VulkanEngine& VulkanEngine::GetInstance()
 {
-    return instance;
+    return *instance;
 }
 
 VulkanEngine::VulkanEngine()
@@ -38,13 +38,17 @@ void VulkanEngine::Initialize()
 
     // We initialize SDL and create a window with it.
     SDL_Init(SDL_INIT_VIDEO);
+    // auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN);
+    auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE);
+    window_ = SDL_CreateWindow("Vulkan Engine", engineConfig_.window.width, engineConfig_.window.height, window_flags);
+    renderer_ = SDL_CreateRenderer(window_, "Vulkan Renderer");
 
-    auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN);
+    // show window
+    SDL_ShowWindow(window_);
 
-    window_ = SDL_CreateWindow(
-        "Vulkan Engine", engineConfig_.window.width, engineConfig_.window.height, window_flags);
-
+    // Initialize the states
     engineState_ = EWindowState::Initialized;
+    renderState_ = ERenderState::True;
 }
 
 // Main loop
@@ -58,7 +62,7 @@ void VulkanEngine::Run()
     while (engineState_ != EWindowState::Stopped)
     {
         // Handle events on queue
-        while (static_cast<int>(SDL_PollEvent(&event)) != 0)
+        while (SDL_PollEvent(&event))
         {
             // close the window when user alt-f4s or clicks the X button
             if (event.type == SDL_EVENT_QUIT)
@@ -70,11 +74,11 @@ void VulkanEngine::Run()
             {
                 if (event.window.type == SDL_EVENT_WINDOW_MINIMIZED)
                 {
-                    engineState_ = EWindowState::Stopped;
+                    renderState_ = ERenderState::False;
                 }
                 if (event.window.type == SDL_EVENT_WINDOW_RESTORED)
                 {
-                    engineState_ = EWindowState::Running;
+                    renderState_ = ERenderState::True;
                 }
             }
         }
@@ -95,12 +99,16 @@ void VulkanEngine::Run()
 // Main render loop
 void VulkanEngine::Draw()
 {
-    
+    SDL_RenderClear(renderer_);
+    // TODO: Add your rendering code here
+    SDL_RenderTexture(renderer_, nullptr, 0, 0);
+    SDL_RenderPresent(renderer_);  // 显示渲染的内容
 }
 
 // Shutdown the engine
 void VulkanEngine::Shutdown()
 {
+    SDL_DestroyRenderer(renderer_);
     SDL_DestroyWindow(window_);
     SDL_Quit();
 
