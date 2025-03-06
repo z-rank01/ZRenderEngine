@@ -15,13 +15,13 @@ VulkanEngine* VulkanEngine::GetInstance()
 
 VulkanEngine::VulkanEngine()
 {
-    engineState_ = EEngineState::Stopped;
+    engineState_ = EWindowState::Stopped;
 }
 
 VulkanEngine::VulkanEngine(const SEngineConfig& config)
 {
     engineConfig_ = config;
-    engineState_ = EEngineState::Stopped;
+    engineState_ = EWindowState::Stopped;
 }
 
 VulkanEngine::~VulkanEngine()
@@ -41,21 +41,21 @@ void VulkanEngine::Initialize()
 
     auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN);
 
-    window_ = SDL_CreateWindow(
+    window = SDL_CreateWindow(
         "Vulkan Engine", engineConfig_.window.width, engineConfig_.window.height, window_flags);
 
-    engineState_ = EEngineState::Initialized;
+    engineState_ = EWindowState::Initialized;
 }
 
 // Main loop
 void VulkanEngine::Run()
 {
-    engineState_ = EEngineState::Running;
+    engineState_ = EWindowState::Running;
 
     SDL_Event event;
 
     // main loop
-    while (engineState_ == EEngineState::Running)
+    while (engineState_ != EWindowState::Stopped)
     {
         // Handle events on queue
         while (static_cast<int>(SDL_PollEvent(&event)) != 0)
@@ -63,28 +63,27 @@ void VulkanEngine::Run()
             // close the window when user alt-f4s or clicks the X button
             if (event.type == SDL_EVENT_QUIT)
             {
-                engineState_ = EEngineState::Stopped;
+                engineState_ = EWindowState::Stopped;
             }
 
             if (event.window.type == SDL_EVENT_WINDOW_SHOWN)
             {
                 if (event.window.type == SDL_EVENT_WINDOW_MINIMIZED)
                 {
-                    engineState_ = EEngineState::Stopped;
+                    engineState_ = EWindowState::Stopped;
                 }
                 if (event.window.type == SDL_EVENT_WINDOW_RESTORED)
                 {
-                    engineState_ = EEngineState::Running;
+                    engineState_ = EWindowState::Running;
                 }
             }
         }
 
         // do not draw if we are minimized
-        if (engineState_ == EEngineState::Stopped)
+        if (renderState_ == ERenderState::False)
         {
-            // throttle the speed to avoid the endless spinning
-            const auto sleep_time = std::chrono::milliseconds(100);
-            std::this_thread::sleep_for(sleep_time);
+            // throttle the speed to avoid the endless spinning 
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
 
@@ -95,20 +94,13 @@ void VulkanEngine::Run()
 // Main render loop
 void VulkanEngine::Draw()
 {
-    engineState_ = EEngineState::Drawing;
+    
 }
 
 // Shutdown the engine
 void VulkanEngine::Shutdown()
 {
-    if (engineState_ == EEngineState::Stopped)
-    {
-        return;
-    }
-
-    engineState_ = EEngineState::Stopped;
-
-    SDL_DestroyWindow(window_);
+    SDL_DestroyWindow(window);
     SDL_Quit();
 
     instance = nullptr;
