@@ -2,5 +2,10 @@
     "cmake.configureOnOpen": true,
     "cmake.configureSettings": {
         "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    },
+    "C_Cpp.exclusionPolicy": "checkFolders",
+    "C_Cpp.files.exclude": {
+        "${workspaceFolder}/vcpkg/**": true,
+        "${workspaceFolder}/vcpkg_installed/**": true
     }
 }

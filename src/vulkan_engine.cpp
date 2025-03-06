@@ -41,7 +41,7 @@ void VulkanEngine::Initialize()
 
     auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN);
 
-    window = SDL_CreateWindow(
+    window_ = SDL_CreateWindow(
         "Vulkan Engine", engineConfig_.window.width, engineConfig_.window.height, window_flags);
 
     engineState_ = EWindowState::Initialized;
@@ -83,7 +83,8 @@ void VulkanEngine::Run()
         if (renderState_ == ERenderState::False)
         {
             // throttle the speed to avoid the endless spinning 
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            constexpr auto sleep_duration_ms = 100;
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration_ms));
             continue;
         }
 
@@ -100,7 +101,7 @@ void VulkanEngine::Draw()
 // Shutdown the engine
 void VulkanEngine::Shutdown()
 {
-    SDL_DestroyWindow(window);
+    SDL_DestroyWindow(window_);
     SDL_Quit();
 
     instance = nullptr;

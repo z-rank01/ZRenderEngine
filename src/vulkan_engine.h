@@ -2,14 +2,14 @@
 
 #include "vulkan_structure.h"
 
-enum class EWindowState
+enum class EWindowState : std::uint8_t
 {
     Initialized, // Engine is initialized but not running
     Running,     // Engine is running
     Stopped      // Engine is stopped
 };
 
-enum class ERenderState
+enum class ERenderState : std::uint8_t
 {
     True,   // Render is enabled 
     False   // Render is disabled
@@ -52,5 +52,5 @@ private:
     EWindowState engineState_;
     ERenderState renderState_;
     SEngineConfig engineConfig_;
-    struct SDL_Window* window;
+    struct SDL_Window* window_;
 };

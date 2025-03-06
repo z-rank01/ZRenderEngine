@@ -109,8 +109,8 @@
         "id": "cmakePreset",              // 输入 ID（与任务中的 ${input:cmakePreset} 对应）
         "type": "pickString",             // 输入类型：下拉选择
         "description": "Select CMake Preset:",
-        "options": ["windows-clang", "linux-clang", "macos-clang"], // 可选项
-        "default": "windows-clang"        // 默认值
+        "options": ["windows-msvc", "windows-clang", "linux-clang", "macos-clang"], // 可选项
+        "default": "windows-msvc"         // 默认值
       },
       {
         "id": "buildType",                // 输入 ID（构建类型）
