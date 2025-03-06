@@ -5,19 +5,6 @@ project(VulkanEngine LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 配置 clang-tidy
-find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
-if(CLANG_TIDY_EXE)
-    set(CMAKE_CXX_CLANG_TIDY 
-        ${CLANG_TIDY_EXE};
-        -extra-arg=-Wno-unknown-warning-option;
-        -p=${CMAKE_BINARY_DIR}
-    )
-    message(STATUS "Using clang-tidy: ${CLANG_TIDY_EXE}")
-else()
-    message(WARNING "clang-tidy not found!")
-endif()
-
 # 设置 vcpkg 工具链文件（如果未通过命令行指定）
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
   set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"

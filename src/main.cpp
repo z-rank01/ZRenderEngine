@@ -1,6 +1,7 @@
 #include "vulkan_engine.h"
+#include <iostream>
 
-auto main() -> int
+int main()
 {
     // window config
     SWindowConfig window_config;
@@ -23,6 +24,9 @@ auto main() -> int
     engine.Initialize();
     engine.Run();
     engine.Shutdown();
+
+    std::cout << "Hello, World!" << '\n';
+    std::cout << "This is a Vulkan Engine" << '\n';
 
     return 0;
 }
