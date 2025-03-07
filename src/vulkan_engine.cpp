@@ -38,12 +38,12 @@ void VulkanEngine::Initialize()
 
     // We initialize SDL and create a window with it.
     SDL_Init(SDL_INIT_VIDEO);
-    // auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN);
+    // auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN);    // failed when there is no vulkan driver
     auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE);
     window_ = SDL_CreateWindow("Vulkan Engine", engineConfig_.window.width, engineConfig_.window.height, window_flags);
     renderer_ = SDL_CreateRenderer(window_, "Vulkan Renderer");
 
-    // show window
+    // show window (has implicitly created after SDL_CreateWindow)
     SDL_ShowWindow(window_);
 
     // Initialize the states

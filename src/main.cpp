@@ -3,6 +3,9 @@
 
 int main()
 {
+    std::cout << "Hello, World!" << '\n';
+    std::cout << "This is a Vulkan Engine" << '\n';
+
     // window config
     SWindowConfig window_config;
     const auto window_width = 800;
@@ -25,8 +28,7 @@ int main()
     engine.Run();
     engine.Shutdown();
 
-    std::cout << "Hello, World!" << '\n';
-    std::cout << "This is a Vulkan Engine" << '\n';
+    std::cout << "Goodbye" << '\n';
 
     return 0;
 }
