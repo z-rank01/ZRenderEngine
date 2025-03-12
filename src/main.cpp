@@ -24,9 +24,7 @@ int main()
 
     // main loop
     VulkanEngine engine(config);
-    engine.Initialize();
     engine.Run();
-    engine.Shutdown();
 
     std::cout << "Goodbye" << '\n';
 

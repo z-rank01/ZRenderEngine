@@ -1,5 +1,6 @@
 #pragma once
 
+#include "initialization/vulkan_instance.h"
 #include "vulkan_structure.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -39,21 +40,29 @@ struct SEngineConfig
 class VulkanEngine
 {
 public:
-    VulkanEngine();
+    VulkanEngine() = delete;
     VulkanEngine(const SEngineConfig& config);
     ~VulkanEngine();
-
-    void Initialize();
+    
     void Run();
     void Draw();
-    void Shutdown();
 
     static VulkanEngine& GetInstance();
 
 private:
-    EWindowState engineState_;
-    ERenderState renderState_;
-    SEngineConfig engineConfig_;
+    // engine members
+    EWindowState engine_state_;
+    ERenderState render_state_;
+    SEngineConfig engine_config_;
+
+    // SDL members
     SDL_Window* window_;
     SDL_Renderer* renderer_;
+
+    // vulkan members
+    VkInstance vkInstance_;
+    
+    void InitializeSDL();
+    void InitializeVulkan();
+    void Shutdown();
 };

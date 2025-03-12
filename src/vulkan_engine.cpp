@@ -1,8 +1,6 @@
 #pragma once
 
 #include "vulkan_engine.h"
-// #include <SDL3/SDL.h>
-// #include <SDL3/SDL_vulkan.h>
 #include <chrono>
 #include <thread>
 
@@ -13,15 +11,21 @@ VulkanEngine& VulkanEngine::GetInstance()
     return *instance;
 }
 
-VulkanEngine::VulkanEngine()
-{
-    engineState_ = EWindowState::Stopped;
-}
-
 VulkanEngine::VulkanEngine(const SEngineConfig& config)
 {
-    engineConfig_ = config;
-    engineState_ = EWindowState::Stopped;
+    // only one engine initialization is allowed with the application.
+    assert(instance == nullptr);
+    instance = this;
+
+    // 
+    engine_config_ = config;
+    
+    // Initialize the states
+    engine_state_ = EWindowState::Initialized;
+    render_state_ = ERenderState::True;
+    
+    InitializeSDL();
+    InitializeVulkan();
 }
 
 VulkanEngine::~VulkanEngine()
@@ -30,36 +34,50 @@ VulkanEngine::~VulkanEngine()
 }
 
 // Initialize the engine
-void VulkanEngine::Initialize()
+void VulkanEngine::InitializeSDL()
 {
-    // only one engine initialization is allowed with the application.
-    assert(instance == nullptr);
-    instance = this;
-
     // We initialize SDL and create a window with it.
     SDL_Init(SDL_INIT_VIDEO);
     // auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN);    // failed when there is no vulkan driver
     auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE);
-    window_ = SDL_CreateWindow("Vulkan Engine", engineConfig_.window.width, engineConfig_.window.height, window_flags);
+    window_ = SDL_CreateWindow("Vulkan Engine", engine_config_.window.width, engine_config_.window.height, window_flags);
     renderer_ = SDL_CreateRenderer(window_, "Vulkan Renderer");
 
     // show window (has implicitly created after SDL_CreateWindow)
     SDL_ShowWindow(window_);
+}
 
-    // Initialize the states
-    engineState_ = EWindowState::Initialized;
-    renderState_ = ERenderState::True;
+void VulkanEngine::InitializeVulkan()
+{
+    // TODO: Use builder pattern to create VulkanInstanceHelper
+    SVulkanInstanceConfig instance_config;
+    instance_config.application_name = "Vulkan Engine";
+    instance_config.application_version[0] = 1;
+    instance_config.application_version[1] = 0;
+    instance_config.application_version[2] = 0;
+    instance_config.engine_name = "Vulkan Engine";
+    instance_config.engine_version[0] = 1;
+    instance_config.engine_version[1] = 0;
+    instance_config.engine_version[2] = 0;
+    instance_config.api_version[0] = 1;
+    instance_config.api_version[1] = 3;
+    instance_config.api_version[2] = 0;
+    instance_config.validation_layers = { "VK_LAYER_KHRONOS_validation" };
+    instance_config.extensions = { VK_KHR_SURFACE_EXTENSION_NAME };
+
+    VulkanInstanceHelper vkInstanceHelper = VulkanInstanceHelper(instance_config);
+    vkInstanceHelper.CreateVulkanInstance(vkInstance_);
 }
 
 // Main loop
 void VulkanEngine::Run()
 {
-    engineState_ = EWindowState::Running;
+    engine_state_ = EWindowState::Running;
 
     SDL_Event event;
 
     // main loop
-    while (engineState_ != EWindowState::Stopped)
+    while (engine_state_ != EWindowState::Stopped)
     {
         // Handle events on queue
         while (SDL_PollEvent(&event))
@@ -67,24 +85,24 @@ void VulkanEngine::Run()
             // close the window when user alt-f4s or clicks the X button
             if (event.type == SDL_EVENT_QUIT)
             {
-                engineState_ = EWindowState::Stopped;
+                engine_state_ = EWindowState::Stopped;
             }
 
             if (event.window.type == SDL_EVENT_WINDOW_SHOWN)
             {
                 if (event.window.type == SDL_EVENT_WINDOW_MINIMIZED)
                 {
-                    renderState_ = ERenderState::False;
+                    render_state_ = ERenderState::False;
                 }
                 if (event.window.type == SDL_EVENT_WINDOW_RESTORED)
                 {
-                    renderState_ = ERenderState::True;
+                    render_state_ = ERenderState::True;
                 }
             }
         }
 
         // do not draw if we are minimized
-        if (renderState_ == ERenderState::False)
+        if (render_state_ == ERenderState::False)
         {
             // throttle the speed to avoid the endless spinning 
             constexpr auto sleep_duration_ms = 100;
