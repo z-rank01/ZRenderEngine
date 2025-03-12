@@ -1,9 +1,9 @@
 #pragma once
 
-#include "vulkan_logger.h"
+#include "logger.h"
 
 // 全局日志对象
-extern VulkanLogger kLogger;
+extern Logger kLogger;
 
 // VkResult 到字符串的宏定义
 #define VK_RESULT_STRING(result) \
@@ -16,35 +16,35 @@ extern VulkanLogger kLogger;
 /// @brief log message with target level
 /// @param level level of the log message
 /// @param message message content
-void VulkanLogger::Log(ELogLevel level, const std::string& message)
+void Logger::Log(ELogLevel level, const std::string& message)
 {
     std::cout << '[' << LogLevelToString(level) << "] " << message << std::endl;
 }
 
 /// @brief log message with debug level
 /// @param message message content
-void VulkanLogger::LogDebug(const std::string& message)
+void Logger::LogDebug(const std::string& message)
 {
     Log(ELogLevel::kDebug, message);
 }
 
 /// @brief log message with infomation level
 /// @param message message content
-void VulkanLogger::LogInfo(const std::string& message)
+void Logger::LogInfo(const std::string& message)
 {
     Log(ELogLevel::kInfo, message);
 }
 
 /// @brief log message with warning level
 /// @param message message content
-void VulkanLogger::LogWarning(const std::string& message)
+void Logger::LogWarning(const std::string& message)
 {
     Log(ELogLevel::kWarning, message);
 }
 
 /// @brief log message with error level
 /// @param message message content
-void VulkanLogger::LogError(const std::string& message)
+void Logger::LogError(const std::string& message)
 {
     Log(ELogLevel::kError, message);
 }
@@ -54,7 +54,7 @@ void VulkanLogger::LogError(const std::string& message)
 /// @param messageOnFail message content on failure
 /// @param level level of the log message (default is error)
 /// @return true if the result is success, otherwise false
-bool VulkanLogger::LogWithResult(VkResult result, const std::string& messageOnFail, const std::string& messageOnSuccess)
+bool Logger::LogWithVkResult(VkResult result, const std::string& messageOnFail, const std::string& messageOnSuccess)
 {
     if (IsVulkanResultSuccess(result))
     {
@@ -71,7 +71,7 @@ bool VulkanLogger::LogWithResult(VkResult result, const std::string& messageOnFa
 /// @brief convert Vulkan API result to human-readable string
 /// @param result Vulkan API result code
 /// @return human-readable string of the result
-std::string VulkanLogger::VulkanResultToString(VkResult result)
+std::string Logger::VulkanResultToString(VkResult result)
 {
     switch (result)
     {
@@ -121,7 +121,7 @@ std::string VulkanLogger::VulkanResultToString(VkResult result)
 /// @brief check if the Vulkan API result is success
 /// @param result Vulkan API result code
 /// @return true if the result is success, otherwise false
-bool VulkanLogger::IsVulkanResultSuccess(VkResult result)
+bool Logger::IsVulkanResultSuccess(VkResult result)
 {
     return result == VK_SUCCESS;
 }
@@ -129,7 +129,7 @@ bool VulkanLogger::IsVulkanResultSuccess(VkResult result)
 /// @brief convert log level enum to string
 /// @param level log level enum
 /// @return string of the log level
-std::string VulkanLogger::LogLevelToString(ELogLevel level)
+std::string Logger::LogLevelToString(ELogLevel level)
 {
     switch (level)
     {

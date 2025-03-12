@@ -1,6 +1,8 @@
 add_library(vulkan_initialization STATIC
     vulkan_instance.cpp
     vulkan_instance.h
+    vulkan_device.cpp
+    vulkan_device.h
 )
 
 # 设置头文件包含目录

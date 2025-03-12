@@ -26,7 +26,7 @@ find_package(fastgltf CONFIG REQUIRED)
 find_package(Stb REQUIRED)
 
 # 添加子目录
-add_subdirectory(src/logger)
+add_subdirectory(src/utility)
 add_subdirectory(src/initialization)
 
 # 设置源文件
@@ -55,7 +55,7 @@ target_link_libraries(VulkanEngine
     fmt::fmt-header-only
     imgui::imgui
     fastgltf::fastgltf
-    vulkan_logger  # 添加 vulkan_logger 库
+    utility  # 添加 utility 库
     vulkan_initialization  # 添加 vulkan_initialization 库
 )
 

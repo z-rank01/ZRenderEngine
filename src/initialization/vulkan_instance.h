@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include "logger/vulkan_logger.h"
+#include "utility/logger.h"
 
 struct SVulkanInstanceConfig
 {
@@ -27,14 +27,13 @@ class VulkanInstanceHelper
 {
 public:
     VulkanInstanceHelper() = delete;
-    VulkanInstanceHelper(const SVulkanInstanceConfig& config);
+    VulkanInstanceHelper(SVulkanInstanceConfig config);
     ~VulkanInstanceHelper();
 
     bool CreateVulkanInstance(VkInstance& instance);
     
 
 private:
-    VkInstance instance_;
     SVulkanInstanceConfig instance_config_;
 
     std::vector<const char*> ExtractValidationLayers();

@@ -13,17 +13,17 @@ enum class ELogLevel {
     kError
 };
 
-class VulkanLogger
+class Logger
 {
 public:
-    VulkanLogger();
-    ~VulkanLogger();
+    Logger();
+    ~Logger();
 
     static void LogDebug(const std::string& message);
     static void LogInfo(const std::string& message);
     static void LogWarning(const std::string& message);
     static void LogError(const std::string& message);
-    static bool LogWithResult(VkResult result, const std::string& messageOnFail, const std::string& messageOnSuccess);
+    static bool LogWithVkResult(VkResult result, const std::string& messageOnFail, const std::string& messageOnSuccess);
     
 private:
     static void Log(ELogLevel level, const std::string& message);

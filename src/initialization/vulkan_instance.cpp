@@ -3,19 +3,13 @@
 #include "vulkan_instance.h"
 #include <unordered_set>
 
-VulkanInstanceHelper::VulkanInstanceHelper(const SVulkanInstanceConfig& config)
+VulkanInstanceHelper::VulkanInstanceHelper(SVulkanInstanceConfig config)
 {
     instance_config_ = config;
-    instance_ = VK_NULL_HANDLE;
 }
 
 VulkanInstanceHelper::~VulkanInstanceHelper()
 {
-    if (instance_ != VK_NULL_HANDLE)
-    {
-        vkDestroyInstance(instance_, nullptr);
-        instance_ = VK_NULL_HANDLE;
-    }
 }
 
 bool VulkanInstanceHelper::CreateVulkanInstance(VkInstance& instance)
@@ -44,11 +38,10 @@ bool VulkanInstanceHelper::CreateVulkanInstance(VkInstance& instance)
     instance_info.ppEnabledExtensionNames = instance_config_.extensions.data();
 
     // Create Vulkan instance
-    bool result = VulkanLogger::LogWithResult(
-            vkCreateInstance(&instance_info, nullptr, &instance_), 
+    bool result = Logger::LogWithVkResult(
+            vkCreateInstance(&instance_info, nullptr, &instance), 
             "Failed to create Vulkan instance", 
             "Succeeded in creating Vulkan instance");
-    instance = result ? instance_ : VK_NULL_HANDLE;
     return result;
 }
 
@@ -65,7 +58,7 @@ std::vector<const char*> VulkanInstanceHelper::ExtractValidationLayers()
     for (const auto& layer : supported_layers) 
     {
         supported_layer_names.insert(layer.layerName);
-        VulkanLogger::LogDebug("Supported layer: " + std::string(layer.layerName));
+        Logger::LogDebug("Supported layer: " + std::string(layer.layerName));
     }
 
     // filter out the required layers that are not supported
@@ -79,7 +72,7 @@ std::vector<const char*> VulkanInstanceHelper::ExtractValidationLayers()
         }
         else 
         {
-            VulkanLogger::LogWarning("Required layer not supported: " + std::string(layer));
+            Logger::LogWarning("Required layer not supported: " + std::string(layer));
         }
     }
 
@@ -112,7 +105,7 @@ std::vector<const char*> VulkanInstanceHelper::ExtractExtensions()
         }
         else 
         {
-            VulkanLogger::LogWarning("Required extension not supported: " + std::string(ext));
+            Logger::LogWarning("Required extension not supported: " + std::string(ext));
         }
     }
 
