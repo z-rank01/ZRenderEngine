@@ -14,7 +14,7 @@ struct SVulkanInstanceConfig
     uint8_t engine_version[3];
 
     // Vulkan API version
-    uint8_t api_version[3];
+    uint8_t api_version[4];
     
     // validation info
     std::vector<const char*> validation_layers;
@@ -26,15 +26,17 @@ struct SVulkanInstanceConfig
 class VulkanInstanceHelper
 {
 public:
-    VulkanInstanceHelper() = delete;
+    VulkanInstanceHelper();
     VulkanInstanceHelper(SVulkanInstanceConfig config);
     ~VulkanInstanceHelper();
 
-    bool CreateVulkanInstance(VkInstance& instance);
+    bool CreateVulkanInstance();
+    const VkInstance& GetVulkanInstance() const { return vkInstance_; }
     
 
 private:
     SVulkanInstanceConfig instance_config_;
+    VkInstance vkInstance_;
 
     std::vector<const char*> ExtractValidationLayers();
     std::vector<const char*> ExtractExtensions();

@@ -11,14 +11,11 @@ VulkanEngine& VulkanEngine::GetInstance()
     return *instance;
 }
 
-VulkanEngine::VulkanEngine(const SEngineConfig& config)
+VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
 {
     // only one engine initialization is allowed with the application.
     assert(instance == nullptr);
     instance = this;
-
-    // 
-    engine_config_ = config;
     
     // Initialize the states
     engine_state_ = EWindowState::Initialized;
@@ -30,7 +27,7 @@ VulkanEngine::VulkanEngine(const SEngineConfig& config)
 
 VulkanEngine::~VulkanEngine()
 {
-    Shutdown();
+    ShutdownSDL();
 }
 
 // Initialize the engine
@@ -59,14 +56,27 @@ void VulkanEngine::InitializeVulkan()
     instance_config.engine_version[0] = 1;
     instance_config.engine_version[1] = 0;
     instance_config.engine_version[2] = 0;
-    instance_config.api_version[0] = 1;
-    instance_config.api_version[1] = 3;
-    instance_config.api_version[2] = 0;
+    instance_config.api_version[0] = 0;
+    instance_config.api_version[1] = 1;
+    instance_config.api_version[2] = 3;
+    instance_config.api_version[3] = 0;
     instance_config.validation_layers = { "VK_LAYER_KHRONOS_validation" };
     instance_config.extensions = { VK_KHR_SURFACE_EXTENSION_NAME };
 
-    VulkanInstanceHelper vkInstanceHelper = VulkanInstanceHelper(instance_config);
-    vkInstanceHelper.CreateVulkanInstance(vkInstance_);
+    vkInstanceHelper_ = std::make_unique<VulkanInstanceHelper>(instance_config);
+    vkInstanceHelper_->CreateVulkanInstance();
+
+    SVulkanDeviceConfig device_config;
+    device_config.physical_device_type = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+    device_config.physical_device_api_version[0] = 0;
+    device_config.physical_device_api_version[1] = 1;
+    device_config.physical_device_api_version[2] = 3;
+    device_config.physical_device_api_version[3] = 0;
+    device_config.queue_flags = { VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT };
+    device_config.physical_device_features = { VK_TRUE };
+
+    vkDeviceHelper_ = std::make_unique<VulkanDeviceHelper>(device_config);
+    vkDeviceHelper_->CreatePhysicalDevice(vkInstanceHelper_->GetVulkanInstance());
 }
 
 // Main loop
@@ -124,7 +134,7 @@ void VulkanEngine::Draw()
 }
 
 // Shutdown the engine
-void VulkanEngine::Shutdown()
+void VulkanEngine::ShutdownSDL()
 {
     SDL_DestroyRenderer(renderer_);
     SDL_DestroyWindow(window_);

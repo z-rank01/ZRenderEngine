@@ -1,9 +1,11 @@
 #pragma once
 
 #include "initialization/vulkan_instance.h"
+#include "initialization/vulkan_device.h"
 #include "vulkan_structure.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
+#include <memory>
 
 enum class EWindowState : std::uint8_t
 {
@@ -59,10 +61,11 @@ private:
     SDL_Window* window_;
     SDL_Renderer* renderer_;
 
-    // vulkan members
-    VkInstance vkInstance_;
+    // vulkan helper members
+    std::unique_ptr<VulkanInstanceHelper> vkInstanceHelper_;
+    std::unique_ptr<VulkanDeviceHelper> vkDeviceHelper_;
     
     void InitializeSDL();
     void InitializeVulkan();
-    void Shutdown();
+    void ShutdownSDL();
 };

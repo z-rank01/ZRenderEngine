@@ -3,16 +3,20 @@
 #include "vulkan_instance.h"
 #include <unordered_set>
 
-VulkanInstanceHelper::VulkanInstanceHelper(SVulkanInstanceConfig config)
+VulkanInstanceHelper::VulkanInstanceHelper()
 {
-    instance_config_ = config;
+}
+
+VulkanInstanceHelper::VulkanInstanceHelper(SVulkanInstanceConfig config) : instance_config_(config)
+{
 }
 
 VulkanInstanceHelper::~VulkanInstanceHelper()
 {
+    vkDestroyInstance(vkInstance_, nullptr);
 }
 
-bool VulkanInstanceHelper::CreateVulkanInstance(VkInstance& instance)
+bool VulkanInstanceHelper::CreateVulkanInstance()
 {
     // Application info
     VkApplicationInfo app_info = {};
@@ -21,7 +25,7 @@ bool VulkanInstanceHelper::CreateVulkanInstance(VkInstance& instance)
     app_info.applicationVersion = VK_MAKE_VERSION(instance_config_.application_version[0], instance_config_.application_version[1], instance_config_.application_version[2]);
     app_info.pEngineName = instance_config_.engine_name.c_str();
     app_info.engineVersion = VK_MAKE_VERSION(instance_config_.engine_version[0], instance_config_.engine_version[1], instance_config_.engine_version[2]);
-    app_info.apiVersion = VK_API_VERSION_1_2;
+    app_info.apiVersion = VK_MAKE_API_VERSION(instance_config_.api_version[0], instance_config_.api_version[1], instance_config_.api_version[2], instance_config_.api_version[3]);
 
     // extract validation layers
     instance_config_.validation_layers = ExtractValidationLayers();
@@ -39,7 +43,7 @@ bool VulkanInstanceHelper::CreateVulkanInstance(VkInstance& instance)
 
     // Create Vulkan instance
     bool result = Logger::LogWithVkResult(
-            vkCreateInstance(&instance_info, nullptr, &instance), 
+            vkCreateInstance(&instance_info, nullptr, &vkInstance_), 
             "Failed to create Vulkan instance", 
             "Succeeded in creating Vulkan instance");
     return result;
