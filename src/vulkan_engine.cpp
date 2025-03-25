@@ -73,7 +73,7 @@ void VulkanEngine::InitializeVulkan()
     device_config.physical_device_api_version[2] = 3;
     device_config.physical_device_api_version[3] = 0;
     device_config.queue_flags = { VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT };
-    device_config.physical_device_features = { VK_TRUE };
+    device_config.physical_device_features = { };
 
     vkDeviceHelper_ = std::make_unique<VulkanDeviceHelper>(device_config);
     vkDeviceHelper_->CreatePhysicalDevice(vkInstanceHelper_->GetVulkanInstance());

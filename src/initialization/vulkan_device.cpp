@@ -24,10 +24,25 @@ VulkanDeviceHelper::~VulkanDeviceHelper()
     vkDestroyDevice(vkLogicalDevice_, nullptr);
 }
 
-bool VulkanDeviceHelper::CreateLogicalDevice()
+bool VulkanDeviceHelper::CreateLogicalDevice(const VkDeviceQueueCreateInfo& queue_create_info)
 {
-
-    return true;
+    // create logical device
+    VkDeviceCreateInfo device_info = {};
+    device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_info.queueCreateInfoCount = 1;
+    device_info.pQueueCreateInfos = &queue_create_info;
+    device_info.enabledExtensionCount = 0;
+    device_info.ppEnabledExtensionNames = nullptr;
+    device_info.enabledLayerCount = 0;
+    device_info.ppEnabledLayerNames = nullptr;
+    device_info.pEnabledFeatures = nullptr;
+    if (!Logger::LogWithVkResult(
+        vkCreateDevice(vkPhysicalDevice_, &device_info, nullptr, &vkLogicalDevice_),
+        "Failed to create logical device",
+        "Succeeded in creating logical device"))
+        return false;
+    else
+        return true;
 }
 
 bool VulkanDeviceHelper::CreatePhysicalDevice(const VkInstance& instance)
@@ -48,11 +63,6 @@ bool VulkanDeviceHelper::CreatePhysicalDevice(const VkInstance& instance)
 
     // pick the first physical device that supports the required features
     vkPhysicalDevice_ = PickPhysicalDevice(devices);
-    return true;
-}
-
-bool VulkanDeviceHelper::CreateQueue()
-{
     return true;
 }
 

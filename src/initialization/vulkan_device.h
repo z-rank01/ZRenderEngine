@@ -21,9 +21,8 @@ public:
     VulkanDeviceHelper(SVulkanDeviceConfig config);
     ~VulkanDeviceHelper();
 
-    bool CreateLogicalDevice();
+    bool CreateLogicalDevice(const VkDeviceQueueCreateInfo& queue_create_info);
     bool CreatePhysicalDevice(const VkInstance& instance);
-    bool CreateQueue();
 
 private:
     SVulkanDeviceConfig device_config_;

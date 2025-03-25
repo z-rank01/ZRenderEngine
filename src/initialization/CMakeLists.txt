@@ -3,6 +3,8 @@ add_library(vulkan_initialization STATIC
     vulkan_instance.h
     vulkan_device.cpp
     vulkan_device.h
+    vulkan_queue.h
+    vulkan_queue.cpp
 )
 
 # 设置头文件包含目录
