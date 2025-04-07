@@ -3,6 +3,9 @@
 /out/
 /bin/
 
+# visual studio 缓存
+/.vs/
+
 # clangd 缓存
 /.cache/
 
