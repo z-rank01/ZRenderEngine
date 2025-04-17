@@ -3,6 +3,7 @@
 #include "initialization/vulkan_instance.h"
 #include "initialization/vulkan_device.h"
 #include "initialization/vulkan_queue.h"
+#include "initialization/vulkan_window.h"
 #include "vulkan_structure.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -58,16 +59,12 @@ private:
     ERenderState render_state_;
     SEngineConfig engine_config_;
 
-    // SDL members
-    SDL_Window* window_;
-    SDL_Renderer* renderer_;
-
     // vulkan helper members
+    std::unique_ptr<VulkanSDLWindowHelper> vkWindowHelper_;
     std::unique_ptr<VulkanInstanceHelper> vkInstanceHelper_;
     std::unique_ptr<VulkanDeviceHelper> vkDeviceHelper_;
     std::unique_ptr<VulkanQueueHelper> vkQueueHelper_;
     
     void InitializeSDL();
     void InitializeVulkan();
-    void ShutdownSDL();
 };

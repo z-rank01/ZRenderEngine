@@ -11,14 +11,14 @@ struct SVulkanQueueConfig
 class VulkanQueueHelper
 {
 public:
-    VulkanQueueHelper();
+    VulkanQueueHelper() = delete;
     VulkanQueueHelper(SVulkanQueueConfig config);
     ~VulkanQueueHelper();
 
     const VkQueue& GetQueueFromDevice(const VkDevice& logical_device);
     const VkQueue& GetQueue() const { return vkQueue_; }
-    bool GenerateQueueCreateInfo(const VkDeviceQueueCreateInfo& queue_create_info) const;
-    void PickQueueFamily(const VkPhysicalDevice& physical_device);
+    bool GenerateQueueCreateInfo(VkDeviceQueueCreateInfo& queue_create_info) const;
+    void PickQueueFamily(const VkPhysicalDevice& physical_device, const VkSurfaceKHR& surface);
 
 private:
     SVulkanQueueConfig queue_config_;

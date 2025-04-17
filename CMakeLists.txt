@@ -16,7 +16,6 @@ set(VCPKG_MANIFEST_MODE ON)
 
 # 查找依赖
 find_package(Vulkan REQUIRED)
-find_package(vk-bootstrap CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -48,7 +47,6 @@ add_executable(VulkanEngine ${SOURCES} ${HEADERS})
 target_link_libraries(VulkanEngine
   PRIVATE
     Vulkan::Vulkan
-    vk-bootstrap::vk-bootstrap
     GPUOpen::VulkanMemoryAllocator
     SDL3::SDL3
     glm::glm
@@ -64,6 +62,7 @@ target_include_directories(VulkanEngine
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/installed/${VCPKG_TARGET_TRIPLET}/include # STB 头文件路径
+    ${Vulkan_INCLUDE_DIRS}
 )
 
 # 定义宏以使用 Vulkan 动态加载
@@ -75,3 +74,12 @@ source_group(
     PREFIX ""
     FILES ${SOURCES} ${HEADERS}
 )
+
+# 查询 Vulkan SDK 路径
+if (Vulkan_FOUND)
+    message(STATUS "Vulkan SDK found at: ${Vulkan_INCLUDE_DIRS}")
+    message(STATUS "Vulkan Libraries: ${Vulkan_LIBRARIES}")
+    message(STATUS "Vulkan Version: ${Vulkan_VERSION}")
+else()
+    message(FATAL_ERROR "Vulkan SDK not found. Please install the Vulkan SDK.")
+endif()

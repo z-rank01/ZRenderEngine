@@ -26,7 +26,7 @@ struct SVulkanInstanceConfig
 class VulkanInstanceHelper
 {
 public:
-    VulkanInstanceHelper();
+    VulkanInstanceHelper() = delete;
     VulkanInstanceHelper(SVulkanInstanceConfig config);
     ~VulkanInstanceHelper();
 

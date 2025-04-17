@@ -3,12 +3,16 @@
 #include "vulkan_instance.h"
 #include <unordered_set>
 
-VulkanInstanceHelper::VulkanInstanceHelper()
-{
-}
-
 VulkanInstanceHelper::VulkanInstanceHelper(SVulkanInstanceConfig config) : instance_config_(config)
 {
+    vkInstance_ = VK_NULL_HANDLE;
+
+    // Check if the instance configuration is valid
+    if (instance_config_.application_name.empty() || instance_config_.engine_name.empty())
+    {
+        Logger::LogError("Application name or engine name is not set");
+        return;
+    }
 }
 
 VulkanInstanceHelper::~VulkanInstanceHelper()

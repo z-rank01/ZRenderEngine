@@ -73,12 +73,15 @@ struct SVulkanDeviceConfig
     
     // Queue and Queue Family config
     std::vector<VkQueueFlagBits> queue_flags;
+
+    // logical device config
+    std::vector<const char*> device_extensions;
 };
 
 class VulkanDeviceHelper
 {
 public:
-    VulkanDeviceHelper();
+    VulkanDeviceHelper() = delete;
     VulkanDeviceHelper(SVulkanDeviceConfig config);
     ~VulkanDeviceHelper();
 
@@ -92,6 +95,8 @@ private:
     SVulkanDeviceConfig device_config_;
     VkPhysicalDevice vkPhysicalDevice_;
     VkDevice vkLogicalDevice_;
+    VkPhysicalDeviceFeatures vkSupportedFeatures_;
+    VkPhysicalDeviceProperties vkSupportedProperties_;
 
     VkPhysicalDevice PickPhysicalDevice(const std::vector<VkPhysicalDevice>& instance);
 };
