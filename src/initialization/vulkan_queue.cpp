@@ -22,7 +22,7 @@ const VkQueue& VulkanQueueHelper::GetQueueFromDevice(const VkDevice& logical_dev
     return vkQueue_;
 }
 
-bool VulkanQueueHelper::GetQueueCreateInfo(const VkDeviceQueueCreateInfo& queue_create_info) const
+bool VulkanQueueHelper::GenerateQueueCreateInfo(const VkDeviceQueueCreateInfo& queue_create_info) const
 {
     // check if queue family index is set
     if (!queue_family_index_.has_value()) 
@@ -44,7 +44,7 @@ void VulkanQueueHelper::PickQueueFamily(const VkPhysicalDevice& physical_device)
 {
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queueFamilyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> queueFamilyProperties;
+    std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queueFamilyCount, queueFamilyProperties.data());
 
     for (uint32_t i = 0; i < queueFamilyCount; i++)

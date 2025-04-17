@@ -17,7 +17,7 @@ public:
 
     const VkQueue& GetQueueFromDevice(const VkDevice& logical_device);
     const VkQueue& GetQueue() const { return vkQueue_; }
-    bool GetQueueCreateInfo(const VkDeviceQueueCreateInfo& queue_create_info) const;
+    bool GenerateQueueCreateInfo(const VkDeviceQueueCreateInfo& queue_create_info) const;
     void PickQueueFamily(const VkPhysicalDevice& physical_device);
 
 private:

@@ -47,6 +47,9 @@ void VulkanEngine::InitializeSDL()
 void VulkanEngine::InitializeVulkan()
 {
     // TODO: Use builder pattern to create VulkanInstanceHelper
+    
+    // create instance
+
     SVulkanInstanceConfig instance_config;
     instance_config.application_name = "Vulkan Engine";
     instance_config.application_version[0] = 1;
@@ -66,6 +69,8 @@ void VulkanEngine::InitializeVulkan()
     vkInstanceHelper_ = std::make_unique<VulkanInstanceHelper>(instance_config);
     vkInstanceHelper_->CreateVulkanInstance();
 
+    // create physical device
+
     SVulkanDeviceConfig device_config;
     device_config.physical_device_type = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
     device_config.physical_device_api_version[0] = 0;
@@ -73,10 +78,21 @@ void VulkanEngine::InitializeVulkan()
     device_config.physical_device_api_version[2] = 3;
     device_config.physical_device_api_version[3] = 0;
     device_config.queue_flags = { VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT };
-    device_config.physical_device_features = { };
+    device_config.physical_device_features = { GeometryShader };
 
     vkDeviceHelper_ = std::make_unique<VulkanDeviceHelper>(device_config);
     vkDeviceHelper_->CreatePhysicalDevice(vkInstanceHelper_->GetVulkanInstance());
+
+    // create logical device
+    SVulkanQueueConfig queue_config;
+    VkDeviceQueueCreateInfo queue_create_info = {};
+    queue_config.queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+
+    vkQueueHelper_ = std::make_unique<VulkanQueueHelper>(queue_config);
+    vkQueueHelper_->PickQueueFamily(vkDeviceHelper_->GetPhysicalDevice());
+    vkQueueHelper_->GenerateQueueCreateInfo(queue_create_info);
+    
+    vkDeviceHelper_->CreateLogicalDevice(queue_create_info);
 }
 
 // Main loop
