@@ -5,7 +5,8 @@
 
 ///-------------------------------------------------------------------------------------------------
 // helper function declaration
-int CountSupportedPropertiesOrFeatures(const SVulkanDeviceConfig& device_config, const VkPhysicalDevice& physical_device);
+int CountSupportedPropertiesOrFeatures(const SVulkanDeviceConfig& device_config, const VkPhysicalDevice& physical_device, 
+                                       const VkPhysicalDeviceProperties& supported_properties, const VkPhysicalDeviceFeatures& supported_features);
 bool CheckPhysicalDeviceFeatureAvailable(EPhysicalDeviceFeatures feature, const VkPhysicalDeviceFeatures& supported_features);
 
 ///-------------------------------------------------------------------------------------------------
@@ -113,7 +114,7 @@ VkPhysicalDevice VulkanDeviceHelper::PickPhysicalDevice(const std::vector<VkPhys
 
 
         // count the number of supported properties or features
-        int current_cnt = CountSupportedPropertiesOrFeatures(device_config_, physical_device);
+        int current_cnt = CountSupportedPropertiesOrFeatures(device_config_, physical_device, vkSupportedProperties_, vkSupportedFeatures_);
         Logger::LogInfo("Supported feature count: " + std::to_string(current_cnt));
         Logger::LogInfo("-------------------------");
 
@@ -140,21 +141,17 @@ VkPhysicalDevice VulkanDeviceHelper::PickPhysicalDevice(const std::vector<VkPhys
 
 // helper function:
 // count the number of supported properties or features
-int CountSupportedPropertiesOrFeatures(const SVulkanDeviceConfig& device_config, const VkPhysicalDevice& physical_device)
+int CountSupportedPropertiesOrFeatures(const SVulkanDeviceConfig& device_config, const VkPhysicalDevice& physical_device, 
+                                       const VkPhysicalDeviceProperties& supported_properties, const VkPhysicalDeviceFeatures& supported_features)
 {
-    VkPhysicalDeviceProperties properties;
-    VkPhysicalDeviceFeatures features;
-    vkGetPhysicalDeviceProperties(physical_device, &properties);
-    vkGetPhysicalDeviceFeatures(physical_device, &features);
-
     // Check properies: device type and API version
     if ((device_config.physical_device_type && 
-         device_config.physical_device_type != properties.deviceType) ||
+         device_config.physical_device_type != supported_properties.deviceType) ||
         (device_config.physical_device_api_version && 
-         properties.apiVersion < VK_MAKE_API_VERSION(device_config.physical_device_api_version[0], 
-                                                     device_config.physical_device_api_version[1], 
-                                                     device_config.physical_device_api_version[2], 
-                                                     device_config.physical_device_api_version[3])))
+         supported_properties.apiVersion < VK_MAKE_API_VERSION(device_config.physical_device_api_version[0], 
+                                                               device_config.physical_device_api_version[1], 
+                                                               device_config.physical_device_api_version[2], 
+                                                               device_config.physical_device_api_version[3])))
     {
         return -1;
     }
@@ -163,7 +160,7 @@ int CountSupportedPropertiesOrFeatures(const SVulkanDeviceConfig& device_config,
     int supported_feature_cnt = 0;
     for (const auto& feature : device_config.physical_device_features)
     {
-        if (CheckPhysicalDeviceFeatureAvailable(feature, features))
+        if (CheckPhysicalDeviceFeatureAvailable(feature, supported_features))
         {
             ++supported_feature_cnt;
         }
