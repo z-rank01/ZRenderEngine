@@ -27,6 +27,7 @@ VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
 
 VulkanEngine::~VulkanEngine()
 {
+    vkSwapChainHelper_.release();
     vkWindowHelper_.release();
     vkQueueHelper_.release();
     vkDeviceHelper_.release();
@@ -50,8 +51,12 @@ void VulkanEngine::InitializeVulkan()
     // TODO: Use builder pattern to create VulkanInstanceHelper
     
     // create instance
-    auto extensions = vkWindowHelper_->GetWindowExtensions();
-    int extension_count = vkWindowHelper_->GetWindowExtensionCount();
+
+    auto window_required_extensions = vkWindowHelper_->GetWindowExtensions();
+    int window_required_extension_count = vkWindowHelper_->GetWindowExtensionCount();
+
+    auto extensions = std::vector<const char*>(window_required_extensions, window_required_extensions + window_required_extension_count);
+
     SVulkanInstanceConfig instance_config;
     instance_config.application_name = "Vulkan Engine";
     instance_config.application_version[0] = 1;
@@ -66,45 +71,73 @@ void VulkanEngine::InitializeVulkan()
     instance_config.api_version[2] = 3;
     instance_config.api_version[3] = 0;
     instance_config.validation_layers = { "VK_LAYER_KHRONOS_validation" };
-    instance_config.extensions = std::vector<const char*>(extensions, extensions + extension_count);
+    instance_config.extensions = extensions;
     vkInstanceHelper_ = std::make_unique<VulkanInstanceHelper>(instance_config);
     
     if (!vkInstanceHelper_->CreateVulkanInstance()) {
-        Logger::LogError("Failed to create Vulkan instance.");
-        // Handle instance creation failure
         return;
     }
 
     // create surface
+
     vkWindowHelper_->CreateSurface(&vkInstanceHelper_->GetVulkanInstance());
 
     // create physical device
-    SVulkanDeviceConfig device_config;
-    device_config.physical_device_type = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
-    device_config.physical_device_api_version[0] = 0;
-    device_config.physical_device_api_version[1] = 1;
-    device_config.physical_device_api_version[2] = 3;
-    device_config.physical_device_api_version[3] = 0;
-    device_config.queue_flags = { VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT };
-    device_config.physical_device_features = { GeometryShader };
-    device_config.device_extensions = std::vector<const char*>(extensions, extensions + extension_count);
 
-    vkDeviceHelper_ = std::make_unique<VulkanDeviceHelper>(device_config);
-    if (!vkDeviceHelper_->CreatePhysicalDevice(vkInstanceHelper_->GetVulkanInstance())) {
+    SVulkanPhysicalDeviceConfig physical_device_config;
+    physical_device_config.physical_device_type = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+    physical_device_config.physical_device_api_version[0] = 0;
+    physical_device_config.physical_device_api_version[1] = 1;
+    physical_device_config.physical_device_api_version[2] = 3;
+    physical_device_config.physical_device_api_version[3] = 0;
+    physical_device_config.queue_flags = { VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT };
+    physical_device_config.physical_device_features = { GeometryShader };
+
+    vkDeviceHelper_ = std::make_unique<VulkanDeviceHelper>();
+    if (!vkDeviceHelper_->CreatePhysicalDevice(physical_device_config, vkInstanceHelper_->GetVulkanInstance())) {
          return;
     }
 
+
+    // create default swap chain helper to get swap chain extensions
+
+    vkSwapChainHelper_ = std::make_unique<VulkanSwapChainHelper>();
+    std::vector<const char*> swapchain_required_extensions;
+    int swapchain_required_extension_count = vkSwapChainHelper_->GetSwapChainExtensions(vkDeviceHelper_->GetPhysicalDevice(), swapchain_required_extensions);
+
     // create queue
+
     SVulkanQueueConfig queue_config;
     VkDeviceQueueCreateInfo queue_create_info = {};
     queue_config.queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-
     vkQueueHelper_ = std::make_unique<VulkanQueueHelper>(queue_config);
     vkQueueHelper_->PickQueueFamily(vkDeviceHelper_->GetPhysicalDevice(), vkWindowHelper_->GetSurface());
     vkQueueHelper_->GenerateQueueCreateInfo(queue_create_info);
 
     // create logical device
-    if (!vkDeviceHelper_->CreateLogicalDevice(queue_create_info)) {
+    SVulkanDeviceConfig device_config;
+    device_config.queue_create_infos.push_back(queue_create_info);
+    device_config.device_extensions = swapchain_required_extensions;
+    device_config.device_extension_count = static_cast<int>(swapchain_required_extension_count);
+    if (!vkDeviceHelper_->CreateLogicalDevice(device_config)) {
+        return;
+    }
+
+    // create swap chain
+
+    SVulkanSwapChainConfig swap_chain_config;
+    swap_chain_config.target_surface_format_.format = VK_FORMAT_B8G8R8A8_UNORM;
+    swap_chain_config.target_surface_format_.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    swap_chain_config.target_present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
+    swap_chain_config.target_swap_extent_.width = engine_config_.window.width;
+    swap_chain_config.target_swap_extent_.height = engine_config_.window.height;
+    swap_chain_config.target_image_count_ = engine_config_.frame_count;
+    vkSwapChainHelper_->Setup(swap_chain_config, 
+                              vkDeviceHelper_->GetLogicalDevice(), 
+                              vkDeviceHelper_->GetPhysicalDevice(), 
+                              vkWindowHelper_->GetSurface(), 
+                              vkWindowHelper_->GetWindow());
+    if (!vkSwapChainHelper_->CreateSwapChain()) {
         return;
     }
 }

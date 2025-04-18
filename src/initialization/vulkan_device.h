@@ -62,7 +62,7 @@ typedef enum EPhysicalDeviceFeatures
     InheritedQueries,
 } EPhysicalDeviceFeatures;
 
-struct SVulkanDeviceConfig
+struct SVulkanPhysicalDeviceConfig
 {
     // physical device config
     // properties
@@ -73,30 +73,34 @@ struct SVulkanDeviceConfig
     
     // Queue and Queue Family config
     std::vector<VkQueueFlagBits> queue_flags;
+};
 
+struct SVulkanDeviceConfig
+{
     // logical device config
+    std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
+    // device extensions
+    int device_extension_count;
     std::vector<const char*> device_extensions;
 };
 
 class VulkanDeviceHelper
 {
 public:
-    VulkanDeviceHelper() = delete;
-    VulkanDeviceHelper(SVulkanDeviceConfig config);
+    VulkanDeviceHelper();
     ~VulkanDeviceHelper();
 
-    bool CreateLogicalDevice(const VkDeviceQueueCreateInfo& queue_create_info);
-    bool CreatePhysicalDevice(const VkInstance& instance);
+    bool CreateLogicalDevice(SVulkanDeviceConfig config);
+    bool CreatePhysicalDevice(SVulkanPhysicalDeviceConfig config, const VkInstance& instance);
 
     const VkPhysicalDevice& GetPhysicalDevice() const { return vkPhysicalDevice_; }
     const VkDevice& GetLogicalDevice() const { return vkLogicalDevice_; }
 
 private:
-    SVulkanDeviceConfig device_config_;
     VkPhysicalDevice vkPhysicalDevice_;
     VkDevice vkLogicalDevice_;
     VkPhysicalDeviceFeatures vkSupportedFeatures_;
     VkPhysicalDeviceProperties vkSupportedProperties_;
 
-    VkPhysicalDevice PickPhysicalDevice(const std::vector<VkPhysicalDevice>& instance);
+    VkPhysicalDevice PickPhysicalDevice(const SVulkanPhysicalDeviceConfig& config, const std::vector<VkPhysicalDevice>& instance);
 };

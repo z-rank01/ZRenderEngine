@@ -5,14 +5,13 @@
 
 ///-------------------------------------------------------------------------------------------------
 // helper function declaration
-int CountSupportedPropertiesOrFeatures(const SVulkanDeviceConfig& device_config, const VkPhysicalDevice& physical_device, 
+int CountSupportedPropertiesOrFeatures(const SVulkanPhysicalDeviceConfig& device_config, const VkPhysicalDevice& physical_device, 
                                        const VkPhysicalDeviceProperties& supported_properties, const VkPhysicalDeviceFeatures& supported_features);
 bool CheckPhysicalDeviceFeatureAvailable(EPhysicalDeviceFeatures feature, const VkPhysicalDeviceFeatures& supported_features);
 
 ///-------------------------------------------------------------------------------------------------
 // VulkanDeviceHelper implementation
-VulkanDeviceHelper::VulkanDeviceHelper(SVulkanDeviceConfig config)
-    : device_config_(config)
+VulkanDeviceHelper::VulkanDeviceHelper()
 {
     vkPhysicalDevice_ = VK_NULL_HANDLE;
     vkLogicalDevice_ = VK_NULL_HANDLE;
@@ -20,13 +19,6 @@ VulkanDeviceHelper::VulkanDeviceHelper(SVulkanDeviceConfig config)
     // Initialize the Vulkan device features
     vkSupportedFeatures_ = {};
     vkSupportedProperties_ = {};
-
-    // Check if the device configuration is valid
-    if (!device_config_.physical_device_type)
-    {
-        Logger::LogError("Physical device type is not set");
-        return;
-    }
 }
 
 VulkanDeviceHelper::~VulkanDeviceHelper()
@@ -34,15 +26,15 @@ VulkanDeviceHelper::~VulkanDeviceHelper()
     vkDestroyDevice(vkLogicalDevice_, nullptr);
 }
 
-bool VulkanDeviceHelper::CreateLogicalDevice(const VkDeviceQueueCreateInfo& queue_create_info)
+bool VulkanDeviceHelper::CreateLogicalDevice(SVulkanDeviceConfig config)
 {
     // create logical device
     VkDeviceCreateInfo device_info = {};
     device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    device_info.queueCreateInfoCount = 1;
-    device_info.pQueueCreateInfos = &queue_create_info;
-    device_info.enabledExtensionCount = 0;
-    device_info.ppEnabledExtensionNames = nullptr;
+    device_info.queueCreateInfoCount = config.queue_create_infos.size();
+    device_info.pQueueCreateInfos = config.queue_create_infos.data();
+    device_info.enabledExtensionCount = static_cast<uint32_t>(config.device_extensions.size());
+    device_info.ppEnabledExtensionNames = config.device_extensions.data();
     device_info.enabledLayerCount = 0;
     device_info.ppEnabledLayerNames = nullptr;
     device_info.pEnabledFeatures = &vkSupportedFeatures_;
@@ -55,7 +47,7 @@ bool VulkanDeviceHelper::CreateLogicalDevice(const VkDeviceQueueCreateInfo& queu
         return true;
 }
 
-bool VulkanDeviceHelper::CreatePhysicalDevice(const VkInstance& instance)
+bool VulkanDeviceHelper::CreatePhysicalDevice(SVulkanPhysicalDeviceConfig config, const VkInstance& instance)
 {
     // enumerate physical devices
     uint32_t deviceCount = 0;
@@ -71,7 +63,7 @@ bool VulkanDeviceHelper::CreatePhysicalDevice(const VkInstance& instance)
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
     // pick the physical device that supports the most required features
-    vkPhysicalDevice_ = PickPhysicalDevice(devices);
+    vkPhysicalDevice_ = PickPhysicalDevice(config, devices);
 
     // Check if a suitable device was found
     if (vkPhysicalDevice_ == VK_NULL_HANDLE)
@@ -88,7 +80,7 @@ bool VulkanDeviceHelper::CreatePhysicalDevice(const VkInstance& instance)
     return true;
 }
 
-VkPhysicalDevice VulkanDeviceHelper::PickPhysicalDevice(const std::vector<VkPhysicalDevice>& physical_devices)
+VkPhysicalDevice VulkanDeviceHelper::PickPhysicalDevice(const SVulkanPhysicalDeviceConfig& config, const std::vector<VkPhysicalDevice>& physical_devices)
 {
     int max_cnt = -1;             // Track maximum features supported
     int best_device_index = -1; // Track index of the best device found so far
@@ -114,7 +106,7 @@ VkPhysicalDevice VulkanDeviceHelper::PickPhysicalDevice(const std::vector<VkPhys
 
 
         // count the number of supported properties or features
-        int current_cnt = CountSupportedPropertiesOrFeatures(device_config_, physical_device, vkSupportedProperties_, vkSupportedFeatures_);
+        int current_cnt = CountSupportedPropertiesOrFeatures(config, physical_device, vkSupportedProperties_, vkSupportedFeatures_);
         Logger::LogInfo("Supported feature count: " + std::to_string(current_cnt));
         Logger::LogInfo("-------------------------");
 
@@ -141,7 +133,7 @@ VkPhysicalDevice VulkanDeviceHelper::PickPhysicalDevice(const std::vector<VkPhys
 
 // helper function:
 // count the number of supported properties or features
-int CountSupportedPropertiesOrFeatures(const SVulkanDeviceConfig& device_config, const VkPhysicalDevice& physical_device, 
+int CountSupportedPropertiesOrFeatures(const SVulkanPhysicalDeviceConfig& device_config, const VkPhysicalDevice& physical_device, 
                                        const VkPhysicalDeviceProperties& supported_properties, const VkPhysicalDeviceFeatures& supported_features)
 {
     // Check properies: device type and API version
