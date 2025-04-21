@@ -1,4 +1,6 @@
 #include "vulkan_engine.h"
+#include "utility/config_reader.h"
+#include "utility/logger.h"
 #include <iostream>
 
 int main()
@@ -16,11 +18,22 @@ int main()
     window_config.height = window_height;
     window_config.title = window_name;
 
+    // general config
+    ConfigReader config_reader("E:\\Projects\\ZRenderGraph\\config\\win64\\app_config.json");
+    SGeneralConfig general_config;
+    if (!config_reader.TryParseGeneralConfig(general_config))
+    {
+        Logger::LogError("Failed to parse general config");
+        return -1;
+    }
+
     // engine config
     SEngineConfig config;
-    config.window = window_config;
+    config.window_config = window_config;
+    config.general_config = general_config;
     config.frame_count = 2;
     config.use_validation_layers = true;
+    
 
     // main loop
     VulkanEngine engine(config);

@@ -44,12 +44,12 @@ bool VulkanQueueHelper::GenerateQueueCreateInfo(VkDeviceQueueCreateInfo& queue_c
     return true;
 }
 
-void VulkanQueueHelper::PickQueueFamily(const VkPhysicalDevice& physical_device, const VkSurfaceKHR& surface)
+void VulkanQueueHelper::PickQueueFamily(const VkPhysicalDevice* physical_device, const VkSurfaceKHR* surface)
 {
     uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queueFamilyCount, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(*physical_device, &queueFamilyCount, nullptr);
     std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queueFamilyCount, queueFamilyProperties.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(*physical_device, &queueFamilyCount, queueFamilyProperties.data());
 
     for (uint32_t i = 0; i < queueFamilyCount; i++)
     {
@@ -58,7 +58,7 @@ void VulkanQueueHelper::PickQueueFamily(const VkPhysicalDevice& physical_device,
             // keep the graphic and present queue family index the same
             // so that we only need one family index for both rather than two for each
             VkBool32 presentSupport = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface, &presentSupport);
+            vkGetPhysicalDeviceSurfaceSupportKHR(*physical_device, i, *surface, &presentSupport);
             if (presentSupport)
             {
                 queue_family_index_ = i;

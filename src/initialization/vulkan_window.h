@@ -24,8 +24,8 @@ public:
     VulkanSDLWindowHelper(SVulkanSDLWindowConfig config);
     ~VulkanSDLWindowHelper();
 
-    void CreateSurface(const VkInstance* vkInstance);
-    const VkSurfaceKHR& GetSurface() const { return surface_; }
+    bool CreateSurface(const VkInstance* vkInstance);
+    const VkSurfaceKHR* GetSurface() const { return &surface_; }
     SDL_Window* GetWindow() const { return window_; }
     
     const char** GetWindowExtensions() const { return extensions_; }
@@ -71,20 +71,20 @@ public:
     VulkanSwapChainHelper();
     ~VulkanSwapChainHelper();
 
-    void Setup(SVulkanSwapChainConfig config, const VkDevice& device, const VkPhysicalDevice& physical_device, const VkSurfaceKHR& surface, SDL_Window* window);
+    void Setup(SVulkanSwapChainConfig config, const VkDevice* device, const VkPhysicalDevice* physical_device, const VkSurfaceKHR* surface, SDL_Window* window);
     bool CreateSwapChain();
-    int GetSwapChainExtensions(const VkPhysicalDevice& physical_device, std::vector<const char*>& extensions) 
+    int GetSwapChainExtensions(const VkPhysicalDevice* physical_device, std::vector<const char*>& extensions) 
     {
-        physical_device_ = &physical_device; // Set the physical device
+        physical_device_ = physical_device;
         CheckExtensions();
         extensions = swap_chain_config_.device_extensions_; 
         return swap_chain_config_.device_extensions_.size(); 
     }
 
-    const VkSwapchainKHR& GetSwapChain() const { return swap_chain_; }
-    const std::vector<VkImage>& GetSwapChainImages() const { return swap_chain_images_; }
-    const std::vector<VkImageView>& GetSwapChainImageViews() const { return swap_chain_image_views_; }
-    const SVulkanSwapChainConfig& GetSwapChainConfig() const { return swap_chain_config_; }
+    const VkSwapchainKHR* GetSwapChain() const { return &swap_chain_; }
+    const std::vector<VkImage>* GetSwapChainImages() const { return &swap_chain_images_; }
+    const std::vector<VkImageView>* GetSwapChainImageViews() const { return &swap_chain_image_views_; }
+    const SVulkanSwapChainConfig* GetSwapChainConfig() const { return &swap_chain_config_; }
     
 
 private:

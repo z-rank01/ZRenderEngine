@@ -12,7 +12,7 @@ add_library(vulkan_initialization STATIC
 # 设置头文件包含目录
 target_include_directories(vulkan_initialization
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/..  # 允许其他模块引用 initialization 目录下的头文件
+        ${CMAKE_CURRENT_SOURCE_DIR}/..  # 允许 initialization 引用其他目录下的头文件
 )
 
 # 设置编译器标准和选项

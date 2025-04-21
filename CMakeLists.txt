@@ -27,6 +27,7 @@ find_package(Stb REQUIRED)
 # 添加子目录
 add_subdirectory(src/utility)
 add_subdirectory(src/initialization)
+add_subdirectory(src/pipeline)
 
 # 设置源文件
 set(SOURCES
@@ -53,8 +54,9 @@ target_link_libraries(VulkanEngine
     fmt::fmt-header-only
     imgui::imgui
     fastgltf::fastgltf
-    utility  # 添加 utility 库
-    vulkan_initialization  # 添加 vulkan_initialization 库
+    utility                 # 添加 utility 库
+    vulkan_initialization   # 添加 vulkan_initialization 库
+    vulkan_pipeline         # 添加 vulkan_pipeline 库
 )
 
 # 包含目录

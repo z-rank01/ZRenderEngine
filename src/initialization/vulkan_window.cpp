@@ -40,7 +40,7 @@ VulkanSDLWindowHelper::VulkanSDLWindowHelper(SVulkanSDLWindowConfig config)
     window_extension_count_ = extension_count;
 }
 
-void VulkanSDLWindowHelper::CreateSurface(const VkInstance* vkInstance)
+bool VulkanSDLWindowHelper::CreateSurface(const VkInstance* vkInstance)
 {
     vk_instance_ = vkInstance;
 
@@ -48,11 +48,12 @@ void VulkanSDLWindowHelper::CreateSurface(const VkInstance* vkInstance)
     if (!SDL_Vulkan_CreateSurface(window_, *vk_instance_, nullptr, &surface_))
     {
         Logger::LogError("Failed to create Vulkan surface: " + std::string(SDL_GetError()));
-        return;
+        return false;
     }
     else
     {
         Logger::LogDebug("Succeeded in creating Vulkan surface.");
+        return true;
     }
 }
 
@@ -73,12 +74,12 @@ VulkanSwapChainHelper::~VulkanSwapChainHelper()
     }
 }
 
-void VulkanSwapChainHelper::Setup(SVulkanSwapChainConfig config, const VkDevice& device, const VkPhysicalDevice& physical_device, const VkSurfaceKHR& surface, SDL_Window* window)
+void VulkanSwapChainHelper::Setup(SVulkanSwapChainConfig config, const VkDevice* device, const VkPhysicalDevice* physical_device, const VkSurfaceKHR* surface, SDL_Window* window)
 {
     swap_chain_config_ = config; // user config
-    device_ = &device;
-    physical_device_ = &physical_device;
-    surface_ = &surface;
+    device_ = device;
+    physical_device_ = physical_device;
+    surface_ = surface;
     window_ = window;
 }
 

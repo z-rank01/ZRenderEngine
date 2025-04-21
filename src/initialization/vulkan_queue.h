@@ -18,7 +18,7 @@ public:
     const VkQueue& GetQueueFromDevice(const VkDevice& logical_device);
     const VkQueue& GetQueue() const { return vkQueue_; }
     bool GenerateQueueCreateInfo(VkDeviceQueueCreateInfo& queue_create_info) const;
-    void PickQueueFamily(const VkPhysicalDevice& physical_device, const VkSurfaceKHR& surface);
+    void PickQueueFamily(const VkPhysicalDevice* physical_device, const VkSurfaceKHR* surface);
 
 private:
     SVulkanQueueConfig queue_config_;

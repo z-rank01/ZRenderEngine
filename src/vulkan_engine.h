@@ -4,7 +4,14 @@
 #include "initialization/vulkan_device.h"
 #include "initialization/vulkan_queue.h"
 #include "initialization/vulkan_window.h"
+
+#include "pipeline/vulkan_shader.h"
+#include "pipeline/vulkan_pipeline.h"
+#include "pipeline/vulkan_renderpass.h"
+
+#include "utility/config_reader.h"
 #include "vulkan_structure.h"
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <memory>
@@ -36,7 +43,8 @@ struct SWindowConfig
 
 struct SEngineConfig
 {
-    SWindowConfig window;
+    SWindowConfig window_config;
+    SGeneralConfig general_config;
     uint8_t frame_count;
     bool use_validation_layers;
 };
@@ -65,7 +73,17 @@ private:
     std::unique_ptr<VulkanDeviceHelper> vkDeviceHelper_;
     std::unique_ptr<VulkanQueueHelper> vkQueueHelper_;
     std::unique_ptr<VulkanSwapChainHelper> vkSwapChainHelper_;
+    std::unique_ptr<VulkanShaderHelper> vkShaderHelper_;
     
     void InitializeSDL();
     void InitializeVulkan();
+
+    // --- Vulkan Initialization Steps ---
+    bool CreateInstance();
+    bool CreateSurface();
+    bool CreatePhysicalDevice();
+    bool CreateLogicalDevice();
+    bool CreateSwapChain();
+    bool CreatePipeline();
+    // ------------------------------------
 };

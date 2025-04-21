@@ -2,6 +2,7 @@
 add_library(utility STATIC
     logger.h
     logger.cpp
+    config_reader.h
 )
 
 # 设置头文件包含目录
