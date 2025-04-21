@@ -259,8 +259,8 @@ bool VulkanEngine::CreatePipeline()
     renderpass_config.color_format = swapchain_config->target_surface_format_.format;
     renderpass_config.depth_format = VK_FORMAT_D32_SFLOAT; // TODO: Make configurable
     renderpass_config.sample_count = VK_SAMPLE_COUNT_1_BIT; // TODO: Make configurable
-    VulkanRenderpassHelper renderpass_helper(renderpass_config);
-    if (!renderpass_helper.CreateRenderpass(vkDeviceHelper_->GetLogicalDevice()))
+    vkRenderpassHelper_ = std::make_unique<VulkanRenderpassHelper>(renderpass_config);
+    if (!vkRenderpassHelper_->CreateRenderpass(vkDeviceHelper_->GetLogicalDevice()))
     {
         Logger::LogError("Failed to create renderpass");
         return false;
@@ -273,7 +273,7 @@ bool VulkanEngine::CreatePipeline()
         { EShaderType::VERTEX_SHADER, vkShaderHelper_->GetShaderModule(EShaderType::VERTEX_SHADER) },
         { EShaderType::FRAGMENT_SHADER, vkShaderHelper_->GetShaderModule(EShaderType::FRAGMENT_SHADER) }
     };
-    pipeline_config.renderpass = renderpass_helper.GetRenderpass();
+    pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
     VulkanPipelineHelper pipeline_helper(pipeline_config);
     if (!pipeline_helper.CreatePipeline(vkDeviceHelper_->GetLogicalDevice()))
     {

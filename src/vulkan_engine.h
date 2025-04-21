@@ -74,6 +74,7 @@ private:
     std::unique_ptr<VulkanQueueHelper> vkQueueHelper_;
     std::unique_ptr<VulkanSwapChainHelper> vkSwapChainHelper_;
     std::unique_ptr<VulkanShaderHelper> vkShaderHelper_;
+    std::unique_ptr<VulkanRenderpassHelper> vkRenderpassHelper_;
     
     void InitializeSDL();
     void InitializeVulkan();
