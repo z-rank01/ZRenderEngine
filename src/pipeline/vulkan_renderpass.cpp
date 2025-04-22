@@ -4,12 +4,12 @@ VulkanRenderpassHelper::~VulkanRenderpassHelper()
 {
     if (renderpass_ != VK_NULL_HANDLE)
     {
-        vkDestroyRenderPass(*device_, renderpass_, nullptr);
+        vkDestroyRenderPass(device_, renderpass_, nullptr);
         renderpass_ = VK_NULL_HANDLE;
     }
 }
 
-bool VulkanRenderpassHelper::CreateRenderpass(const VkDevice* device)
+bool VulkanRenderpassHelper::CreateRenderpass(VkDevice device)
 {
     device_ = device;
 
@@ -65,7 +65,7 @@ bool VulkanRenderpassHelper::CreateRenderpass(const VkDevice* device)
     renderPassInfo.flags = 0;
 
     // create render pass
-    return Logger::LogWithVkResult(vkCreateRenderPass(*device_, &renderPassInfo, nullptr, &renderpass_), 
+    return Logger::LogWithVkResult(vkCreateRenderPass(device_, &renderPassInfo, nullptr, &renderpass_), 
         "Failed to create render pass", 
         "Succeeded in creating render pass");
 }

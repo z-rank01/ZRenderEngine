@@ -26,12 +26,12 @@ class VulkanShaderHelper
 {
 public:
     VulkanShaderHelper() = delete;
-    VulkanShaderHelper(const VkDevice* device) : device_(device) {};
+    VulkanShaderHelper(VkDevice device) : device_(device) {};
     ~VulkanShaderHelper();
 
     bool ReadShaderCode(const char* filename, std::vector<uint32_t>& shader_code);
-    bool CreateShaderModule(const VkDevice* device, const std::vector<uint32_t>& shader_code, EShaderType shader_type);
-    const VkShaderModule* GetShaderModule(EShaderType shader_type) const 
+    bool CreateShaderModule(VkDevice device, const std::vector<uint32_t>& shader_code, EShaderType shader_type);
+    VkShaderModule GetShaderModule(EShaderType shader_type) const 
     {
         if (shader_module_pairs_.find(shader_type) == shader_module_pairs_.end())
         {
@@ -42,6 +42,6 @@ public:
     }
 
 private:
-    const VkDevice* device_;
-    std::map<EShaderType, VkShaderModule*> shader_module_pairs_;
+    VkDevice device_;
+    std::map<EShaderType, VkShaderModule> shader_module_pairs_;
 };

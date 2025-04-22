@@ -165,7 +165,7 @@ bool VulkanEngine::CreateInstance()
 
 bool VulkanEngine::CreateSurface()
 {
-    return vkWindowHelper_->CreateSurface(&vkInstanceHelper_->GetVulkanInstance());
+    return vkWindowHelper_->CreateSurface(vkInstanceHelper_->GetVulkanInstance());
 }
 
 bool VulkanEngine::CreatePhysicalDevice()

@@ -12,8 +12,8 @@
 struct SVulkanPipelineConfig
 {
     const SVulkanSwapChainConfig* swap_chain_config;
-    std::map<EShaderType, const VkShaderModule*> shader_module_map;
-    const VkRenderPass* renderpass;
+    std::map<EShaderType, VkShaderModule> shader_module_map;
+    VkRenderPass renderpass;
 };
 
 class VulkanPipelineHelper
@@ -22,10 +22,10 @@ private:
     SVulkanPipelineConfig config_;
     VkPipelineLayout pipeline_layout_;
     VkPipeline pipeline_;
-    const VkDevice* device_;
+    VkDevice device_;
 public:
     VulkanPipelineHelper(SVulkanPipelineConfig config) : config_(config) {}
     ~VulkanPipelineHelper();
 
-    bool CreatePipeline(const VkDevice* device);
+    bool CreatePipeline(VkDevice device);
 };

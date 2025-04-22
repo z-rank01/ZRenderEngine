@@ -15,10 +15,10 @@ public:
     VulkanQueueHelper(SVulkanQueueConfig config);
     ~VulkanQueueHelper();
 
-    const VkQueue& GetQueueFromDevice(const VkDevice& logical_device);
-    const VkQueue& GetQueue() const { return vkQueue_; }
+    VkQueue GetQueueFromDevice(VkDevice logical_device);
+    VkQueue GetQueue() const { return vkQueue_; }
     bool GenerateQueueCreateInfo(VkDeviceQueueCreateInfo& queue_create_info) const;
-    void PickQueueFamily(const VkPhysicalDevice* physical_device, const VkSurfaceKHR* surface);
+    void PickQueueFamily(VkPhysicalDevice physical_device, VkSurfaceKHR surface);
 
 private:
     SVulkanQueueConfig queue_config_;

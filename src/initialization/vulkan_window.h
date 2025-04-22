@@ -24,8 +24,8 @@ public:
     VulkanSDLWindowHelper(SVulkanSDLWindowConfig config);
     ~VulkanSDLWindowHelper();
 
-    bool CreateSurface(const VkInstance* vkInstance);
-    const VkSurfaceKHR* GetSurface() const { return &surface_; }
+    bool CreateSurface(VkInstance vkInstance);
+    VkSurfaceKHR GetSurface() const { return surface_; }
     SDL_Window* GetWindow() const { return window_; }
     
     const char** GetWindowExtensions() const { return extensions_; }
@@ -40,7 +40,7 @@ private:
     const char** extensions_;
 
     // vulkan
-    const VkInstance* vk_instance_;
+    VkInstance vk_instance_;
     VkSurfaceKHR surface_;
 };
 
@@ -71,9 +71,9 @@ public:
     VulkanSwapChainHelper();
     ~VulkanSwapChainHelper();
 
-    void Setup(SVulkanSwapChainConfig config, const VkDevice* device, const VkPhysicalDevice* physical_device, const VkSurfaceKHR* surface, SDL_Window* window);
+    void Setup(SVulkanSwapChainConfig config, VkDevice device, VkPhysicalDevice physical_device, VkSurfaceKHR surface, SDL_Window* window);
     bool CreateSwapChain();
-    int GetSwapChainExtensions(const VkPhysicalDevice* physical_device, std::vector<const char*>& extensions) 
+    int GetSwapChainExtensions(VkPhysicalDevice physical_device, std::vector<const char*>& extensions) 
     {
         physical_device_ = physical_device;
         CheckExtensions();
@@ -81,7 +81,7 @@ public:
         return swap_chain_config_.device_extensions_.size(); 
     }
 
-    const VkSwapchainKHR* GetSwapChain() const { return &swap_chain_; }
+    const VkSwapchainKHR GetSwapChain() const { return swap_chain_; }
     const std::vector<VkImage>* GetSwapChainImages() const { return &swap_chain_images_; }
     const std::vector<VkImageView>* GetSwapChainImageViews() const { return &swap_chain_image_views_; }
     const SVulkanSwapChainConfig* GetSwapChainConfig() const { return &swap_chain_config_; }
@@ -100,9 +100,9 @@ private:
     std::vector<VkImage> swap_chain_images_;
     std::vector<VkImageView> swap_chain_image_views_;
 
-    const VkDevice* device_;
-    const VkPhysicalDevice* physical_device_;
-    const VkSurfaceKHR* surface_;
+    VkDevice device_;
+    VkPhysicalDevice physical_device_;
+    VkSurfaceKHR surface_;
     SDL_Window* window_;
 
     void CheckExtensions();

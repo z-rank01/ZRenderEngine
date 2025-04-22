@@ -7,14 +7,14 @@ VulkanShaderHelper::~VulkanShaderHelper()
     {
         if (pair.second != VK_NULL_HANDLE)
         {
-            vkDestroyShaderModule(*device_, *pair.second, nullptr);
+            vkDestroyShaderModule(device_, pair.second, nullptr);
             pair.second = VK_NULL_HANDLE;
         }
     }
     shader_module_pairs_.clear();
 }
 
-bool VulkanShaderHelper::CreateShaderModule(const VkDevice* device, const std::vector<uint32_t>& shader_code, EShaderType shader_type)
+bool VulkanShaderHelper::CreateShaderModule(VkDevice device, const std::vector<uint32_t>& shader_code, EShaderType shader_type)
 {
     device_ = device; // Store the device reference
 
@@ -28,17 +28,17 @@ bool VulkanShaderHelper::CreateShaderModule(const VkDevice* device, const std::v
     if (shader_module_pairs_.find(shader_type) != shader_module_pairs_.end())
     {
         Logger::LogError("Shader module already exists for the specified shader type.");
-        vkDestroyShaderModule(*device, *shader_module_pairs_[shader_type], nullptr);
+        vkDestroyShaderModule(device, shader_module_pairs_[shader_type], nullptr);
         shader_module_pairs_.erase(shader_type);
     }
 
     // Create the shader module
     VkShaderModule returned_shader_module = VK_NULL_HANDLE;
-    if (Logger::LogWithVkResult(vkCreateShaderModule(*device, &create_info, nullptr, &returned_shader_module), 
+    if (Logger::LogWithVkResult(vkCreateShaderModule(device, &create_info, nullptr, &returned_shader_module), 
                 "Failed to create shader module", 
                 "Succeeded in creating shader module"))
     {
-        shader_module_pairs_[shader_type] = &returned_shader_module; // Store the shader module in the map
+        shader_module_pairs_[shader_type] = returned_shader_module; // Store the shader module in the map
         return true;
     }
     else

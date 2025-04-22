@@ -93,8 +93,8 @@ public:
     bool CreateLogicalDevice(SVulkanDeviceConfig config);
     bool CreatePhysicalDevice(SVulkanPhysicalDeviceConfig config, const VkInstance& instance);
 
-    const VkPhysicalDevice* GetPhysicalDevice() const { return &vkPhysicalDevice_; }
-    const VkDevice* GetLogicalDevice() const { return &vkLogicalDevice_; }
+    VkPhysicalDevice GetPhysicalDevice() const { return vkPhysicalDevice_; }
+    VkDevice GetLogicalDevice() const { return vkLogicalDevice_; }
 
 private:
     VkPhysicalDevice vkPhysicalDevice_;

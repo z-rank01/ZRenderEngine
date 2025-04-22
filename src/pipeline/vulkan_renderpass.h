@@ -16,12 +16,12 @@ class VulkanRenderpassHelper
 private:
     SVulkanRenderpassConfig config_;
     VkRenderPass renderpass_;
-    const VkDevice* device_;
+    VkDevice device_;
 public:
     VulkanRenderpassHelper() = delete;
     VulkanRenderpassHelper(SVulkanRenderpassConfig config) : config_(config) {};
     ~VulkanRenderpassHelper();
 
-    bool CreateRenderpass(const VkDevice* device);
-    const VkRenderPass* GetRenderpass() const { return &renderpass_; }
+    bool CreateRenderpass(VkDevice device);
+    VkRenderPass GetRenderpass() const { return renderpass_; }
 };

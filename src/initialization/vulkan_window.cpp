@@ -10,7 +10,7 @@ VulkanSDLWindowHelper::~VulkanSDLWindowHelper()
     SDL_Quit();
     SDL_free(extensions_);   // Free the allocated memory for extensions after it's copied or used by the helper
 
-    vkDestroySurfaceKHR(*vk_instance_, surface_, nullptr);
+    vkDestroySurfaceKHR(vk_instance_, surface_, nullptr);
 }
 
 
@@ -40,12 +40,12 @@ VulkanSDLWindowHelper::VulkanSDLWindowHelper(SVulkanSDLWindowConfig config)
     window_extension_count_ = extension_count;
 }
 
-bool VulkanSDLWindowHelper::CreateSurface(const VkInstance* vkInstance)
+bool VulkanSDLWindowHelper::CreateSurface(VkInstance vkInstance)
 {
     vk_instance_ = vkInstance;
 
     // create vulkan surface
-    if (!SDL_Vulkan_CreateSurface(window_, *vk_instance_, nullptr, &surface_))
+    if (!SDL_Vulkan_CreateSurface(window_, vk_instance_, nullptr, &surface_))
     {
         Logger::LogError("Failed to create Vulkan surface: " + std::string(SDL_GetError()));
         return false;
@@ -67,14 +67,14 @@ VulkanSwapChainHelper::VulkanSwapChainHelper()
 
 VulkanSwapChainHelper::~VulkanSwapChainHelper()
 {
-    vkDestroySwapchainKHR(*device_, swap_chain_, nullptr);
+    vkDestroySwapchainKHR(device_, swap_chain_, nullptr);
     for (const auto& image_view : swap_chain_image_views_)
     {
-        vkDestroyImageView(*device_, image_view, nullptr);
+        vkDestroyImageView(device_, image_view, nullptr);
     }
 }
 
-void VulkanSwapChainHelper::Setup(SVulkanSwapChainConfig config, const VkDevice* device, const VkPhysicalDevice* physical_device, const VkSurfaceKHR* surface, SDL_Window* window)
+void VulkanSwapChainHelper::Setup(SVulkanSwapChainConfig config, VkDevice device, VkPhysicalDevice physical_device, VkSurfaceKHR surface, SDL_Window* window)
 {
     swap_chain_config_ = config; // user config
     device_ = device;
@@ -122,9 +122,9 @@ void VulkanSwapChainHelper::CheckExtensions()
 {
     // check extensions
     uint32_t extension_count = 0;
-    vkEnumerateDeviceExtensionProperties(*physical_device_, nullptr, &extension_count, nullptr);
+    vkEnumerateDeviceExtensionProperties(physical_device_, nullptr, &extension_count, nullptr);
     std::vector<VkExtensionProperties> extensions(extension_count);
-    vkEnumerateDeviceExtensionProperties(*physical_device_, nullptr, &extension_count, extensions.data());
+    vkEnumerateDeviceExtensionProperties(physical_device_, nullptr, &extension_count, extensions.data());
 
     std::unordered_set<std::string> supported_extensions(extension_count);
     std::vector<const char*> available_extensions;
@@ -151,24 +151,24 @@ void VulkanSwapChainHelper::CheckExtensions()
 void VulkanSwapChainHelper::GetSwapChainSupport()
 {
     // get swap chain support
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(*physical_device_, *surface_, &surface_capabilities_);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device_, surface_, &surface_capabilities_);
 
     // get surface formats
     uint32_t format_count = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(*physical_device_, *surface_, &format_count, nullptr);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device_, surface_, &format_count, nullptr);
     if (format_count != 0)
     {
         surface_formats_.resize(format_count);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(*physical_device_, *surface_, &format_count, surface_formats_.data());
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device_, surface_, &format_count, surface_formats_.data());
     }
 
     // get present modes
     uint32_t present_mode_count = 0;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(*physical_device_, *surface_, &present_mode_count, nullptr);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device_, surface_, &present_mode_count, nullptr);
     if (present_mode_count != 0)
     {
         present_modes_.resize(present_mode_count);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(*physical_device_, *surface_, &present_mode_count, present_modes_.data());
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device_, surface_, &present_mode_count, present_modes_.data());
     }
 }
 
@@ -239,7 +239,7 @@ void VulkanSwapChainHelper::CreateSwapChainInternal()
 
     VkSwapchainCreateInfoKHR swap_chain_info = {};
     swap_chain_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swap_chain_info.surface = *surface_;
+    swap_chain_info.surface = surface_;
     swap_chain_info.minImageCount = swap_chain_config_.target_image_count_;
     swap_chain_info.imageFormat = swap_chain_config_.target_surface_format_.format;
     swap_chain_info.imageColorSpace = swap_chain_config_.target_surface_format_.colorSpace;
@@ -255,7 +255,7 @@ void VulkanSwapChainHelper::CreateSwapChainInternal()
     swap_chain_info.pNext = nullptr;
     swap_chain_info.flags = 0;
     if (!Logger::LogWithVkResult(
-        vkCreateSwapchainKHR(*device_, &swap_chain_info, nullptr, &swap_chain_),
+        vkCreateSwapchainKHR(device_, &swap_chain_info, nullptr, &swap_chain_),
         "Failed to create swap chain",
         "Succeeded in creating swap chain"))
     {
@@ -272,9 +272,9 @@ void VulkanSwapChainHelper::CreateImageViews()
 {
     // get swap chain images
     uint32_t image_count = 0;
-    vkGetSwapchainImagesKHR(*device_, swap_chain_, &image_count, nullptr);
+    vkGetSwapchainImagesKHR(device_, swap_chain_, &image_count, nullptr);
     swap_chain_images_.resize(image_count);
-    vkGetSwapchainImagesKHR(*device_, swap_chain_, &image_count, swap_chain_images_.data());
+    vkGetSwapchainImagesKHR(device_, swap_chain_, &image_count, swap_chain_images_.data());
     swap_chain_image_views_.resize(image_count);
     for (size_t i = 0; i < image_count; ++i)
     {
@@ -294,7 +294,7 @@ void VulkanSwapChainHelper::CreateImageViews()
         view_info.subresourceRange.layerCount = 1;
 
         Logger::LogWithVkResult(
-            vkCreateImageView(*device_, &view_info, nullptr, &swap_chain_image_views_[i]),
+            vkCreateImageView(device_, &view_info, nullptr, &swap_chain_image_views_[i]),
             "Failed to create swapchain image view",
             "Succeeded in creating swapchain image view");
     }

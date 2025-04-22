@@ -5,9 +5,9 @@
 
 ///-------------------------------------------------------------------------------------------------
 // helper function declaration
-int CountSupportedPropertiesOrFeatures(const SVulkanPhysicalDeviceConfig& device_config, const VkPhysicalDevice& physical_device, 
-                                       const VkPhysicalDeviceProperties& supported_properties, const VkPhysicalDeviceFeatures& supported_features);
-bool CheckPhysicalDeviceFeatureAvailable(EPhysicalDeviceFeatures feature, const VkPhysicalDeviceFeatures& supported_features);
+int CountSupportedPropertiesOrFeatures(const SVulkanPhysicalDeviceConfig& device_config, VkPhysicalDevice physical_device, 
+                                       VkPhysicalDeviceProperties supported_properties, VkPhysicalDeviceFeatures supported_features);
+bool CheckPhysicalDeviceFeatureAvailable(EPhysicalDeviceFeatures feature, VkPhysicalDeviceFeatures supported_features);
 
 ///-------------------------------------------------------------------------------------------------
 // VulkanDeviceHelper implementation
@@ -133,8 +133,8 @@ VkPhysicalDevice VulkanDeviceHelper::PickPhysicalDevice(const SVulkanPhysicalDev
 
 // helper function:
 // count the number of supported properties or features
-int CountSupportedPropertiesOrFeatures(const SVulkanPhysicalDeviceConfig& device_config, const VkPhysicalDevice& physical_device, 
-                                       const VkPhysicalDeviceProperties& supported_properties, const VkPhysicalDeviceFeatures& supported_features)
+int CountSupportedPropertiesOrFeatures(const SVulkanPhysicalDeviceConfig& device_config, VkPhysicalDevice physical_device, 
+                                       VkPhysicalDeviceProperties supported_properties, VkPhysicalDeviceFeatures supported_features)
 {
     // Check properies: device type and API version
     if ((device_config.physical_device_type && 
@@ -165,7 +165,7 @@ int CountSupportedPropertiesOrFeatures(const SVulkanPhysicalDeviceConfig& device
     return supported_feature_cnt;
 }
 
-bool CheckPhysicalDeviceFeatureAvailable(EPhysicalDeviceFeatures feature, const VkPhysicalDeviceFeatures& supported_features)
+bool CheckPhysicalDeviceFeatureAvailable(EPhysicalDeviceFeatures feature, VkPhysicalDeviceFeatures supported_features)
 {
     switch (feature)
     {

@@ -4,17 +4,17 @@ VulkanPipelineHelper::~VulkanPipelineHelper()
 {
     if (pipeline_ != VK_NULL_HANDLE)
     {
-        vkDestroyPipeline(*device_, pipeline_, nullptr);
+        vkDestroyPipeline(device_, pipeline_, nullptr);
         pipeline_ = VK_NULL_HANDLE;
     }
     if (pipeline_layout_ != VK_NULL_HANDLE)
     {
-        vkDestroyPipelineLayout(*device_, pipeline_layout_, nullptr);
+        vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
         pipeline_layout_ = VK_NULL_HANDLE;
     }
 }
 
-bool VulkanPipelineHelper::CreatePipeline(const VkDevice* device)
+bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
 {
     device_ = device;
     
@@ -112,7 +112,7 @@ bool VulkanPipelineHelper::CreatePipeline(const VkDevice* device)
     pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
     pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
-    if (!Logger::LogWithVkResult(vkCreatePipelineLayout(*device_, &pipelineLayoutInfo, nullptr, &pipeline_layout_), 
+    if (!Logger::LogWithVkResult(vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr, &pipeline_layout_), 
         "Failed to create pipeline layout", 
         "Created pipeline layout successfully"))
     {
@@ -120,16 +120,33 @@ bool VulkanPipelineHelper::CreatePipeline(const VkDevice* device)
     }
 
     VkPipelineShaderStageCreateInfo shader_stages[2];
+    // 获取顶点着色器模块
+    auto it_vert = config_.shader_module_map.find(EShaderType::VERTEX_SHADER);
+    if (it_vert == config_.shader_module_map.end()) {
+        Logger::LogError("Vertex shader module not found in pipeline config map.");
+        return false;
+    }
     shader_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    shader_stages[0].module = *config_.shader_module_map[EShaderType::VERTEX_SHADER];
+    shader_stages[0].module = it_vert->second;
     shader_stages[0].pName = "main";
     shader_stages[0].pSpecializationInfo = nullptr;
+    shader_stages[0].pNext = nullptr;
+    shader_stages[0].flags = 0;
+
+    // 获取片段着色器模块
+    auto it_frag = config_.shader_module_map.find(EShaderType::FRAGMENT_SHADER);
+    if (it_frag == config_.shader_module_map.end()) {
+        Logger::LogError("Fragment shader module not found in pipeline config map.");
+        return false;
+    }
     shader_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    shader_stages[1].module = *config_.shader_module_map[EShaderType::FRAGMENT_SHADER];
+    shader_stages[1].module = it_frag->second;
     shader_stages[1].pName = "main";
     shader_stages[1].pSpecializationInfo = nullptr;
+    shader_stages[1].pNext = nullptr;
+    shader_stages[1].flags = 0;
 
     std::vector<VkDynamicState> dynamicStates =
     {
@@ -156,14 +173,14 @@ bool VulkanPipelineHelper::CreatePipeline(const VkDevice* device)
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = pipeline_layout_;
-    pipelineInfo.renderPass = *config_.renderpass;
+    pipelineInfo.renderPass = config_.renderpass;
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
     pipelineInfo.basePipelineIndex = -1; // Optional
     pipelineInfo.pNext = nullptr; // Optional
     pipelineInfo.flags = 0; // Optional
 
-    return Logger::LogWithVkResult(vkCreateGraphicsPipelines(*device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_), 
+    return Logger::LogWithVkResult(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_), 
         "Failed to create graphics pipeline", 
         "Succeeded in creating graphics pipeline");
 }

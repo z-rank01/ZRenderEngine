@@ -31,7 +31,7 @@ public:
     ~VulkanInstanceHelper();
 
     bool CreateVulkanInstance();
-    const VkInstance& GetVulkanInstance() const { return vkInstance_; }
+    VkInstance GetVulkanInstance() const { return vkInstance_; }
     
 
 private:
