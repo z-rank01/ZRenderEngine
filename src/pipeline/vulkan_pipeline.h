@@ -28,4 +28,6 @@ public:
     ~VulkanPipelineHelper();
 
     bool CreatePipeline(VkDevice device);
+    VkPipeline GetPipeline() const { return pipeline_; }
+    VkPipelineLayout GetPipelineLayout() const { return pipeline_layout_; }
 };

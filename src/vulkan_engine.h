@@ -9,6 +9,10 @@
 #include "pipeline/vulkan_pipeline.h"
 #include "pipeline/vulkan_renderpass.h"
 
+#include "source/vulkan_commandbuffer.h"
+#include "source/vulkan_framebuffer.h"
+
+#include "synchronization/vulkan_synchronization.h"
 #include "utility/config_reader.h"
 #include "vulkan_structure.h"
 
@@ -75,6 +79,10 @@ private:
     std::unique_ptr<VulkanSwapChainHelper> vkSwapChainHelper_;
     std::unique_ptr<VulkanShaderHelper> vkShaderHelper_;
     std::unique_ptr<VulkanRenderpassHelper> vkRenderpassHelper_;
+    std::unique_ptr<VulkanPipelineHelper> vkPipelineHelper_;
+    std::unique_ptr<VulkanCommandBufferHelper> vkCommandBufferHelper_;
+    std::unique_ptr<VulkanFrameBufferHelper> vkFrameBufferHelper_;
+    std::unique_ptr<VulkanSynchronizationHelper> vkSynchronizationHelper_;
     
     void InitializeSDL();
     void InitializeVulkan();
@@ -86,5 +94,14 @@ private:
     bool CreateLogicalDevice();
     bool CreateSwapChain();
     bool CreatePipeline();
+    bool CreateFrameBuffer();
+    bool CreateCommandPool();
+    bool AllocateCommandBuffer();
+    bool CreateSynchronizationObjects();
     // ------------------------------------
+
+    // --- Vulkan Draw Steps ---
+    void DrawFrame();
+    bool RecordCommand(uint32_t image_index, std::string command_buffer_id);
+    // --------------------------------------
 };

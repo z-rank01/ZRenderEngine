@@ -65,6 +65,9 @@ struct SVulkanSwapChainConfig
     }
 };
 
+
+// --------------------------------------
+
 class VulkanSwapChainHelper
 {
 public:
@@ -85,6 +88,7 @@ public:
     const std::vector<VkImage>* GetSwapChainImages() const { return &swap_chain_images_; }
     const std::vector<VkImageView>* GetSwapChainImageViews() const { return &swap_chain_image_views_; }
     const SVulkanSwapChainConfig* GetSwapChainConfig() const { return &swap_chain_config_; }
+    bool AcquireNextImage(uint32_t& image_index, VkSemaphore semaphore = VK_NULL_HANDLE, VkFence fence = VK_NULL_HANDLE);
     
 
 private:

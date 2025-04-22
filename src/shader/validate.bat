@@ -1,0 +1,2 @@
+glslangValidator triangle.vert
+glslangValidator triangle.frag

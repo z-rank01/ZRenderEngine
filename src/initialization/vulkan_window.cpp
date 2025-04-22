@@ -118,6 +118,14 @@ bool VulkanSwapChainHelper::CreateSwapChain()
     return true;
 }
 
+bool VulkanSwapChainHelper::AcquireNextImage(uint32_t& image_index, VkSemaphore semaphore, VkFence fence)
+{
+    return Logger::LogWithVkResult(
+        vkAcquireNextImageKHR(device_, swap_chain_, UINT64_MAX, semaphore, fence, &image_index),
+        "Failed to acquire next image",
+        "Succeeded in acquiring next image");
+}
+
 void VulkanSwapChainHelper::CheckExtensions()
 {
     // check extensions

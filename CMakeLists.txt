@@ -28,6 +28,8 @@ find_package(Stb REQUIRED)
 add_subdirectory(src/utility)
 add_subdirectory(src/initialization)
 add_subdirectory(src/pipeline)
+add_subdirectory(src/source)
+add_subdirectory(src/synchronization)
 
 # 设置源文件
 set(SOURCES
@@ -57,6 +59,8 @@ target_link_libraries(VulkanEngine
     utility                 # 添加 utility 库
     vulkan_initialization   # 添加 vulkan_initialization 库
     vulkan_pipeline         # 添加 vulkan_pipeline 库
+    vulkan_source           # 添加 vulkan_source 库
+    vulkan_synchronization  # 添加 vulkan_synchronization 库
 )
 
 # 包含目录
@@ -66,9 +70,6 @@ target_include_directories(VulkanEngine
     ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/installed/${VCPKG_TARGET_TRIPLET}/include # STB 头文件路径
     ${Vulkan_INCLUDE_DIRS}
 )
-
-# 定义宏以使用 Vulkan 动态加载
-target_compile_definitions(VulkanEngine PRIVATE VK_NO_PROTOTYPES)
 
 # 设置 IDE 中的源文件分组
 source_group(

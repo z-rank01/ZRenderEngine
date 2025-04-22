@@ -6,31 +6,44 @@
 
 VulkanQueueHelper::VulkanQueueHelper(SVulkanQueueConfig config) : queue_config_(config)
 {
-    vkQueue_ = VK_NULL_HANDLE;
 }
 
 VulkanQueueHelper::~VulkanQueueHelper()
 {
+    // wait for all queues to finish
+    for (auto& queue : queue_map_)
+    {
+        vkQueueWaitIdle(queue.second);
+    }
 }
 
-VkQueue VulkanQueueHelper::GetQueueFromDevice(VkDevice logical_device)
+VkQueue VulkanQueueHelper::GetQueueFromDevice(VkDevice logical_device, std::string id)
 {
-    if (queue_family_index_.has_value())
-    {
-        queue_index_ = 0; // default to 0 for now
-        vkGetDeviceQueue(logical_device, queue_family_index_.value(), queue_index_.value(), &vkQueue_);
-    }
-    else
+    if (!queue_family_index_.has_value())
     {
         Logger::LogError("Queue family index is not set");
+        return VK_NULL_HANDLE;
     }
-    return vkQueue_;
+
+    // check if queue family index is set
+    queue_index_ = 0;   // default to 0 for now
+    if (queue_map_.find(id) != queue_map_.end())
+    {
+        Logger::LogError("Queue with ID " + id + " already exists.");
+        return queue_map_[id];
+    }
+
+    // create queue
+    VkQueue queue;
+    vkGetDeviceQueue(logical_device, queue_family_index_.value(), queue_index_.value(), &queue);
+    queue_map_[id] = queue;
+    return queue;
 }
 
 bool VulkanQueueHelper::GenerateQueueCreateInfo(VkDeviceQueueCreateInfo& queue_create_info) const
 {
     // check if queue family index is set
-    if (!queue_family_index_.has_value()) 
+    if (!queue_family_index_.has_value())
     {
         Logger::LogError("Queue family index is not set");
         return false;
@@ -40,7 +53,7 @@ bool VulkanQueueHelper::GenerateQueueCreateInfo(VkDeviceQueueCreateInfo& queue_c
     queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_create_info.queueFamilyIndex = queue_family_index_.value();
     queue_create_info.queueCount = 1;
-    queue_create_info.pQueuePriorities = new float[1]{ 1.0f };
+    queue_create_info.pQueuePriorities = new float[1] { 1.0f };
     return true;
 }
 
@@ -67,5 +80,37 @@ void VulkanQueueHelper::PickQueueFamily(VkPhysicalDevice physical_device, VkSurf
             }
         }
     }
+}
+
+bool VulkanQueueHelper::SubmitCommandBuffer(const SVulkanQueueSubmitConfig& config, VkDevice logical_device, VkFence fence)
+{
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.waitSemaphoreCount = static_cast<uint32_t>(config.wait_semaphores.size());
+    submitInfo.pWaitSemaphores = config.wait_semaphores.data();
+    submitInfo.pWaitDstStageMask = config.wait_stages.data();
+    submitInfo.commandBufferCount = static_cast<uint32_t>(config.command_buffers.size());
+    submitInfo.pCommandBuffers = config.command_buffers.data();
+    submitInfo.signalSemaphoreCount = static_cast<uint32_t>(config.signal_semaphores.size());
+    submitInfo.pSignalSemaphores = config.signal_semaphores.data();
+    return Logger::LogWithVkResult(
+        vkQueueSubmit(queue_map_.at(config.queue_id), 1, &submitInfo, fence),
+        "Failed to submit command buffer",
+        "Succeeded in submitting command buffer");
+}
+
+bool VulkanQueueHelper::PresentImage(const SVulkanQueuePresentConfig& config, VkDevice logical_device)
+{
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = static_cast<uint32_t>(config.wait_semaphores.size());
+    presentInfo.pWaitSemaphores = config.wait_semaphores.data();
+    presentInfo.swapchainCount = static_cast<uint32_t>(config.swapchains.size());
+    presentInfo.pSwapchains = config.swapchains.data();
+    presentInfo.pImageIndices = config.image_indices.data();
+    return Logger::LogWithVkResult(
+        vkQueuePresentKHR(queue_map_.at(config.queue_id), &presentInfo),
+        "Failed to present image",
+        "Succeeded in presenting image");
 }
 
