@@ -53,6 +53,16 @@ struct SEngineConfig
     bool use_validation_layers;
 };
 
+struct SOutputFrame
+{
+    uint32_t image_index;
+    std::string queue_id;
+    std::string command_buffer_id;
+    std::string image_available_sempaphore_id;
+    std::string render_finished_sempaphore_id;
+    std::string fence_id;
+};
+
 class VulkanEngine
 {
 public:
@@ -67,9 +77,11 @@ public:
 
 private:
     // engine members
+    uint8_t frame_index_ = 0;
     EWindowState engine_state_;
     ERenderState render_state_;
     SEngineConfig engine_config_;
+    std::vector<SOutputFrame> output_frames_;
 
     // vulkan helper members
     std::unique_ptr<VulkanSDLWindowHelper> vkWindowHelper_;
@@ -88,6 +100,7 @@ private:
     void InitializeVulkan();
 
     // --- Vulkan Initialization Steps ---
+    void GenerateFrameStructs();
     bool CreateInstance();
     bool CreateSurface();
     bool CreatePhysicalDevice();

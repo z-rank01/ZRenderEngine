@@ -55,6 +55,8 @@ void VulkanEngine::InitializeSDL()
 
 void VulkanEngine::InitializeVulkan()
 {
+    GenerateFrameStructs();
+
     if (!CreateInstance()) {
         Logger::LogError("Failed to create Vulkan instance.");
         return;
@@ -160,6 +162,19 @@ void VulkanEngine::Draw()
 // ------------------------------------
 // private function to create the engine
 // ------------------------------------
+
+void VulkanEngine::GenerateFrameStructs()
+{
+    output_frames_.resize(engine_config_.frame_count);
+    for (int i = 0; i < engine_config_.frame_count; ++i) {
+        output_frames_[i].image_index = i;
+        output_frames_[i].queue_id = "graphic_queue";
+        output_frames_[i].command_buffer_id = "graphic_command_buffer_" + std::to_string(i);
+        output_frames_[i].image_available_sempaphore_id = "image_available_semaphore_" + std::to_string(i);
+        output_frames_[i].render_finished_sempaphore_id = "render_finished_semaphore_" + std::to_string(i);
+        output_frames_[i].fence_id = "in_flight_fence_" + std::to_string(i);
+    }
+}
 
 bool VulkanEngine::CreateInstance()
 {
@@ -329,16 +344,27 @@ bool VulkanEngine::CreateCommandPool()
 
 bool VulkanEngine::AllocateCommandBuffer()
 {
-    return vkCommandBufferHelper_->AllocateCommandBuffer({ VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1 }, "graphic_command_buffer");
+    for(int i = 0; i < engine_config_.frame_count; ++i)
+    {
+        if (!vkCommandBufferHelper_->AllocateCommandBuffer({ VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1 }, output_frames_[i].command_buffer_id))
+        {
+            Logger::LogError("Failed to allocate command buffer for frame " + std::to_string(i));
+            return false;
+        }
+    }
+    return true;
 }
 
 bool VulkanEngine::CreateSynchronizationObjects()
 {
     vkSynchronizationHelper_ = std::make_unique<VulkanSynchronizationHelper>(vkDeviceHelper_->GetLogicalDevice());
     // create synchronization objects
-    if (!vkSynchronizationHelper_->CreateSemaphore("image_available_semaphore")) return false;
-    if (!vkSynchronizationHelper_->CreateSemaphore("render_finished_semaphore")) return false;
-    if (!vkSynchronizationHelper_->CreateFence("in_flight_fence")) return false;
+    for(int i = 0; i < engine_config_.frame_count; ++i)
+    {
+        if (!vkSynchronizationHelper_->CreateSemaphore(output_frames_[i].image_available_sempaphore_id)) return false;
+        if (!vkSynchronizationHelper_->CreateSemaphore(output_frames_[i].render_finished_sempaphore_id)) return false;
+        if (!vkSynchronizationHelper_->CreateFence(output_frames_[i].fence_id)) return false;
+    }
     return true;
 }
 
@@ -349,27 +375,34 @@ bool VulkanEngine::CreateSynchronizationObjects()
 
 void VulkanEngine::DrawFrame()
 {
+    // get current resource
+    auto current_fence_id = output_frames_[frame_index_].fence_id;
+    auto current_image_available_semaphore_id = output_frames_[frame_index_].image_available_sempaphore_id;
+    auto current_render_finished_semaphore_id = output_frames_[frame_index_].render_finished_sempaphore_id;
+    auto current_command_buffer_id = output_frames_[frame_index_].command_buffer_id;
+    auto current_queue_id = output_frames_[frame_index_].queue_id;
+    
     // wait for last frame to finish
-    if (!vkSynchronizationHelper_->WaitForFence("in_flight_fence")) return;
-    if (!vkSynchronizationHelper_->ResetFence("in_flight_fence")) return;
+    if (!vkSynchronizationHelper_->WaitForFence(current_fence_id)) return;
+    if (!vkSynchronizationHelper_->ResetFence(current_fence_id)) return;
 
     // get semaphores
-    auto image_available_semaphore = vkSynchronizationHelper_->GetSemaphore("image_available_semaphore");
-    auto render_finished_semaphore = vkSynchronizationHelper_->GetSemaphore("render_finished_semaphore");
-    auto in_flight_fence = vkSynchronizationHelper_->GetFence("in_flight_fence");
+    auto image_available_semaphore = vkSynchronizationHelper_->GetSemaphore(current_image_available_semaphore_id);
+    auto render_finished_semaphore = vkSynchronizationHelper_->GetSemaphore(current_render_finished_semaphore_id);
+    auto in_flight_fence = vkSynchronizationHelper_->GetFence(current_fence_id);
 
     // acquire next image
     uint32_t image_index;
     if (!vkSwapChainHelper_->AcquireNextImage(image_index, image_available_semaphore)) return;
 
     // record command buffer
-    if (!vkCommandBufferHelper_->ResetCommandBuffer("graphic_command_buffer")) return;
-    if (!RecordCommand(image_index, "graphic_command_buffer")) return;
+    if (!vkCommandBufferHelper_->ResetCommandBuffer(current_command_buffer_id)) return;
+    if (!RecordCommand(image_index, current_command_buffer_id)) return;
 
     // submit command buffer
     SVulkanQueueSubmitConfig submit_config;
-    submit_config.queue_id = "graphic_queue";
-    submit_config.command_buffers.push_back(vkCommandBufferHelper_->GetCommandBuffer("graphic_command_buffer"));
+    submit_config.queue_id = current_queue_id;
+    submit_config.command_buffers.push_back(vkCommandBufferHelper_->GetCommandBuffer(current_command_buffer_id));
     submit_config.wait_semaphores.push_back(image_available_semaphore);
     submit_config.signal_semaphores.push_back(render_finished_semaphore);
     submit_config.wait_stages.push_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -377,11 +410,14 @@ void VulkanEngine::DrawFrame()
 
     // present the image
     SVulkanQueuePresentConfig present_config;
-    present_config.queue_id = "graphic_queue";
+    present_config.queue_id = current_queue_id;
     present_config.swapchains.push_back(vkSwapChainHelper_->GetSwapChain());
     present_config.image_indices.push_back(image_index);
-    present_config.wait_semaphores.push_back(vkSynchronizationHelper_->GetSemaphore("render_finished_semaphore"));
+    present_config.wait_semaphores.push_back(vkSynchronizationHelper_->GetSemaphore(current_render_finished_semaphore_id));
     if (!vkQueueHelper_->PresentImage(present_config, vkDeviceHelper_->GetLogicalDevice())) return;
+
+    // update frame index
+    frame_index_ = (frame_index_ + 1) % engine_config_.frame_count;
 }
 
 bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffer_id)
