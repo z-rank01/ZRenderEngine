@@ -16,8 +16,8 @@ enum class ELogLevel {
 class Logger
 {
 public:
-    Logger();
-    ~Logger();
+    Logger() = default;
+    ~Logger() = default;
 
     static void LogDebug(const std::string& message);
     static void LogInfo(const std::string& message);
