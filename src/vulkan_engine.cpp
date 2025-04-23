@@ -436,13 +436,7 @@ void VulkanEngine::ResizeSwapChain()
     vkSwapChainHelper_->DestroySwapChain();
 
     // reset window size
-    int original_width = engine_config_.window_config.width;
-    int original_height = engine_config_.window_config.height;
     auto current_extent = vkWindowHelper_->GetCurrentWindowExtent();
-    // if (current_extent.width == 0 || current_extent.height == 0) {
-    //     current_extent.width = original_width;
-    //     current_extent.height = original_height;
-    // }
     engine_config_.window_config.width = current_extent.width;
     engine_config_.window_config.height = current_extent.height;
 
