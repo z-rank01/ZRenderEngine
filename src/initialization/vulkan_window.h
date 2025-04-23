@@ -27,6 +27,7 @@ public:
     bool CreateSurface(VkInstance vkInstance);
     VkSurfaceKHR GetSurface() const { return surface_; }
     SDL_Window* GetWindow() const { return window_; }
+    VkExtent2D GetCurrentWindowExtent() const;
     
     const char** GetWindowExtensions() const { return extensions_; }
     int GetWindowExtensionCount() const { return window_extension_count_; }
@@ -88,8 +89,10 @@ public:
     const std::vector<VkImage>* GetSwapChainImages() const { return &swap_chain_images_; }
     const std::vector<VkImageView>* GetSwapChainImageViews() const { return &swap_chain_image_views_; }
     const SVulkanSwapChainConfig* GetSwapChainConfig() const { return &swap_chain_config_; }
+
     bool AcquireNextImage(uint32_t& image_index, VkSemaphore semaphore = VK_NULL_HANDLE, VkFence fence = VK_NULL_HANDLE);
-    
+    bool AcquireNextImage(uint32_t& image_index, bool& resize_request, VkSemaphore semaphore = VK_NULL_HANDLE, VkFence fence = VK_NULL_HANDLE);
+    bool DestroySwapChain();
 
 private:
     VkSwapchainKHR swap_chain_;

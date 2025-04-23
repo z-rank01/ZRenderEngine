@@ -114,3 +114,26 @@ bool VulkanQueueHelper::PresentImage(const SVulkanQueuePresentConfig& config, Vk
         "Succeeded in presenting image");
 }
 
+bool VulkanQueueHelper::PresentImage(const SVulkanQueuePresentConfig& config, VkDevice logical_device, bool& resize_request)
+{
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = static_cast<uint32_t>(config.wait_semaphores.size());
+    presentInfo.pWaitSemaphores = config.wait_semaphores.data();
+    presentInfo.swapchainCount = static_cast<uint32_t>(config.swapchains.size());
+    presentInfo.pSwapchains = config.swapchains.data();
+    presentInfo.pImageIndices = config.image_indices.data();
+    VkResult result = vkQueuePresentKHR(queue_map_.at(config.queue_id), &presentInfo);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    {
+        resize_request = true;
+        return false;
+    }
+    else if (result != VK_SUCCESS)
+    {
+        Logger::LogError("Failed to present image: " + std::to_string(result));
+        return false;
+    }
+    return true;
+}
+

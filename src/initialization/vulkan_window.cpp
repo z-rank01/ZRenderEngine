@@ -57,6 +57,13 @@ bool VulkanSDLWindowHelper::CreateSurface(VkInstance vkInstance)
     }
 }
 
+VkExtent2D VulkanSDLWindowHelper::GetCurrentWindowExtent() const
+{
+    int width, height;
+    SDL_GetWindowSizeInPixels(window_, &width, &height);
+    return { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+}
+
 // ------------------------------------
 // VulkanSwapChainHelper implementation
 // ------------------------------------
@@ -126,6 +133,34 @@ bool VulkanSwapChainHelper::AcquireNextImage(uint32_t& image_index, VkSemaphore 
         "Succeeded in acquiring next image");
 }
 
+bool VulkanSwapChainHelper::AcquireNextImage(uint32_t& image_index, bool& resize_request, VkSemaphore semaphore, VkFence fence)
+{
+    VkResult result = vkAcquireNextImageKHR(device_, swap_chain_, UINT64_MAX, semaphore, fence, &image_index);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    {
+        resize_request = true;
+        return false;
+    }
+    else if (result != VK_SUCCESS)
+    {
+        Logger::LogError("Failed to acquire next image: " + std::to_string(result));
+        return false;
+    }
+    return true;
+}
+
+bool VulkanSwapChainHelper::DestroySwapChain()
+{
+    vkDestroySwapchainKHR(device_, swap_chain_, nullptr);
+    for (auto image_view : swap_chain_image_views_)
+    {
+        vkDestroyImageView(device_, image_view, nullptr);
+    }
+    swap_chain_image_views_.clear();
+    swap_chain_images_.clear();
+    return true;
+}
+
 void VulkanSwapChainHelper::CheckExtensions()
 {
     // check extensions
@@ -191,7 +226,7 @@ bool VulkanSwapChainHelper::CheckSurfaceFormat()
     {
         for (const auto& format : surface_formats_)
         {
-            if (format.format == swap_chain_config_.target_surface_format_.format && 
+            if (format.format == swap_chain_config_.target_surface_format_.format &&
                 format.colorSpace == swap_chain_config_.target_surface_format_.colorSpace)
             {
                 return true;

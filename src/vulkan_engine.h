@@ -78,6 +78,7 @@ public:
 private:
     // engine members
     uint8_t frame_index_ = 0;
+    bool resize_request_ = false;
     EWindowState engine_state_;
     ERenderState render_state_;
     SEngineConfig engine_config_;
@@ -115,6 +116,7 @@ private:
 
     // --- Vulkan Draw Steps ---
     void DrawFrame();
+    void ResizeSwapChain();
     bool RecordCommand(uint32_t image_index, std::string command_buffer_id);
     // --------------------------------------
 };

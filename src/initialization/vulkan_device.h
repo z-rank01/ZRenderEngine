@@ -95,6 +95,7 @@ public:
 
     VkPhysicalDevice GetPhysicalDevice() const { return vkPhysicalDevice_; }
     VkDevice GetLogicalDevice() const { return vkLogicalDevice_; }
+    bool WaitIdle() const;
 
 private:
     VkPhysicalDevice vkPhysicalDevice_;

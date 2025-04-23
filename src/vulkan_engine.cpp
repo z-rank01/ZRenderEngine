@@ -149,6 +149,11 @@ void VulkanEngine::Run()
             continue;
         }
 
+        if (resize_request_)
+        {
+            ResizeSwapChain();
+        }
+
         Draw();
     }
 }
@@ -384,7 +389,6 @@ void VulkanEngine::DrawFrame()
     
     // wait for last frame to finish
     if (!vkSynchronizationHelper_->WaitForFence(current_fence_id)) return;
-    if (!vkSynchronizationHelper_->ResetFence(current_fence_id)) return;
 
     // get semaphores
     auto image_available_semaphore = vkSynchronizationHelper_->GetSemaphore(current_image_available_semaphore_id);
@@ -393,7 +397,10 @@ void VulkanEngine::DrawFrame()
 
     // acquire next image
     uint32_t image_index;
-    if (!vkSwapChainHelper_->AcquireNextImage(image_index, image_available_semaphore)) return;
+    if (!vkSwapChainHelper_->AcquireNextImage(image_index, resize_request_, image_available_semaphore)) return;
+
+    // reset fence before submitting
+    if (!vkSynchronizationHelper_->ResetFence(current_fence_id)) return;
 
     // record command buffer
     if (!vkCommandBufferHelper_->ResetCommandBuffer(current_command_buffer_id)) return;
@@ -414,10 +421,50 @@ void VulkanEngine::DrawFrame()
     present_config.swapchains.push_back(vkSwapChainHelper_->GetSwapChain());
     present_config.image_indices.push_back(image_index);
     present_config.wait_semaphores.push_back(vkSynchronizationHelper_->GetSemaphore(current_render_finished_semaphore_id));
-    if (!vkQueueHelper_->PresentImage(present_config, vkDeviceHelper_->GetLogicalDevice())) return;
+    if (!vkQueueHelper_->PresentImage(present_config, vkDeviceHelper_->GetLogicalDevice(), resize_request_)) return;
 
     // update frame index
     frame_index_ = (frame_index_ + 1) % engine_config_.frame_count;
+}
+
+void VulkanEngine::ResizeSwapChain()
+{
+    // wait for the device to be idle
+    vkDeviceHelper_->WaitIdle();
+
+    // destroy old swapchain
+    vkSwapChainHelper_->DestroySwapChain();
+
+    // reset window size
+    int original_width = engine_config_.window_config.width;
+    int original_height = engine_config_.window_config.height;
+    auto current_extent = vkWindowHelper_->GetCurrentWindowExtent();
+    // if (current_extent.width == 0 || current_extent.height == 0) {
+    //     current_extent.width = original_width;
+    //     current_extent.height = original_height;
+    // }
+    engine_config_.window_config.width = current_extent.width;
+    engine_config_.window_config.height = current_extent.height;
+
+    // create new swapchain
+    if (!CreateSwapChain()) {
+        Logger::LogError("Failed to create Vulkan swap chain.");
+        return;
+    }
+
+    // recreate framebuffers
+    if (!CreateFrameBuffer()) {
+        Logger::LogError("Failed to create Vulkan frame buffer.");
+        return;
+    }
+
+    // recreate command buffers
+    if (!AllocateCommandBuffer()) {
+        Logger::LogError("Failed to allocate Vulkan command buffer.");
+        return;
+    }
+
+    resize_request_ = false;
 }
 
 bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffer_id)

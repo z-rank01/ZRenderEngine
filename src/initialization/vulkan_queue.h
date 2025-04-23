@@ -43,6 +43,7 @@ public:
     void PickQueueFamily(VkPhysicalDevice physical_device, VkSurfaceKHR surface);
     bool SubmitCommandBuffer(const SVulkanQueueSubmitConfig& config, VkDevice logical_device, VkFence fence = VK_NULL_HANDLE);
     bool PresentImage(const SVulkanQueuePresentConfig& config, VkDevice logical_device);
+    bool PresentImage(const SVulkanQueuePresentConfig& config, VkDevice logical_device, bool& resize_request);
 
 private:
     SVulkanQueueConfig queue_config_;
