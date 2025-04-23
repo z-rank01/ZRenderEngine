@@ -264,8 +264,8 @@ bool VulkanEngine::CreatePipeline()
     std::string shader_path = engine_config_.general_config.working_directory + "src\\shader\\";
     std::string vertex_shader_path = shader_path + "triangle.vert.spv";
     std::string fragment_shader_path = shader_path + "triangle.frag.spv";
-    configs.push_back({ EShaderType::VERTEX_SHADER, vertex_shader_path.c_str() });
-    configs.push_back({ EShaderType::FRAGMENT_SHADER, fragment_shader_path.c_str() });
+    configs.push_back({ EShaderType::kVertexShader, vertex_shader_path.c_str() });
+    configs.push_back({ EShaderType::kFragmentShader, fragment_shader_path.c_str() });
 
     for (const auto& config : configs)
     {
@@ -299,8 +299,8 @@ bool VulkanEngine::CreatePipeline()
     SVulkanPipelineConfig pipeline_config;
     pipeline_config.swap_chain_config = swapchain_config;
     pipeline_config.shader_module_map = {
-        { EShaderType::VERTEX_SHADER, vkShaderHelper_->GetShaderModule(EShaderType::VERTEX_SHADER) },
-        { EShaderType::FRAGMENT_SHADER, vkShaderHelper_->GetShaderModule(EShaderType::FRAGMENT_SHADER) }
+        { EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader) },
+        { EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader) }
     };
     pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
     vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);

@@ -8,12 +8,12 @@
 
 enum class EShaderType
 {
-    VERTEX_SHADER,
-    FRAGMENT_SHADER,
-    COMPUTE_SHADER,
-    GEOMETRY_SHADER,
-    TESSELLATION_SHADER,
-    RAY_TRACING_SHADER
+    kVertexShader,
+    kFragmentShader,
+    kComputeShader,
+    kGeometryShader,
+    kTessellationShader,
+    kRayTracingShader
 };
 
 struct SVulkanShaderConfig

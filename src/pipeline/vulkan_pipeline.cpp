@@ -121,7 +121,7 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
 
     VkPipelineShaderStageCreateInfo shader_stages[2];
     // 获取顶点着色器模块
-    auto it_vert = config_.shader_module_map.find(EShaderType::VERTEX_SHADER);
+    auto it_vert = config_.shader_module_map.find(EShaderType::kVertexShader);
     if (it_vert == config_.shader_module_map.end()) {
         Logger::LogError("Vertex shader module not found in pipeline config map.");
         return false;
@@ -135,7 +135,7 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
     shader_stages[0].flags = 0;
 
     // 获取片段着色器模块
-    auto it_frag = config_.shader_module_map.find(EShaderType::FRAGMENT_SHADER);
+    auto it_frag = config_.shader_module_map.find(EShaderType::kFragmentShader);
     if (it_frag == config_.shader_module_map.end()) {
         Logger::LogError("Fragment shader module not found in pipeline config map.");
         return false;
