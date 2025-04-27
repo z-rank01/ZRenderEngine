@@ -22,6 +22,20 @@ VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
     engine_state_ = EWindowState::Initialized;
     render_state_ = ERenderState::True;
 
+    VulkanInstanceBuilder instance_builder;
+    std::vector<const char*> required_layers = { "VK_LAYER_KHRONOS_validation" };
+    std::vector<const char*> required_extensions = {VK_KHR_SURFACE_EXTENSION_NAME, "VK_KHR_win32_surface" };
+
+    auto instance = instance_builder
+        .SetApplicationName("Vulkan Engine")
+        .SetApplicationVersion(1, 0, 0)
+        .SetEngineName("Vulkan Engine")
+        .SetEngineVersion(1, 0, 0)
+        .SetApiHighestVersion(1, 3, 0)
+        .SetRequiredLayers(required_layers.data(), 0)
+        .SetRequiredExtensions(required_extensions.data(), 0)
+        .Build();
+
     InitializeSDL();
     InitializeVulkan();
 }

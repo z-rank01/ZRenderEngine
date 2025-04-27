@@ -30,6 +30,7 @@ add_subdirectory(src/initialization)
 add_subdirectory(src/pipeline)
 add_subdirectory(src/source)
 add_subdirectory(src/synchronization)
+add_subdirectory(src/builder)
 
 # 设置源文件
 set(SOURCES
@@ -61,6 +62,7 @@ target_link_libraries(VulkanEngine
     vulkan_pipeline         # 添加 vulkan_pipeline 库
     vulkan_source           # 添加 vulkan_source 库
     vulkan_synchronization  # 添加 vulkan_synchronization 库
+    builder                 # 添加 builder 库
 )
 
 # 包含目录
