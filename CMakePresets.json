@@ -13,21 +13,52 @@
       }
     },
     {
-        "name": "windows-msvc",
-        "inherits": "base",
-        "displayName": "windows-msvc",
-        "environment": {
-          "VCPKG_DEFAULT_TRIPLET": "x64-windows"
-        },
-        "cacheVariables": {
-          "CMAKE_C_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.42.34433/bin/Hostx64/x64/cl.exe",
-          "CMAKE_CXX_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.42.34433/bin/Hostx64/x64/cl.exe"
-        }
+      "name": "base-visual-studio",
+      "inherits": "base",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64"
+    },
+    {
+      "name": "base-ninja",
+      "inherits": "base",
+      "hidden": true,
+      "generator": "Ninja"
+    },
+    {
+      "name": "base-mingw-makefiles",
+      "inherits": "base",
+      "hidden": true,
+      "generator": "MinGW Makefiles"
+    },
+    {
+      "name": "windows-msvc",
+      "inherits": "base-visual-studio",
+      "displayName": "Windows MSVC (Visual Studio)",
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-windows"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.42.34433/bin/Hostx64/x64/cl.exe",
+        "CMAKE_CXX_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.42.34433/bin/Hostx64/x64/cl.exe"
+      }
+    },
+    {
+      "name": "windows-gcc",
+      "inherits": "base-mingw-makefiles",
+      "displayName": "Windows GCC (MinGW Makefiles)",
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-windows-gcc"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "C:/Program Files/w64devkit/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "C:/Program Files/w64devkit/bin/g++.exe"
+      }
     },
     {
       "name": "windows-clang",
-      "inherits": "base",
-      "displayName": "Windows Clang",
+      "inherits": "base-ninja",
+      "displayName": "Windows Clang (Ninja)",
       "environment": {
         "VCPKG_DEFAULT_TRIPLET": "x64-windows-clang"
       },
@@ -39,8 +70,8 @@
     },
     {
       "name": "macos-clang",
-      "inherits": "base",
-      "displayName": "macOS Clang",
+      "inherits": "base-ninja",
+      "displayName": "macOS Clang (Ninja)",
       "environment": {
         "VCPKG_DEFAULT_TRIPLET": "x64-osx"
       },
@@ -51,8 +82,8 @@
     },
     {
       "name": "linux-clang",
-      "inherits": "base",
-      "displayName": "Linux Clang",
+      "inherits": "base-ninja",
+      "displayName": "Linux Clang (Ninja)",
       "environment": {
         "VCPKG_DEFAULT_TRIPLET": "x64-linux"
       },
