@@ -1,5 +1,3 @@
-#pragma once
-
 #include "vulkan_engine.h"
 #include <chrono>
 #include <thread>
@@ -28,7 +26,6 @@ VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
 
 VulkanEngine::~VulkanEngine()
 {
-    vkSwapChainHelper_.release();
     vkShaderHelper_.release();
     vkWindowHelper_.release();
     vkRenderpassHelper_.release();
@@ -36,9 +33,10 @@ VulkanEngine::~VulkanEngine()
     vkFrameBufferHelper_.release();
     vkCommandBufferHelper_.release();
     vkSynchronizationHelper_.release();
-    vkQueueHelper_.release();
-    vkDeviceHelper_.release();
-    vkInstanceHelper_.release();
+
+    vkb::destroy_swapchain(vkb_swapchain_);
+    vkb::destroy_device(vkb_device_);
+    vkb::destroy_instance(vkb_instance_);
 }
 
 // Initialize the engine
@@ -176,91 +174,100 @@ void VulkanEngine::GenerateFrameStructs()
 
 bool VulkanEngine::CreateInstance()
 {
-    auto extensions = vkWindowHelper_->GetWindowExtensions();
-    auto layers = std::vector<const char*> { "VK_LAYER_KHRONOS_validation" };
+    vkb::InstanceBuilder builder;
+    
+    auto inst_ret = builder
+        .set_app_name(engine_config_.window_config.title.c_str())
+        .set_engine_name("Vulkan Engine")
+        .require_api_version(1, 3, 0)
+        .use_default_debug_messenger()
+        .enable_validation_layers(engine_config_.use_validation_layers)
+        .build();
 
-    vkInstanceHelper_ = std::make_unique<VulkanInstanceHelper>();
-    return vkInstanceHelper_->GetVulkanInstanceBuilder()
-        .SetApplicationName(engine_config_.window_config.title.c_str())
-        .SetApplicationVersion(1, 0, 0)
-        .SetEngineName("Vulkan Engine")
-        .SetEngineVersion(1, 0, 0)
-        .SetApiHighestVersion(1, 3, 0)
-        .SetRequiredLayers(layers.data(), static_cast<uint32_t>(layers.size()))
-        .SetRequiredExtensions(extensions.data(), static_cast<uint32_t>(extensions.size()))
-        .Build();
+    if (!inst_ret) {
+        std::cout << "Failed to create Vulkan instance. Error: " << inst_ret.error().message() << std::endl;
+        return false;
+    }
+
+    vkb_instance_ = inst_ret.value();
+    return true;
 }
 
 bool VulkanEngine::CreateSurface()
 {
-    return vkWindowHelper_->CreateSurface(vkInstanceHelper_->GetVulkanInstance());
+    return vkWindowHelper_->CreateSurface(vkb_instance_);
 }
 
 bool VulkanEngine::CreatePhysicalDevice()
 {
-    SVulkanPhysicalDeviceConfig physical_device_config;
-    physical_device_config.physical_device_type = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU; // TODO: Make configurable
-    physical_device_config.physical_device_api_version[0] = 0;
-    physical_device_config.physical_device_api_version[1] = 1;
-    physical_device_config.physical_device_api_version[2] = 3;
-    physical_device_config.physical_device_api_version[3] = 0;
-    physical_device_config.physical_device_features = { GeometryShader }; // TODO: Make configurable
+    //vulkan 1.3 features
+	VkPhysicalDeviceVulkan13Features features_13{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+	features_13.synchronization2 = true;
 
-    vkDeviceHelper_ = std::make_unique<VulkanDeviceHelper>();
-    return vkDeviceHelper_->CreatePhysicalDevice(physical_device_config, vkInstanceHelper_->GetVulkanInstance());
+    vkb::PhysicalDeviceSelector selector{vkb_instance_};
+    auto phys_ret = selector
+        .set_surface(vkWindowHelper_->GetSurface())
+        .set_minimum_version(1, 3)
+        .set_required_features_13(features_13)
+        .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
+        .require_present()
+        .select();
+
+    if (!phys_ret) {
+        std::cout << "Failed to select Vulkan Physical Device. Error: " << phys_ret.error().message() << std::endl;
+        return false;
+    }
+
+    vkb_physical_device_ = phys_ret.value();
+    return true;
 }
 
 bool VulkanEngine::CreateLogicalDevice()
 {
-    // get swapchain required extensions
-    vkSwapChainHelper_ = std::make_unique<VulkanSwapChainHelper>();
-    std::vector<const char*> swapchain_required_extensions;
-    int swapchain_required_extension_count = vkSwapChainHelper_->GetSwapChainExtensions(vkDeviceHelper_->GetPhysicalDevice(), swapchain_required_extensions);
-
-    // create queue
-    SVulkanQueueConfig queue_config;
-    queue_config.queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT; // TODO: Make configurable
-    vkQueueHelper_ = std::make_unique<VulkanQueueHelper>(queue_config);
-    vkQueueHelper_->PickQueueFamily(vkDeviceHelper_->GetPhysicalDevice(), vkWindowHelper_->GetSurface());
-    VkDeviceQueueCreateInfo queue_create_info = {};
-    vkQueueHelper_->GenerateQueueCreateInfo(queue_create_info);
-
-    // create logical device
-    SVulkanDeviceConfig device_config;
-    device_config.queue_create_infos.push_back(queue_create_info);
-    device_config.device_extensions = swapchain_required_extensions;
-    device_config.device_extension_count = static_cast<int>(swapchain_required_extension_count);
-    if (!vkDeviceHelper_->CreateLogicalDevice(device_config))
-    {
+    vkb::DeviceBuilder device_builder{vkb_physical_device_};
+    auto dev_ret = device_builder.build();
+    if (!dev_ret) {
+        std::cout << "Failed to create Vulkan device. Error: " << dev_ret.error().message() << std::endl;
         return false;
     }
-    vkQueueHelper_->GetQueueFromDevice(vkDeviceHelper_->GetLogicalDevice(), "graphic_queue");
+
+    vkb_device_ = dev_ret.value();
     return true;
 }
 
 bool VulkanEngine::CreateSwapChain()
 {
-    SVulkanSwapChainConfig swap_chain_config;
-    swap_chain_config.target_surface_format_.format = VK_FORMAT_B8G8R8A8_UNORM; // TODO: Make configurable or query best
-    swap_chain_config.target_surface_format_.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR; // TODO: Make configurable or query best
-    swap_chain_config.target_present_mode_ = VK_PRESENT_MODE_FIFO_KHR; // TODO: Make configurable (Mailbox is often preferred)
-    swap_chain_config.target_swap_extent_.width = engine_config_.window_config.width; // TODO: Handle resize
-    swap_chain_config.target_swap_extent_.height = engine_config_.window_config.height; // TODO: Handle resize
-    swap_chain_config.target_image_count_ = engine_config_.frame_count;
+    vkb::SwapchainBuilder swapchain_builder{vkb_device_};
+    auto swap_ret = swapchain_builder
+        .set_desired_format({VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
+        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+        .set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height)
+        .set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+        .build();
 
-    vkSwapChainHelper_->Setup(swap_chain_config,
-        vkDeviceHelper_->GetLogicalDevice(),
-        vkDeviceHelper_->GetPhysicalDevice(),
-        vkWindowHelper_->GetSurface(),
-        vkWindowHelper_->GetWindow());
+    if (!swap_ret) {
+        std::cout << "Failed to create Vulkan swapchain. Error: " << swap_ret.error().message() << std::endl;
+        return false;
+    }
 
-    return vkSwapChainHelper_->CreateSwapChain();
+    vkb_swapchain_ = swap_ret.value();
+
+    // fill in swapchain config
+    swapchain_config_.target_surface_format_.format = vkb_swapchain_.image_format;
+    swapchain_config_.target_surface_format_.colorSpace = vkb_swapchain_.color_space;
+    swapchain_config_.target_present_mode_ = vkb_swapchain_.present_mode;
+    swapchain_config_.target_swap_extent_ = vkb_swapchain_.extent;
+    swapchain_config_.target_image_count_ = vkb_swapchain_.image_count;
+    swapchain_config_.device_extensions_.clear();
+    swapchain_config_.device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+    return true;
 }
 
 bool VulkanEngine::CreatePipeline()
 {
     // create shader
-    vkShaderHelper_ = std::make_unique<VulkanShaderHelper>(vkDeviceHelper_->GetLogicalDevice());
+    vkShaderHelper_ = std::make_unique<VulkanShaderHelper>(vkb_device_);
 
     std::vector<SVulkanShaderConfig> configs;
     std::string shader_path = engine_config_.general_config.working_directory + "src\\shader\\";
@@ -278,7 +285,7 @@ bool VulkanEngine::CreatePipeline()
             return false;
         }
 
-        if (!vkShaderHelper_->CreateShaderModule(vkDeviceHelper_->GetLogicalDevice(), shader_code, config.shader_type))
+        if (!vkShaderHelper_->CreateShaderModule(vkb_device_, shader_code, config.shader_type))
         {
             Logger::LogError("Failed to create shader module for " + std::string(config.shader_path));
             return false;
@@ -287,46 +294,45 @@ bool VulkanEngine::CreatePipeline()
 
     // create renderpass
     SVulkanRenderpassConfig renderpass_config;
-    auto swapchain_config = vkSwapChainHelper_->GetSwapChainConfig();
-    renderpass_config.color_format = swapchain_config->target_surface_format_.format;
+    renderpass_config.color_format = vkb_swapchain_.image_format;
     renderpass_config.depth_format = VK_FORMAT_D32_SFLOAT; // TODO: Make configurable
     renderpass_config.sample_count = VK_SAMPLE_COUNT_1_BIT; // TODO: Make configurable
     vkRenderpassHelper_ = std::make_unique<VulkanRenderpassHelper>(renderpass_config);
-    if (!vkRenderpassHelper_->CreateRenderpass(vkDeviceHelper_->GetLogicalDevice()))
+    if (!vkRenderpassHelper_->CreateRenderpass(vkb_device_))
     {
         return false;
     }
 
     // create pipeline
     SVulkanPipelineConfig pipeline_config;
-    pipeline_config.swap_chain_config = swapchain_config;
+    pipeline_config.swap_chain_config = &swapchain_config_;
     pipeline_config.shader_module_map = {
         { EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader) },
         { EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader) }
     };
     pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
     vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);
-    return vkPipelineHelper_->CreatePipeline(vkDeviceHelper_->GetLogicalDevice());
+    return vkPipelineHelper_->CreatePipeline(vkb_device_);
 }
 
 bool VulkanEngine::CreateFrameBuffer()
 {
     // create frame buffer
-    auto swapchain_config = vkSwapChainHelper_->GetSwapChainConfig();
-    auto swapchain_image_views = vkSwapChainHelper_->GetSwapChainImageViews();
+    auto swapchain_config = &swapchain_config_;
+    auto swapchain_image_views = vkb_swapchain_.get_image_views().value();
 
     SVulkanFrameBufferConfig framebuffer_config;
     framebuffer_config.extent = swapchain_config->target_swap_extent_;
-    framebuffer_config.image_views = swapchain_image_views;
+    framebuffer_config.image_views = &swapchain_image_views;
     vkFrameBufferHelper_ = std::make_unique<VulkanFrameBufferHelper>(framebuffer_config);
 
-    return vkFrameBufferHelper_->CreateFrameBuffer(vkDeviceHelper_->GetLogicalDevice(), vkRenderpassHelper_->GetRenderpass());
+    return vkFrameBufferHelper_->CreateFrameBuffer(vkb_device_, vkRenderpassHelper_->GetRenderpass());
 }
 
 bool VulkanEngine::CreateCommandPool()
 {
     vkCommandBufferHelper_ = std::make_unique<VulkanCommandBufferHelper>();
-    return vkCommandBufferHelper_->CreateCommandPool(vkDeviceHelper_->GetLogicalDevice(), vkQueueHelper_->GetQueueFamilyIndex());
+    return vkCommandBufferHelper_->CreateCommandPool(vkb_device_, vkb_device_.get_queue_index(vkb::QueueType::graphics).value());
 }
 
 bool VulkanEngine::AllocateCommandBuffer()
@@ -344,7 +350,7 @@ bool VulkanEngine::AllocateCommandBuffer()
 
 bool VulkanEngine::CreateSynchronizationObjects()
 {
-    vkSynchronizationHelper_ = std::make_unique<VulkanSynchronizationHelper>(vkDeviceHelper_->GetLogicalDevice());
+    vkSynchronizationHelper_ = std::make_unique<VulkanSynchronizationHelper>(vkb_device_);
     // create synchronization objects
     for(int i = 0; i < engine_config_.frame_count; ++i)
     {
@@ -379,7 +385,12 @@ void VulkanEngine::DrawFrame()
 
     // acquire next image
     uint32_t image_index;
-    if (!vkSwapChainHelper_->AcquireNextImage(image_index, resize_request_, image_available_semaphore)) return;
+    if (!Logger::LogWithVkResult(vkAcquireNextImageKHR(vkb_device_.device, vkb_swapchain_.swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_index), 
+        "Failed to acquire next image", 
+        "Succeeded in acquiring next image"))
+    {
+        return;
+    }
 
     // reset fence before submitting
     if (!vkSynchronizationHelper_->ResetFence(current_fence_id)) return;
@@ -389,21 +400,55 @@ void VulkanEngine::DrawFrame()
     if (!RecordCommand(image_index, current_command_buffer_id)) return;
 
     // submit command buffer
-    SVulkanQueueSubmitConfig submit_config;
-    submit_config.queue_id = current_queue_id;
-    submit_config.command_buffers.push_back(vkCommandBufferHelper_->GetCommandBuffer(current_command_buffer_id));
-    submit_config.wait_semaphores.push_back(image_available_semaphore);
-    submit_config.signal_semaphores.push_back(render_finished_semaphore);
-    submit_config.wait_stages.push_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-    if (!vkQueueHelper_->SubmitCommandBuffer(submit_config, vkDeviceHelper_->GetLogicalDevice(), in_flight_fence)) return;
+    VkCommandBufferSubmitInfo command_buffer_submit_info{};
+    command_buffer_submit_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    command_buffer_submit_info.commandBuffer = vkCommandBufferHelper_->GetCommandBuffer(current_command_buffer_id);
+
+    VkSemaphoreSubmitInfo wait_semaphore_info{};
+    wait_semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    wait_semaphore_info.semaphore = image_available_semaphore;
+    wait_semaphore_info.value = 1;
+
+    VkSemaphoreSubmitInfo signal_semaphore_info{};
+    signal_semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    signal_semaphore_info.semaphore = render_finished_semaphore;
+    signal_semaphore_info.value = 1;
+
+    VkSubmitInfo2 submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &command_buffer_submit_info;
+    submit_info.waitSemaphoreInfoCount = 1;
+    submit_info.pWaitSemaphoreInfos = &wait_semaphore_info;
+    submit_info.signalSemaphoreInfoCount = 1;
+    submit_info.pSignalSemaphoreInfos = &signal_semaphore_info;
+    if (!Logger::LogWithVkResult(vkQueueSubmit2(vkb_device_.get_queue(vkb::QueueType::graphics).value(), 1, &submit_info, in_flight_fence),
+        "Failed to submit command buffer",
+        "Succeeded in submitting command buffer"))
+    {
+        return;
+    }
 
     // present the image
     SVulkanQueuePresentConfig present_config;
     present_config.queue_id = current_queue_id;
-    present_config.swapchains.push_back(vkSwapChainHelper_->GetSwapChain());
+    present_config.swapchains.push_back(vkb_swapchain_.swapchain);
     present_config.image_indices.push_back(image_index);
-    present_config.wait_semaphores.push_back(vkSynchronizationHelper_->GetSemaphore(current_render_finished_semaphore_id));
-    if (!vkQueueHelper_->PresentImage(present_config, vkDeviceHelper_->GetLogicalDevice(), resize_request_)) return;
+    present_config.wait_semaphores.push_back(render_finished_semaphore);
+
+    VkPresentInfoKHR present_info{};
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores = &render_finished_semaphore;
+    present_info.swapchainCount = 1;
+    present_info.pSwapchains = &vkb_swapchain_.swapchain;
+    present_info.pImageIndices = &image_index;
+    if (!Logger::LogWithVkResult(vkQueuePresentKHR(vkb_device_.get_queue(vkb::QueueType::graphics).value(), &present_info),
+        "Failed to present image",
+        "Succeeded in presenting image"))
+    {
+        return;
+    }
 
     // update frame index
     frame_index_ = (frame_index_ + 1) % engine_config_.frame_count;
@@ -412,10 +457,10 @@ void VulkanEngine::DrawFrame()
 void VulkanEngine::ResizeSwapChain()
 {
     // wait for the device to be idle
-    vkDeviceHelper_->WaitIdle();
+    vkDeviceWaitIdle(vkb_device_.device);
 
     // destroy old swapchain
-    vkSwapChainHelper_->DestroySwapChain();
+    vkDestroySwapchainKHR(vkb_device_.device, vkb_swapchain_.swapchain, nullptr);
 
     // reset window size
     auto current_extent = vkWindowHelper_->GetCurrentWindowExtent();
@@ -424,20 +469,17 @@ void VulkanEngine::ResizeSwapChain()
 
     // create new swapchain
     if (!CreateSwapChain()) {
-        Logger::LogError("Failed to create Vulkan swap chain.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan swap chain.");
     }
 
     // recreate framebuffers
     if (!CreateFrameBuffer()) {
-        Logger::LogError("Failed to create Vulkan frame buffer.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan frame buffer.");
     }
 
     // recreate command buffers
     if (!AllocateCommandBuffer()) {
-        Logger::LogError("Failed to allocate Vulkan command buffer.");
-        return;
+        throw std::runtime_error("Failed to allocate Vulkan command buffer.");
     }
 
     resize_request_ = false;
@@ -451,7 +493,7 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
 
     // collect needed objects
     auto commandBuffer = vkCommandBufferHelper_->GetCommandBuffer(command_buffer_id);
-    auto swapchain_config = vkSwapChainHelper_->GetSwapChainConfig();
+    auto swapchain_config = &swapchain_config_;
 
     // begin renderpass
     VkClearValue clear_color = {};

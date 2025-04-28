@@ -7,7 +7,6 @@
       "binaryDir": "${sourceDir}/build",
       "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON", 
         "CMAKE_CXX_STANDARD": "20"
       }
@@ -36,7 +35,7 @@
       "inherits": "base-visual-studio",
       "displayName": "Windows MSVC (Visual Studio)",
       "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "x64-windows"
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.42.34433/bin/Hostx64/x64/cl.exe",
@@ -48,9 +47,11 @@
       "inherits": "base-mingw-makefiles",
       "displayName": "Windows GCC (MinGW Makefiles)",
       "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "x64-windows-gcc"
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic",
+        "VCPKG_CMAKE_SYSTEM_NAME": "MinGW"
       },
       "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic",
         "CMAKE_C_COMPILER": "C:/Program Files/w64devkit/bin/gcc.exe",
         "CMAKE_CXX_COMPILER": "C:/Program Files/w64devkit/bin/g++.exe"
       }
@@ -60,7 +61,7 @@
       "inherits": "base-ninja",
       "displayName": "Windows Clang (Ninja)",
       "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "x64-windows-clang"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-clang"
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang.exe",
@@ -73,7 +74,7 @@
       "inherits": "base-ninja",
       "displayName": "macOS Clang (Ninja)",
       "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "x64-osx"
+        "VCPKG_TARGET_TRIPLET": "x64-osx"
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "/opt/homebrew/opt/llvm/bin/clang",
@@ -85,7 +86,7 @@
       "inherits": "base-ninja",
       "displayName": "Linux Clang (Ninja)",
       "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "x64-linux"
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "/usr/bin/clang",

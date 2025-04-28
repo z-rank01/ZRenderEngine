@@ -35,7 +35,7 @@
         "group": "build"                  // 属于 "build" 组（非默认）
       },
       {
-        "label": "vcpkg: initialize", // 初始化 vcpkg 任务
+        "label": "vcpkg: download",       // 下载 vcpkg 任务
         "type": "shell",
         "command": "git clone git@github.com:microsoft/vcpkg.git && ${workspaceFolder}/vcpkg/bootstrap-vcpkg.bat",
         "options": {
@@ -132,7 +132,8 @@
         "description": "Select platform triplet for vcpkg:",
         "options": [
           "x64-windows", 
-          "x64-windows-static", 
+          "x64-windows-static",
+          "x64-mingw-dynamic",
           "x64-linux", 
           "x64-osx", 
           "arm64-osx"

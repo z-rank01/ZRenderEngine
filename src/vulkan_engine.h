@@ -14,11 +14,11 @@
 
 #include "synchronization/vulkan_synchronization.h"
 #include "utility/config_reader.h"
-#include "vulkan_structure.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <memory>
+#include <VkBootstrap.h>
 
 enum class EWindowState : std::uint8_t
 {
@@ -63,6 +63,27 @@ struct SOutputFrame
     std::string fence_id;
 };
 
+// struct SVulkanSwapChainConfig
+// {
+//     VkSurfaceFormatKHR target_surface_format_;
+//     VkPresentModeKHR target_present_mode_;
+//     VkExtent2D target_swap_extent_;
+//     uint32_t target_image_count_;
+//     std::vector<const char*> device_extensions_;
+
+//     // Default constructor
+//     SVulkanSwapChainConfig() 
+//     {
+//         target_surface_format_.format = VK_FORMAT_B8G8R8A8_UNORM;
+//         target_surface_format_.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+//         target_present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
+//         target_swap_extent_.width = 800;
+//         target_swap_extent_.height = 600;
+//         target_image_count_ = 2; // Double buffering
+//         device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+//     }
+// };
+
 class VulkanEngine
 {
 public:
@@ -84,12 +105,16 @@ private:
     SEngineConfig engine_config_;
     std::vector<SOutputFrame> output_frames_;
 
+    // vulkan bootstrap members
+    vkb::Instance vkb_instance_;
+    vkb::PhysicalDevice vkb_physical_device_;
+    vkb::Device vkb_device_;
+    vkb::Swapchain vkb_swapchain_;
+
+    SVulkanSwapChainConfig swapchain_config_;
+
     // vulkan helper members
     std::unique_ptr<VulkanSDLWindowHelper> vkWindowHelper_;
-    std::unique_ptr<VulkanInstanceHelper> vkInstanceHelper_;
-    std::unique_ptr<VulkanDeviceHelper> vkDeviceHelper_;
-    std::unique_ptr<VulkanQueueHelper> vkQueueHelper_;
-    std::unique_ptr<VulkanSwapChainHelper> vkSwapChainHelper_;
     std::unique_ptr<VulkanShaderHelper> vkShaderHelper_;
     std::unique_ptr<VulkanRenderpassHelper> vkRenderpassHelper_;
     std::unique_ptr<VulkanPipelineHelper> vkPipelineHelper_;

@@ -16,13 +16,14 @@ set(VCPKG_MANIFEST_MODE ON)
 
 # 查找依赖
 find_package(Vulkan REQUIRED)
+find_package(vk-bootstrap CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(fastgltf CONFIG REQUIRED)
 find_package(Stb REQUIRED)
+
 
 # 添加子目录
 add_subdirectory(src/utility)
@@ -41,7 +42,6 @@ set(SOURCES
 # 设置头文件
 set(HEADERS
     src/vulkan_engine.h
-    src/vulkan_structure.h
 )
 
 # 添加可执行文件
@@ -54,7 +54,7 @@ target_link_libraries(VulkanEngine
     GPUOpen::VulkanMemoryAllocator
     SDL3::SDL3
     glm::glm
-    fmt::fmt-header-only
+    vk-bootstrap::vk-bootstrap
     imgui::imgui
     fastgltf::fastgltf
     utility                 # 添加 utility 库
@@ -69,7 +69,7 @@ target_link_libraries(VulkanEngine
 target_include_directories(VulkanEngine
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/installed/${VCPKG_TARGET_TRIPLET}/include # STB 头文件路径
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/include
     ${Vulkan_INCLUDE_DIRS}
 )
 
