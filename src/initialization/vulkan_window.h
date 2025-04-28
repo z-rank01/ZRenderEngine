@@ -4,10 +4,12 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <string>
-#include <vector> // 添加 vector 头文件
+#include <vector>
+#include <functional>
 #include <unordered_set>
 #include <algorithm>
 #include "utility/logger.h"
+#include "builder/builder.h"
 
 struct SVulkanSDLWindowConfig
 {
@@ -18,11 +20,65 @@ struct SVulkanSDLWindowConfig
     SDL_InitFlags init_flags_;
 };
 
+class VulkanWindowBuilder : public Builder
+{
+private:
+    typedef struct WindowInfo
+    {
+        std::string window_name;
+        int width;
+        int height;
+        SDL_WindowFlags window_flags;
+        SDL_InitFlags init_flags;
+    } WindowInfo;
+
+    WindowInfo window_info_;
+    std::vector<std::function<void(SDL_Window*)>> build_callbacks_;
+
+public:
+    VulkanWindowBuilder();
+    ~VulkanWindowBuilder();
+
+    // Build the SDL window
+    bool Build() override;
+
+    // Add callback listener
+    void AddListener(std::function<void(SDL_Window*)> callback)
+    {
+        build_callbacks_.push_back(callback);
+    }
+
+    // Window configuration methods
+    VulkanWindowBuilder& SetWindowName(const std::string& name)
+    {
+        window_info_.window_name = name;
+        return *this;
+    }
+
+    VulkanWindowBuilder& SetWindowSize(int width, int height)
+    {
+        window_info_.width = width;
+        window_info_.height = height;
+        return *this;
+    }
+
+    VulkanWindowBuilder& SetWindowFlags(SDL_WindowFlags flags)
+    {
+        window_info_.window_flags = flags;
+        return *this;
+    }
+
+    VulkanWindowBuilder& SetInitFlags(SDL_InitFlags flags)
+    {
+        window_info_.init_flags = flags;
+        return *this;
+    }
+};
+
 class VulkanSDLWindowHelper
 {
 public:
-    VulkanSDLWindowHelper() = delete;
-    VulkanSDLWindowHelper(SVulkanSDLWindowConfig config);
+    VulkanSDLWindowHelper() = default;
     ~VulkanSDLWindowHelper();
 
     bool CreateSurface(VkInstance vkInstance);
@@ -30,20 +86,49 @@ public:
     SDL_Window* GetWindow() const { return window_; }
     VkExtent2D GetCurrentWindowExtent() const;
     
-    // 返回扩展向量的常量引用
+    // return constant reference to extensions vector
     const std::vector<const char*>& GetWindowExtensions() const { return extensions_; }
     
+    VulkanWindowBuilder& GetWindowBuilder() 
+    {
+        windowBuilder_.AddListener([this](SDL_Window* window) {
+            window_ = window;
+            // get SDL provided Vulkan instance extensions
+            window_extension_names_ = SDL_Vulkan_GetInstanceExtensions(&sdl_extension_count_);
+            if (!window_extension_names_) {
+                Logger::LogWarning("SDL_Vulkan_GetInstanceExtensions failed: " + std::string(SDL_GetError()));
+                sdl_extension_count_ = 0;
+            }
+
+            // generate window extensions vector
+            extensions_.clear();
+            extensions_.reserve(sdl_extension_count_ + 1);
+
+            // debug utility extension
+            auto debug_ext = SDL_strdup(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            if (debug_ext) extensions_.push_back(debug_ext);
+
+            // add sdl required extensions
+            for (unsigned int i = 0; i < sdl_extension_count_; ++i) {
+                auto ext_copy = SDL_strdup(window_extension_names_[i]);
+                if (ext_copy) extensions_.push_back(ext_copy);
+            }
+        });
+        return windowBuilder_;
+    }
 
 private:
     // sdl
-    SDL_Window* window_;
-    unsigned int sdl_extension_count_; // 用于临时存储 SDL 返回的数量
-    const char* const* window_extension_names_; // SDL 返回的原始指针
-    std::vector<const char*> extensions_; // 存储复制后的扩展名指针
+    SDL_Window* window_ = nullptr;
+    unsigned int sdl_extension_count_ = 0;
+    const char* const* window_extension_names_ = nullptr;
+    std::vector<const char*> extensions_;
 
-    // vulkan
-    VkInstance vk_instance_;
-    VkSurfaceKHR surface_;
+    // vulkan handle
+    VkInstance vk_instance_ = VK_NULL_HANDLE;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+
+    VulkanWindowBuilder windowBuilder_;
 };
 
 struct SVulkanSwapChainConfig

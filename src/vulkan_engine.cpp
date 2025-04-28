@@ -22,20 +22,6 @@ VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
     engine_state_ = EWindowState::Initialized;
     render_state_ = ERenderState::True;
 
-    // VulkanInstanceBuilder instance_builder;
-    // std::vector<const char*> required_layers = { "VK_LAYER_KHRONOS_validation" };
-    // std::vector<const char*> required_extensions = {VK_KHR_SURFACE_EXTENSION_NAME, "VK_KHR_win32_surface" };
-
-    // auto instance = instance_builder
-    //     .SetApplicationName("Vulkan Engine")
-    //     .SetApplicationVersion(1, 0, 0)
-    //     .SetEngineName("Vulkan Engine")
-    //     .SetEngineVersion(1, 0, 0)
-    //     .SetApiHighestVersion(1, 3, 0)
-    //     .SetRequiredLayers(required_layers.data(), 0)
-    //     .SetRequiredExtensions(required_extensions.data(), 0)
-    //     .Build();
-
     InitializeSDL();
     InitializeVulkan();
 }
@@ -58,13 +44,16 @@ VulkanEngine::~VulkanEngine()
 // Initialize the engine
 void VulkanEngine::InitializeSDL()
 {
-    SVulkanSDLWindowConfig window_config;
-    window_config.window_name_ = engine_config_.window_config.title.c_str();
-    window_config.width_ = engine_config_.window_config.width;
-    window_config.height_ = engine_config_.window_config.height;
-    window_config.window_flags_ = SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN;
-    window_config.init_flags_ = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
-    vkWindowHelper_ = std::make_unique<VulkanSDLWindowHelper>(window_config);
+    vkWindowHelper_ = std::make_unique<VulkanSDLWindowHelper>();
+    if (!vkWindowHelper_->GetWindowBuilder()
+        .SetWindowName(engine_config_.window_config.title.c_str())
+        .SetWindowSize(engine_config_.window_config.width, engine_config_.window_config.height)
+        .SetWindowFlags(SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN)
+        .SetInitFlags(SDL_INIT_VIDEO | SDL_INIT_EVENTS)
+        .Build())
+    {
+        throw std::runtime_error("Failed to create SDL window.");
+    }
 }
 
 void VulkanEngine::InitializeVulkan()
@@ -215,7 +204,6 @@ bool VulkanEngine::CreatePhysicalDevice()
     physical_device_config.physical_device_api_version[1] = 1;
     physical_device_config.physical_device_api_version[2] = 3;
     physical_device_config.physical_device_api_version[3] = 0;
-    physical_device_config.queue_flags = { VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT }; // TODO: Make configurable
     physical_device_config.physical_device_features = { GeometryShader }; // TODO: Make configurable
 
     vkDeviceHelper_ = std::make_unique<VulkanDeviceHelper>();

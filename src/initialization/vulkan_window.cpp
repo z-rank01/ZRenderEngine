@@ -1,17 +1,66 @@
 #include "vulkan_window.h"
 #include <vector> // 确保包含 vector
+#include <iostream>
 
 // ------------------------------------
-// VulkanSDLWindowHelper implementation
+// VulkanWindowBuilder Implementation
+// ------------------------------------
+
+VulkanWindowBuilder::VulkanWindowBuilder()
+{
+    // set default values
+    window_info_.window_name = "Vulkan Window";
+    window_info_.width = 800;
+    window_info_.height = 600;
+    window_info_.window_flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN;
+    window_info_.init_flags = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
+}
+
+VulkanWindowBuilder::~VulkanWindowBuilder()
+{
+}
+
+bool VulkanWindowBuilder::Build()
+{
+    // initialize SDL
+    if (!SDL_Init(window_info_.init_flags)) {
+        Logger::LogError("Failed to initialize SDL: " + std::string(SDL_GetError()));
+        return false;
+    }
+
+    // create SDL window
+    SDL_Window* window = SDL_CreateWindow(
+        window_info_.window_name.c_str(),
+        window_info_.width,
+        window_info_.height,
+        window_info_.window_flags
+    );
+
+    if (!window) {
+        Logger::LogError("Failed to create SDL window: " + std::string(SDL_GetError()));
+        SDL_Quit();
+        return false;
+    }
+
+    // call all callbacks
+    for (auto& callback : build_callbacks_) {
+        callback(window);
+    }
+
+    return true;
+}
+
+// ------------------------------------
+// VulkanSDLWindowHelper Implementation
 // ------------------------------------
 
 VulkanSDLWindowHelper::~VulkanSDLWindowHelper()
 {
-    // 释放深拷贝的字符串
+    // free strings allocated by SDL
     for (const char* ext : extensions_) {
-        SDL_free((void*)ext); // 强制转换是必要的，因为 SDL_free 需要 void*
+        SDL_free((void*)ext); // necessary because SDL_free needs void*
     }
-    extensions_.clear(); // 清空向量
+    extensions_.clear(); // clear vector
 
     if (surface_ != VK_NULL_HANDLE && vk_instance_ != VK_NULL_HANDLE) {
         vkDestroySurfaceKHR(vk_instance_, surface_, nullptr);
@@ -23,45 +72,11 @@ VulkanSDLWindowHelper::~VulkanSDLWindowHelper()
     SDL_Quit();
 }
 
-
-VulkanSDLWindowHelper::VulkanSDLWindowHelper(SVulkanSDLWindowConfig config)
-    : window_(nullptr), sdl_extension_count_(0), window_extension_names_(nullptr), vk_instance_(VK_NULL_HANDLE), surface_(VK_NULL_HANDLE)
+VkExtent2D VulkanSDLWindowHelper::GetCurrentWindowExtent() const
 {
-    // init sdl
-    if (!SDL_Init(config.init_flags_)) {
-        throw "Failed to initialize SDL: " + std::string(SDL_GetError());
-    }
-
-    // create sdl window
-    window_ = SDL_CreateWindow(config.window_name_, config.width_, config.height_, config.window_flags_);
-    if (!window_) {
-        throw "Failed to create SDL window: " + std::string(SDL_GetError());
-        SDL_Quit();
-    }
-
-    // 获取 SDL 提供的 Vulkan 实例扩展
-    window_extension_names_ = SDL_Vulkan_GetInstanceExtensions(&sdl_extension_count_);
-    if (!window_extension_names_) {
-         throw "SDL_Vulkan_GetInstanceExtensions failed: " + std::string(SDL_GetError());
-         // 继续执行，可能没有额外的扩展
-         sdl_extension_count_ = 0; 
-    }
-
-    // generate window extensions vector
-    extensions_.clear();
-    extensions_.reserve(sdl_extension_count_ + 1); 
-
-    // debug utility extension
-    auto debug_ext = SDL_strdup(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    if (!debug_ext) throw "Failed to add debug extension.";
-    extensions_.push_back(debug_ext);
-
-    // add sdl required extensions
-    for (unsigned int i = 0; i < sdl_extension_count_; ++i) {
-        auto ext_copy = SDL_strdup(window_extension_names_[i]);
-        if (!ext_copy) throw "Failed to add SDL extension: " + std::string(window_extension_names_[i]);
-        extensions_.push_back(ext_copy);
-    }
+    int width, height;
+    SDL_GetWindowSizeInPixels(window_, &width, &height);
+    return { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 }
 
 bool VulkanSDLWindowHelper::CreateSurface(VkInstance vkInstance)
@@ -84,13 +99,6 @@ bool VulkanSDLWindowHelper::CreateSurface(VkInstance vkInstance)
         Logger::LogDebug("Succeeded in creating Vulkan surface.");
         return true;
     }
-}
-
-VkExtent2D VulkanSDLWindowHelper::GetCurrentWindowExtent() const
-{
-    int width, height;
-    SDL_GetWindowSizeInPixels(window_, &width, &height);
-    return { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 }
 
 // ------------------------------------
