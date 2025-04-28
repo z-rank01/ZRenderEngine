@@ -1,4 +1,5 @@
 #include "vulkan_window.h"
+#include <vector> // 确保包含 vector
 
 // ------------------------------------
 // VulkanSDLWindowHelper implementation
@@ -6,48 +7,76 @@
 
 VulkanSDLWindowHelper::~VulkanSDLWindowHelper()
 {
-    SDL_DestroyWindow(window_);
-    SDL_Quit();
-    SDL_free(extensions_);   // Free the allocated memory for extensions after it's copied or used by the helper
+    // 释放深拷贝的字符串
+    for (const char* ext : extensions_) {
+        SDL_free((void*)ext); // 强制转换是必要的，因为 SDL_free 需要 void*
+    }
+    extensions_.clear(); // 清空向量
 
-    vkDestroySurfaceKHR(vk_instance_, surface_, nullptr);
+    if (surface_ != VK_NULL_HANDLE && vk_instance_ != VK_NULL_HANDLE) {
+        vkDestroySurfaceKHR(vk_instance_, surface_, nullptr);
+    }
+    
+    if (window_) {
+        SDL_DestroyWindow(window_);
+    }
+    SDL_Quit();
 }
 
 
 VulkanSDLWindowHelper::VulkanSDLWindowHelper(SVulkanSDLWindowConfig config)
+    : window_(nullptr), sdl_extension_count_(0), window_extension_names_(nullptr), vk_instance_(VK_NULL_HANDLE), surface_(VK_NULL_HANDLE)
 {
     // init sdl
-    SDL_Init(config.init_flags_);
+    if (!SDL_Init(config.init_flags_)) {
+        throw "Failed to initialize SDL: " + std::string(SDL_GetError());
+    }
 
     // create sdl window
     window_ = SDL_CreateWindow(config.window_name_, config.width_, config.height_, config.window_flags_);
-    window_extension_names_ = SDL_Vulkan_GetInstanceExtensions(&window_extension_count_);
-
-    // show window (has implicitly created after SDL_CreateWindow)
-    SDL_ShowWindow(window_);
-
-    // generate window extensions
-    int extension_count = window_extension_count_ + 1; // +1 for VK_EXT_DEBUG_REPORT_EXTENSION_NAME
-    extensions_ = static_cast<const char**>(SDL_malloc(extension_count * sizeof(const char*)));
-    if (!extensions_) {
-        Logger::LogError("Failed to allocate memory for Vulkan extensions.");
-        // Handle allocation failure, maybe throw an exception or return
-        return;
+    if (!window_) {
+        throw "Failed to create SDL window: " + std::string(SDL_GetError());
+        SDL_Quit();
     }
-    extensions_[0] = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;
-    // Copy SDL extensions starting from index 1
-    SDL_memcpy(&extensions_[1], window_extension_names_, window_extension_count_ * sizeof(const char*));
-    window_extension_count_ = extension_count;
+
+    // 获取 SDL 提供的 Vulkan 实例扩展
+    window_extension_names_ = SDL_Vulkan_GetInstanceExtensions(&sdl_extension_count_);
+    if (!window_extension_names_) {
+         throw "SDL_Vulkan_GetInstanceExtensions failed: " + std::string(SDL_GetError());
+         // 继续执行，可能没有额外的扩展
+         sdl_extension_count_ = 0; 
+    }
+
+    // generate window extensions vector
+    extensions_.clear();
+    extensions_.reserve(sdl_extension_count_ + 1); 
+
+    // debug utility extension
+    auto debug_ext = SDL_strdup(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    if (!debug_ext) throw "Failed to add debug extension.";
+    extensions_.push_back(debug_ext);
+
+    // add sdl required extensions
+    for (unsigned int i = 0; i < sdl_extension_count_; ++i) {
+        auto ext_copy = SDL_strdup(window_extension_names_[i]);
+        if (!ext_copy) throw "Failed to add SDL extension: " + std::string(window_extension_names_[i]);
+        extensions_.push_back(ext_copy);
+    }
 }
 
 bool VulkanSDLWindowHelper::CreateSurface(VkInstance vkInstance)
 {
+    if (!window_) {
+        Logger::LogError("Cannot create surface without a valid SDL window.");
+        return false;
+    }
     vk_instance_ = vkInstance;
 
     // create vulkan surface
     if (!SDL_Vulkan_CreateSurface(window_, vk_instance_, nullptr, &surface_))
     {
         Logger::LogError("Failed to create Vulkan surface: " + std::string(SDL_GetError()));
+        surface_ = VK_NULL_HANDLE;
         return false;
     }
     else

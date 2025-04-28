@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 #include <vector>
+#include "builder/builder.h"
 
 typedef enum EPhysicalDeviceFeatures
 {
@@ -104,4 +105,9 @@ private:
     VkPhysicalDeviceProperties vkSupportedProperties_;
 
     VkPhysicalDevice PickPhysicalDevice(const SVulkanPhysicalDeviceConfig& config, const std::vector<VkPhysicalDevice>& instance);
+};
+
+class VulkanDeviceBuilder : public Builder
+{
+
 };

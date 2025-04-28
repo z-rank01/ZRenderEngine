@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <string>
+#include <vector> // 添加 vector 头文件
 #include <unordered_set>
 #include <algorithm>
 #include "utility/logger.h"
@@ -29,16 +30,16 @@ public:
     SDL_Window* GetWindow() const { return window_; }
     VkExtent2D GetCurrentWindowExtent() const;
     
-    const char** GetWindowExtensions() const { return extensions_; }
-    int GetWindowExtensionCount() const { return window_extension_count_; }
+    // 返回扩展向量的常量引用
+    const std::vector<const char*>& GetWindowExtensions() const { return extensions_; }
     
 
 private:
     // sdl
     SDL_Window* window_;
-    unsigned int window_extension_count_;
-    const char* const* window_extension_names_;
-    const char** extensions_;
+    unsigned int sdl_extension_count_; // 用于临时存储 SDL 返回的数量
+    const char* const* window_extension_names_; // SDL 返回的原始指针
+    std::vector<const char*> extensions_; // 存储复制后的扩展名指针
 
     // vulkan
     VkInstance vk_instance_;

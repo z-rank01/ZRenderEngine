@@ -22,19 +22,19 @@ VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
     engine_state_ = EWindowState::Initialized;
     render_state_ = ERenderState::True;
 
-    VulkanInstanceBuilder instance_builder;
-    std::vector<const char*> required_layers = { "VK_LAYER_KHRONOS_validation" };
-    std::vector<const char*> required_extensions = {VK_KHR_SURFACE_EXTENSION_NAME, "VK_KHR_win32_surface" };
+    // VulkanInstanceBuilder instance_builder;
+    // std::vector<const char*> required_layers = { "VK_LAYER_KHRONOS_validation" };
+    // std::vector<const char*> required_extensions = {VK_KHR_SURFACE_EXTENSION_NAME, "VK_KHR_win32_surface" };
 
-    auto instance = instance_builder
-        .SetApplicationName("Vulkan Engine")
-        .SetApplicationVersion(1, 0, 0)
-        .SetEngineName("Vulkan Engine")
-        .SetEngineVersion(1, 0, 0)
-        .SetApiHighestVersion(1, 3, 0)
-        .SetRequiredLayers(required_layers.data(), 0)
-        .SetRequiredExtensions(required_extensions.data(), 0)
-        .Build();
+    // auto instance = instance_builder
+    //     .SetApplicationName("Vulkan Engine")
+    //     .SetApplicationVersion(1, 0, 0)
+    //     .SetEngineName("Vulkan Engine")
+    //     .SetEngineVersion(1, 0, 0)
+    //     .SetApiHighestVersion(1, 3, 0)
+    //     .SetRequiredLayers(required_layers.data(), 0)
+    //     .SetRequiredExtensions(required_extensions.data(), 0)
+    //     .Build();
 
     InitializeSDL();
     InitializeVulkan();
@@ -72,53 +72,43 @@ void VulkanEngine::InitializeVulkan()
     GenerateFrameStructs();
 
     if (!CreateInstance()) {
-        Logger::LogError("Failed to create Vulkan instance.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan instance.");
     }
 
     if (!CreateSurface()) {
-        Logger::LogError("Failed to create Vulkan surface.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan surface.");
     }
 
     if (!CreatePhysicalDevice()) {
-        Logger::LogError("Failed to create Vulkan physical device.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan physical device.");
     }
 
     if (!CreateLogicalDevice()) {
-        Logger::LogError("Failed to create Vulkan logical device.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan logical device.");
     }
 
     if (!CreateSwapChain()) {
-        Logger::LogError("Failed to create Vulkan swap chain.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan swap chain.");
     }
 
     if (!CreatePipeline()) {
-        Logger::LogError("Failed to create Vulkan pipeline.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan pipeline.");
     }
 
     if (!CreateFrameBuffer()) {
-        Logger::LogError("Failed to create Vulkan frame buffer.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan frame buffer.");
     }
 
     if (!CreateCommandPool()) {
-        Logger::LogError("Failed to create Vulkan command pool.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan command pool.");
     }
 
     if (!AllocateCommandBuffer()) {
-        Logger::LogError("Failed to allocate Vulkan command buffer.");
-        return;
+        throw std::runtime_error("Failed to allocate Vulkan command buffer.");
     }
 
     if (!CreateSynchronizationObjects()) {
-        Logger::LogError("Failed to create Vulkan synchronization objects.");
-        return;
+        throw std::runtime_error("Failed to create Vulkan synchronization objects.");
     }
 }
 
@@ -197,29 +187,19 @@ void VulkanEngine::GenerateFrameStructs()
 
 bool VulkanEngine::CreateInstance()
 {
-    auto window_required_extensions = vkWindowHelper_->GetWindowExtensions();
-    int window_required_extension_count = vkWindowHelper_->GetWindowExtensionCount();
+    auto extensions = vkWindowHelper_->GetWindowExtensions();
+    auto layers = std::vector<const char*> { "VK_LAYER_KHRONOS_validation" };
 
-    auto extensions = std::vector<const char*>(window_required_extensions, window_required_extensions + window_required_extension_count);
-
-    SVulkanInstanceConfig instance_config;
-    instance_config.application_name = "Vulkan Engine";
-    instance_config.application_version[0] = 1;
-    instance_config.application_version[1] = 0;
-    instance_config.application_version[2] = 0;
-    instance_config.engine_name = "Vulkan Engine";
-    instance_config.engine_version[0] = 1;
-    instance_config.engine_version[1] = 0;
-    instance_config.engine_version[2] = 0;
-    instance_config.api_version[0] = 0;
-    instance_config.api_version[1] = 1;
-    instance_config.api_version[2] = 3;
-    instance_config.api_version[3] = 0;
-    instance_config.validation_layers = { "VK_LAYER_KHRONOS_validation" }; // TODO: Make configurable
-    instance_config.extensions = extensions;
-    vkInstanceHelper_ = std::make_unique<VulkanInstanceHelper>(instance_config);
-
-    return vkInstanceHelper_->CreateVulkanInstance();
+    vkInstanceHelper_ = std::make_unique<VulkanInstanceHelper>();
+    return vkInstanceHelper_->GetVulkanInstanceBuilder()
+        .SetApplicationName(engine_config_.window_config.title.c_str())
+        .SetApplicationVersion(1, 0, 0)
+        .SetEngineName("Vulkan Engine")
+        .SetEngineVersion(1, 0, 0)
+        .SetApiHighestVersion(1, 3, 0)
+        .SetRequiredLayers(layers.data(), static_cast<uint32_t>(layers.size()))
+        .SetRequiredExtensions(extensions.data(), static_cast<uint32_t>(extensions.size()))
+        .Build();
 }
 
 bool VulkanEngine::CreateSurface()

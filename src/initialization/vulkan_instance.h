@@ -2,57 +2,21 @@
 
 #include <vulkan/vulkan.h>
 #include <unordered_set>
+#include <functional>
+#include <vector>
+#include <string> // 添加 string 头文件
 
 #include "builder/builder.h"
 #include "utility/logger.h"
 
-struct SVulkanInstanceConfig
-{
-    // Application info
-    std::string application_name;
-    uint8_t application_version[3];
-
-    // Engine info
-    std::string engine_name;
-    uint8_t engine_version[3];
-
-    // Vulkan API version
-    uint8_t api_version[4];
-    
-    // validation info
-    std::vector<const char*> validation_layers;
-
-    // extension info
-    std::vector<const char*> extensions;
-};
-
-class VulkanInstanceHelper
-{
-public:
-    VulkanInstanceHelper() = delete;
-    VulkanInstanceHelper(SVulkanInstanceConfig config);
-    ~VulkanInstanceHelper();
-
-    bool CreateVulkanInstance();
-    VkInstance GetVulkanInstance() const { return vkInstance_; }
-    
-
-private:
-    SVulkanInstanceConfig instance_config_;
-    VkInstance vkInstance_;
-
-    std::vector<const char*> ExtractValidationLayers();
-    std::vector<const char*> ExtractExtensions();
-};
-
-
-class VulkanInstanceBuilder : public Builder<VkInstance>
+class VulkanInstanceBuilder : public Builder
 {
 private:
     typedef struct ApplicationInfo
     {
-        const char* application_name;
-        const char* engine_name;
+        // 使用 std::string 存储名称以避免悬空指针
+        std::string application_name;
+        std::string engine_name;
         uint32_t application_version;
         uint32_t engine_version;
         uint32_t highest_api_version;
@@ -69,16 +33,31 @@ private:
     } InstanceInfo;
 
     InstanceInfo instance_info_;
+    std::vector<std::function<void(VkInstance)>> build_callbacks_;
+
+    // 持久化存储 layers/extensions 字符串和指针
+    std::vector<std::string> required_layer_names_;
+    std::vector<const char*> required_layer_ptrs_;
+    std::vector<std::string> required_extension_names_;
+    std::vector<const char*> required_extension_ptrs_;
+
 public:
     VulkanInstanceBuilder();
     ~VulkanInstanceBuilder();
 
-    VkInstance Build() override;
+    // callback on build
+    void AddListener(std::function<void(VkInstance)> callback)
+    {
+        build_callbacks_.push_back(callback);
+    }
+
+    // Build the Vulkan instance
+    bool Build() override;
 
     // Application Info
     VulkanInstanceBuilder& SetApplicationName(std::string name)
     {
-        instance_info_.app_info.application_name = name.c_str();
+        instance_info_.app_info.application_name = std::move(name);
         return *this;
     }
     VulkanInstanceBuilder& SetApplicationVersion(uint8_t major, uint8_t minor, uint8_t patch)
@@ -88,7 +67,7 @@ public:
     }
     VulkanInstanceBuilder& SetEngineName(std::string name)
     {
-        instance_info_.app_info.engine_name = name.c_str();
+        instance_info_.app_info.engine_name = std::move(name);
         return *this;
     }
     VulkanInstanceBuilder& SetEngineVersion(uint8_t major, uint8_t minor, uint8_t patch)
@@ -112,4 +91,24 @@ public:
 
     // extension
     VulkanInstanceBuilder& SetRequiredExtensions(const char* const* extensions, uint32_t count);
+};
+
+class VulkanInstanceHelper
+{
+public:
+    VulkanInstanceHelper() = default;
+    ~VulkanInstanceHelper();
+
+    VkInstance GetVulkanInstance() const { return vkInstance_; }
+    VulkanInstanceBuilder& GetVulkanInstanceBuilder() 
+    {
+        vkInstanceBuilder_.AddListener([this](VkInstance instance) {
+            vkInstance_ = instance;
+        }); 
+        return vkInstanceBuilder_; 
+    }
+
+private:
+    VulkanInstanceBuilder vkInstanceBuilder_;
+    VkInstance vkInstance_;
 };
