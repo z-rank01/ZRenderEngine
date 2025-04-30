@@ -19,14 +19,32 @@ namespace vra
     {
     }
 
+    bool VraDataCollector::GroupDataIfPossible()
+    {
+        TryGroupVertexIndexData();
+        TryGroupUniformData();
+        TryGroupStorageData();
+        TryGroupIndirectDrawCommands();
+        return true;
+    }
+
     VraBufferInfo2Vma VraDataCollector::ParseDataToBufferInfo()
     {
-        return VraBufferInfo2Vma();
+        VraBufferInfo2Vma buffer_info;
+        buffer_info.buffer_create_info_ = VkBufferCreateInfo();
+        buffer_info.allocation_create_flags_ = VmaAllocationCreateFlags();
+        buffer_info.pData_ = nullptr;
+        return buffer_info;
     }
 
     VraImageInfo2Vma VraDataCollector::ParseDataToImageViewInfo()
     {
-        return VraImageInfo2Vma();
+        VraImageInfo2Vma image_info;
+        image_info.image_create_info_ = VkImageCreateInfo();
+        image_info.image_view_create_info_ = VkImageViewCreateInfo();
+        image_info.allocation_create_flags_ = VmaAllocationCreateFlags();
+        image_info.pData_ = nullptr;
+        return image_info;
     }
 
     bool VraDataCollector::CollectBufferData(VraDataDesc desc, RawData data)
@@ -51,5 +69,25 @@ namespace vra
         data_map_[next_image_id_] = data;
         next_image_id_++;
         return true;
+    }
+
+    bool VraDataCollector::TryGroupVertexIndexData()
+    {
+        return false;
+    }
+
+    bool VraDataCollector::TryGroupUniformData()
+    {
+        return false;
+    }
+
+    bool VraDataCollector::TryGroupStorageData()
+    {
+        return false;
+    }
+
+    bool VraDataCollector::TryGroupIndirectDrawCommands()
+    {
+        return false;
     }
 }

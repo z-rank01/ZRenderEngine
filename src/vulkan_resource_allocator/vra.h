@@ -15,7 +15,7 @@ namespace vra
     {
         // Static Mode
         Static_GPU_Only, // Device Local, no CPU access
-        Static_Upload,   // CPU write once, GPU read multiple times (use staging)
+        Static_Upload,   // CPU write once, GPU read multiple times (e.g. staging buffer)
 
         // Dynamic Mode
         Dynamic_Sequential, // sequential access, e.g. UBO update
@@ -292,6 +292,12 @@ namespace vra
         static constexpr size_t MAX_BUFFER_COUNT = 1024;
         static constexpr size_t MAX_IMAGE_COUNT = 1024;
 
+
+        bool GroupDataIfPossible();
+        bool TryGroupVertexIndexData();
+        bool TryGroupUniformData();
+        bool TryGroupStorageData();
+        bool TryGroupIndirectDrawCommands();
         VraBufferInfo2Vma ParseDataToBufferInfo();
         VraImageInfo2Vma ParseDataToImageViewInfo();
     };
