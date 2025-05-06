@@ -2,40 +2,41 @@
     "version": "2.0.0",
     "tasks": [
       {
-        "label": "cmake: configure",      // 任务名称（用户可见）
-        "type": "shell",                  // 任务类型（shell 表示在终端中运行）
-        "command": "cmake",               // 主命令（调用 CMake）
+        "label": "[custom] cmake: configure",       // 任务名称（用户可见）
+        "type": "shell",                            // 任务类型（shell 表示在终端中运行）
+        "command": "cmake",                         // 主命令（调用 CMake）
         "args": [
-          "--preset",                     // 参数 1：指定 CMake 预设
-          "${input:cmakePreset}",         // 动态输入变量（用户选择预设）
-          "-B",                           // 参数 2：指定构建目录
-          "${workspaceFolder}/build"      // 构建目录路径（固定为项目根目录下的 build）
+          "--preset",                               // 参数 1：指定 CMake 预设
+          "${input:cmakePreset}",                   // 动态输入变量（用户选择预设）
+          "-B",                                     // 参数 2：指定构建目录
+          "${workspaceFolder}/build",               // 构建目录路径（固定为项目根目录下的 build）
+          "-DCMAKE_BUILD_TYPE=${input:buildType}"   // 显式设置 CMAKE_BUILD_TYPE
         ],
         "options": {
-          "cwd": "${workspaceFolder}"     // 工作目录设置为项目根目录
+          "cwd": "${workspaceFolder}"               // 工作目录设置为项目根目录
         },
-        "group": {                        // 任务分组
-          "kind": "build",                // 属于 "build" 组
-          "isDefault": true               // 设为默认构建任务（可通过 Ctrl+Shift+B 触发）
+        "group": {                                  // 任务分组
+          "kind": "build",                          // 属于 "build" 组
+          "isDefault": true                         // 设为默认构建任务（可通过 Ctrl+Shift+B 触发）
         }
       },
       {
-        "label": "cmake: build",          // 任务名称（用户可见）
-        "type": "shell",                  // 任务类型
-        "command": "cmake",               // 主命令（调用 CMake）
+        "label": "[custom] cmake: build",           // 任务名称（用户可见）
+        "type": "shell",                            // 任务类型
+        "command": "cmake",                         // 主命令（调用 CMake）
         "args": [
-          "--build",                      // 参数 1：执行构建操作
-          "${workspaceFolder}/build",     // 参数 2：构建目录路径
-          "--config",                     // 参数 3：指定构建类型
-          "${input:buildType}"            // 动态输入变量（用户选择 Debug/Release）
+          "--build",                                // 参数 1：执行构建操作
+          "${workspaceFolder}/build",               // 参数 2：构建目录路径
+          "--config",                               // 参数 3：指定构建类型
+          "${input:buildType}"                      // 动态输入变量（用户选择 Debug/Release）
         ],
         "options": {
-          "cwd": "${workspaceFolder}"     // 工作目录
+          "cwd": "${workspaceFolder}"               // 工作目录
         },
-        "group": "build"                  // 属于 "build" 组（非默认）
+        "group": "build"                            // 属于 "build" 组（非默认）
       },
       {
-        "label": "vcpkg: download",       // 下载 vcpkg 任务
+        "label": "[custom] vcpkg: download",        // 下载 vcpkg 任务
         "type": "shell",
         "command": "git clone git@github.com:microsoft/vcpkg.git && ${workspaceFolder}/vcpkg/bootstrap-vcpkg.bat",
         "options": {
@@ -48,14 +49,14 @@
         "problemMatcher": []
       },
       {
-        "label": "vcpkg: initialize baseline",    // 初始化 vcpkg 基准线任务 
+        "label": "[custom] vcpkg: initialize baseline",    // 初始化 vcpkg 基准线任务 
         "type": "shell", 
         "command": "${workspaceFolder}/vcpkg/vcpkg x-update-baseline --add-initial-baseline", 
         "options": {}, 
         "group": "none"
       }, 
       {
-        "label": "vcpkg: update baseline",        // 更新 vcpkg 基准线任务
+        "label": "[custom] vcpkg: update baseline",        // 更新 vcpkg 基准线任务
         "type": "shell",
         "command": "${workspaceFolder}/vcpkg/vcpkg x-update-baseline",
         "options": {
@@ -65,7 +66,7 @@
         "problemMatcher": []
       },
       {
-        "label": "vcpkg: install dependencies (command line)",  // 命令行方式安装依赖库任务
+        "label": "[custom] vcpkg: install dependencies (command line)",  // 命令行方式安装依赖库任务
         "type": "shell",
         "command": "${workspaceFolder}/vcpkg/vcpkg",
         "args": [
@@ -89,7 +90,7 @@
         "problemMatcher": []
       },
       {
-        "label": "vcpkg: install dependencies (manifest)",  // 清单模式安装依赖库任务
+        "label": "[custom] vcpkg: install dependencies (manifest)",  // 清单模式安装依赖库任务
         "type": "shell",
         "command": "${workspaceFolder}/vcpkg/vcpkg",
         "args": [

@@ -16,12 +16,16 @@ VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
     assert(instance == nullptr);
     instance = this;
 
+    vra_data_collector_ = std::make_unique<vra::VraDataCollector>();
+
     // Initialize the states
     engine_state_ = EWindowState::Initialized;
     render_state_ = ERenderState::True;
 
     InitializeSDL();
     InitializeVulkan();
+
+    TestVraFunctions();
 }
 
 VulkanEngine::~VulkanEngine()
@@ -97,6 +101,9 @@ void VulkanEngine::InitializeVulkan()
     if (!CreateSynchronizationObjects()) {
         throw std::runtime_error("Failed to create Vulkan synchronization objects.");
     }
+
+    // test vra functions
+    
 }
 
 // Main loop
@@ -554,4 +561,65 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
         return false;
 
     return true;
+}
+
+
+/// --------------------------------
+/// test vra functions
+/// --------------------------------
+
+void VulkanEngine::TestVraFunctions()
+{
+    struct Vertex
+    {
+        glm::vec2 pos;
+        glm::vec3 color;
+    };
+
+    const std::vector<Vertex> vertices = {
+        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
+
+    const std::vector<uint16_t> indices = {
+        0, 1, 2, 2, 3, 0};
+
+    // create vertex buffer
+    vra::VraBufferDesc vertex_buffer_desc;
+    vertex_buffer_desc.usage_flags_ = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    vertex_buffer_desc.sharing_mode_ = VK_SHARING_MODE_EXCLUSIVE;
+    vertex_buffer_desc.queue_family_index_count_ = 1;
+    vertex_buffer_desc.pQueueFamilyIndices_ = std::vector<uint32_t>(1, vkb_device_.get_queue_index(vkb::QueueType::graphics).value()).data();
+    vra::VraRawData vertex_raw_data;
+    vertex_raw_data.pData_ = vertices.data();
+    vertex_raw_data.size_ = vertices.size() * sizeof(Vertex);
+
+    vra::VraDataBehavior vertex_data_behavior;
+    vertex_data_behavior.frequency = vra::VraDataBehavior::UpdateFrequency::RarelyOrNever;
+    vertex_data_behavior.allowPersistentMapping = true;
+
+    vra::ResourceId data_id = 0;
+
+    vra::VraDataDesc vertex_data_desc(vra::VraDataMemoryPattern::Static_Upload, vertex_data_behavior, vertex_buffer_desc, vra::VraImageDesc());
+    vra_data_collector_->CollectBufferData(vertex_data_desc, vertex_raw_data, data_id);
+
+    // create index buffer
+    vra::VraBufferDesc index_buffer_desc;
+    index_buffer_desc.usage_flags_ = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    index_buffer_desc.sharing_mode_ = VK_SHARING_MODE_EXCLUSIVE;
+    index_buffer_desc.queue_family_index_count_ = 1;
+    index_buffer_desc.pQueueFamilyIndices_ = std::vector<uint32_t>(1, vkb_device_.get_queue_index(vkb::QueueType::graphics).value()).data();
+    vra::VraRawData index_raw_data;
+    index_raw_data.pData_ = indices.data();
+    index_raw_data.size_ = indices.size() * sizeof(uint16_t);
+
+    vra::VraDataBehavior index_data_behavior;
+    index_data_behavior.frequency = vra::VraDataBehavior::UpdateFrequency::RarelyOrNever;
+    index_data_behavior.allowPersistentMapping = true;
+
+    vra::ResourceId index_data_id = 1;
+    vra::VraDataDesc index_data_desc(vra::VraDataMemoryPattern::Static_Upload, index_data_behavior, index_buffer_desc, vra::VraImageDesc());
+    vra_data_collector_->CollectBufferData(index_data_desc, index_raw_data, index_data_id);
+
+    vra_data_collector_->GroupAllBufferData();
 }

@@ -47,11 +47,11 @@
       "inherits": "base-mingw-makefiles",
       "displayName": "Windows GCC (MinGW Makefiles)",
       "environment": {
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
         "VCPKG_CMAKE_SYSTEM_NAME": "MinGW"
       },
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
         "CMAKE_C_COMPILER": "C:/Program Files/w64devkit/bin/gcc.exe",
         "CMAKE_CXX_COMPILER": "C:/Program Files/w64devkit/bin/g++.exe"
       }

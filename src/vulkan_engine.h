@@ -15,10 +15,13 @@
 #include "synchronization/vulkan_synchronization.h"
 #include "utility/config_reader.h"
 
+#include "vulkan_resource_allocator/vra.h"
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <memory>
 #include <VkBootstrap.h>
+#include <glm/glm.hpp>
 
 enum class EWindowState : std::uint8_t
 {
@@ -114,6 +117,7 @@ private:
     SVulkanSwapChainConfig swapchain_config_;
 
     // vulkan helper members
+    std::unique_ptr<vra::VraDataCollector> vra_data_collector_;
     std::unique_ptr<VulkanSDLWindowHelper> vkWindowHelper_;
     std::unique_ptr<VulkanShaderHelper> vkShaderHelper_;
     std::unique_ptr<VulkanRenderpassHelper> vkRenderpassHelper_;
@@ -144,4 +148,8 @@ private:
     void ResizeSwapChain();
     bool RecordCommand(uint32_t image_index, std::string command_buffer_id);
     // --------------------------------------
+
+    // --- VRA Test Functions ---
+    void TestVraFunctions();
+    // --------------------------
 };

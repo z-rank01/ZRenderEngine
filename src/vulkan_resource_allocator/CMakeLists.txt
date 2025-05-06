@@ -18,5 +18,5 @@ target_include_directories(vulkan_resource_allocator
 target_link_libraries(vulkan_resource_allocator
     PUBLIC
         Vulkan::Vulkan
-        Vulkan::VulkanMemoryAllocator
+        GPUOpen::VulkanMemoryAllocator
 )

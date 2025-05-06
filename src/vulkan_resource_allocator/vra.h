@@ -5,25 +5,58 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <unordered_map>
+#include <optional>
+#include <cassert>
+#include <stdexcept>
+#include <utility>
+#include <limits>
 
 namespace vra
 {
     using ResourceId = uint64_t;
 
+    // --- Forward Declarations ---
+    class VraDataDesc;
+    struct VraRawData;
+
+    // --- Grouped Buffer Data Structure ---
+    struct GroupedBufferData
+    {
+        std::vector<uint8_t> consolidated_data;
+        std::unordered_map<ResourceId, size_t> offsets; // Map ResourceId to its offset in consolidated_data
+        size_t total_size = 0;
+        VkBufferUsageFlags combined_usage_flags = 0; // Combined usage flags for the group buffer
+
+        void Clear()
+        {
+            consolidated_data.clear();
+            offsets.clear();
+            total_size = 0;
+            combined_usage_flags = 0;
+        }
+    };
+
 
     enum class VraDataMemoryPattern
     {
         // Static Mode
-        Static_GPU_Only, // Device Local, no CPU access
-        Static_Upload,   // CPU write once, GPU read multiple times (e.g. staging buffer)
+        Static_Local,       // Device Local, no CPU access
+        Static_Upload,      // CPU write once, GPU read multiple times (e.g. staging buffer)
 
         // Dynamic Mode
         Dynamic_Sequential, // sequential access, e.g. UBO update
         Dynamic_Random,     // random access, automatically enable Host Cached
 
         // Special Usage
-        Stream_Ring, // ring buffer mode
-        Readback     // GPU write, CPU read
+        Stream_Ring,        // ring buffer mode
+        Readback            // GPU write, CPU read
+    };
+
+    enum class VraGroupType
+    {
+        Vertex_Index, 
+        Uniform, 
+        Storage
     };
 
     // Buffer Behavior Configuration
@@ -36,26 +69,16 @@ namespace vra
             RarelyOrNever // update rarely or never
         };
 
-        enum class SyncStrategy
-        {
-            SingleBuffer, // single buffer (need synchronization)
-            DoubleBuffer, // double buffer (CPU/GPU parallel)
-            TripleBuffer, // triple buffer (minimum waiting)
-            RingBuffer    // ring buffer (stream data)
-        };
-
         UpdateFrequency frequency = UpdateFrequency::RarelyOrNever;
-        SyncStrategy syncStrategy = SyncStrategy::SingleBuffer;
         bool allowPersistentMapping = false; // allow persistent mapping
     };
 
     struct VraBufferDesc
     {
         VkBufferUsageFlags usage_flags_;
-        VkShaderStageFlags stage_flags_;
         VkSharingMode sharing_mode_;
         uint32_t queue_family_index_count_;
-        const uint32_t *pQueueFamilyIndices_;
+        uint32_t *pQueueFamilyIndices_;
     };
 
     struct VraImageDesc
@@ -64,9 +87,9 @@ namespace vra
         VkSharingMode sharing_mode_;
     };
 
-    struct RawData
+    struct VraRawData
     {
-        void *pData_;
+        const void *pData_;
         size_t size_;
     };
 
@@ -102,9 +125,7 @@ namespace vra
             VraDataDesc desc;
             desc.data_pattern_ = VraDataMemoryPattern::Static_Upload;
             desc.data_behavior_.frequency = VraDataBehavior::UpdateFrequency::RarelyOrNever;
-            desc.data_behavior_.syncStrategy = VraDataBehavior::SyncStrategy::SingleBuffer;
             desc.buffer_desc_.usage_flags_ = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-            desc.buffer_desc_.stage_flags_ = VK_SHADER_STAGE_VERTEX_BIT;
             return desc;
         }
 
@@ -113,10 +134,8 @@ namespace vra
             VraDataDesc desc;
             desc.data_pattern_ = VraDataMemoryPattern::Dynamic_Sequential;
             desc.data_behavior_.frequency = VraDataBehavior::UpdateFrequency::PerFrame;
-            desc.data_behavior_.syncStrategy = VraDataBehavior::SyncStrategy::DoubleBuffer;
             desc.data_behavior_.allowPersistentMapping = true;
             desc.buffer_desc_.usage_flags_ = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-            desc.buffer_desc_.stage_flags_ = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
             return desc;
         }
 
@@ -125,10 +144,8 @@ namespace vra
             VraDataDesc desc;
             desc.data_pattern_ = VraDataMemoryPattern::Stream_Ring;
             desc.data_behavior_.frequency = VraDataBehavior::UpdateFrequency::PerFrame;
-            desc.data_behavior_.syncStrategy = VraDataBehavior::SyncStrategy::RingBuffer;
             desc.data_behavior_.allowPersistentMapping = true;
             desc.buffer_desc_.usage_flags_ = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-            desc.buffer_desc_.stage_flags_ = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
             return desc;
         }
     };
@@ -274,32 +291,84 @@ namespace vra
         ~VraDataCollector();
 
         // --- Data Collection ---
-        bool CollectBufferData(VraDataDesc desc, RawData data);
-        bool CollectImageData(VraDataDesc desc, RawData data);
+        /**
+         * @brief Collects buffer data description and raw data pointer.
+         * @param id A unique ResourceId for this buffer data.
+         * @param desc Description of the buffer data (usage, memory pattern, etc.).
+         * @param data Raw data pointer and size. The pointer pData_ must remain valid until GroupAllBufferData is called.
+         * @return True if collected successfully, false if ID already exists or max count reached.
+         */
+        bool CollectBufferData(VraDataDesc desc, VraRawData data, ResourceId& id);
+
+        /**
+         * @brief Collects image data description and raw data pointer. (Not fully implemented in grouping)
+         * @param id A unique ResourceId for this image data.
+         * @param desc Description of the image data.
+         * @param data Raw data pointer and size.
+         * @return True if collected successfully, false if ID already exists or max count reached.
+         */
+        bool CollectImageData(VraDataDesc desc, VraRawData data, ResourceId& id);
+
+        // --- Data Processing ---
+        /**
+         * @brief Processes all collected buffer data, grouping them by memory pattern.
+         * Must be called after collecting data for a batch/frame and before accessing grouped data.
+         */
+        void GroupAllBufferData();
 
         // --- Data Access ---
-        const VraDataDesc &GetBufferDesc(ResourceId id) const { return desc_map_.at(id); }
-        const VraDataDesc &GetImageDesc(ResourceId id) const { return desc_map_.at(id); }
-        const RawData &GetBufferData(ResourceId id) const { return data_map_.at(id); }
-        const RawData &GetImageData(ResourceId id) const { return data_map_.at(id); }
+        // Access individual resource data (usually before grouping)
+        std::optional<std::reference_wrapper<const VraDataDesc>> GetBufferDesc(ResourceId id) const;
+        std::optional<std::reference_wrapper<const VraRawData>> GetBufferData(ResourceId id) const;
+        std::optional<std::reference_wrapper<const VraDataDesc>> GetImageDesc(ResourceId id) const; // Declaration added
+        std::optional<std::reference_wrapper<const VraRawData>> GetImageData(ResourceId id) const;  // Declaration added
+
+        /**
+         * @brief Gets the offset of a specific buffer resource within its consolidated group buffer.
+         * Call this *after* GroupAllBufferData().
+         * @param id The ResourceId of the buffer.
+         * @return The offset in bytes, or std::numeric_limits<size_t>::max() if not found (e.g., ID invalid or not grouped).
+         */
+        size_t GetBufferOffset(ResourceId id) const;
+
+        // Access grouped data (call *after* GroupAllBufferData)
+        const GroupedBufferData &GetStaticLocalGroup() const { return static_local_group_; }
+        const GroupedBufferData &GetStaticUploadGroup() const { return static_upload_group_; }
+        const GroupedBufferData &GetDynamicSequentialGroup() const { return dynamic_sequential_group_; }
+
+        /**
+         * @brief Clears all collected buffer and image data, and resets grouping results.
+         */
+        void ClearAllCollectedData();
 
     private:
-        std::unordered_map<ResourceId, VraDataDesc> desc_map_;
-        std::unordered_map<ResourceId, RawData> data_map_;
-        ResourceId next_buffer_id_ = 0;
-        ResourceId next_image_id_ = 0;
+        // Buffer specific storage
+        std::unordered_map<ResourceId, VraDataDesc> buffer_desc_map_;
+        std::unordered_map<ResourceId, VraRawData> buffer_data_map_;
 
-        static constexpr size_t MAX_BUFFER_COUNT = 1024;
+        // Image specific storage
+        std::unordered_map<ResourceId, VraDataDesc> image_desc_map_;
+        std::unordered_map<ResourceId, VraRawData> image_data_map_;
+
+        // --- Limits ---
+        // Consider making these configurable
+        static constexpr size_t MAX_BUFFER_COUNT = 4096;
         static constexpr size_t MAX_IMAGE_COUNT = 1024;
 
+        // Grouped data structures
+        GroupedBufferData static_local_group_;
+        GroupedBufferData static_upload_group_;
+        GroupedBufferData dynamic_sequential_group_;
+        // Add groups for other patterns (Dynamic_Random, Stream_Ring, Readback) if needed later
 
-        bool GroupDataIfPossible();
-        bool TryGroupVertexIndexData();
-        bool TryGroupUniformData();
-        bool TryGroupStorageData();
-        bool TryGroupIndirectDrawCommands();
-        VraBufferInfo2Vma ParseDataToBufferInfo();
-        VraImageInfo2Vma ParseDataToImageViewInfo();
+        // --- Private Grouping Methods ---
+        void GroupStaticLocalData();
+        void GroupStaticUploadData();
+        void GroupDynamicSeqData();
+        // Add grouping methods for other patterns if needed later
+
+        // Helper to clear groups before regrouping
+        void ClearGroupedBufferData();
     };
 
     class VraDescriptorAllocator

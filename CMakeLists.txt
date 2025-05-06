@@ -32,7 +32,7 @@ add_subdirectory(src/pipeline)
 add_subdirectory(src/source)
 add_subdirectory(src/synchronization)
 add_subdirectory(src/builder)
-
+add_subdirectory(src/vulkan_resource_allocator)
 # 设置源文件
 set(SOURCES
     src/main.cpp
@@ -57,12 +57,13 @@ target_link_libraries(VulkanEngine
     vk-bootstrap::vk-bootstrap
     imgui::imgui
     fastgltf::fastgltf
-    utility                 # 添加 utility 库
-    vulkan_initialization   # 添加 vulkan_initialization 库
-    vulkan_pipeline         # 添加 vulkan_pipeline 库
-    vulkan_source           # 添加 vulkan_source 库
-    vulkan_synchronization  # 添加 vulkan_synchronization 库
-    builder                 # 添加 builder 库
+    utility                         # 添加 utility 库
+    vulkan_initialization           # 添加 vulkan_initialization 库
+    vulkan_pipeline                 # 添加 vulkan_pipeline 库
+    vulkan_source                   # 添加 vulkan_source 库
+    vulkan_synchronization          # 添加 vulkan_synchronization 库
+    builder                         # 添加 builder 库
+    vulkan_resource_allocator       # 添加 vra 库
 )
 
 # 包含目录
