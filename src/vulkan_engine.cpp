@@ -195,7 +195,7 @@ bool VulkanEngine::CreateInstance()
 
 bool VulkanEngine::CreateSurface()
 {
-    return vkWindowHelper_->CreateSurface(vkb_instance_);
+    return vkWindowHelper_->CreateSurface(vkb_instance_.instance);
 }
 
 bool VulkanEngine::CreatePhysicalDevice()
@@ -267,7 +267,7 @@ bool VulkanEngine::CreateSwapChain()
 bool VulkanEngine::CreatePipeline()
 {
     // create shader
-    vkShaderHelper_ = std::make_unique<VulkanShaderHelper>(vkb_device_);
+    vkShaderHelper_ = std::make_unique<VulkanShaderHelper>(vkb_device_.device);
 
     std::vector<SVulkanShaderConfig> configs;
     std::string shader_path = engine_config_.general_config.working_directory + "src\\shader\\";
@@ -285,7 +285,7 @@ bool VulkanEngine::CreatePipeline()
             return false;
         }
 
-        if (!vkShaderHelper_->CreateShaderModule(vkb_device_, shader_code, config.shader_type))
+        if (!vkShaderHelper_->CreateShaderModule(vkb_device_.device, shader_code, config.shader_type))
         {
             Logger::LogError("Failed to create shader module for " + std::string(config.shader_path));
             return false;
@@ -298,7 +298,7 @@ bool VulkanEngine::CreatePipeline()
     renderpass_config.depth_format = VK_FORMAT_D32_SFLOAT; // TODO: Make configurable
     renderpass_config.sample_count = VK_SAMPLE_COUNT_1_BIT; // TODO: Make configurable
     vkRenderpassHelper_ = std::make_unique<VulkanRenderpassHelper>(renderpass_config);
-    if (!vkRenderpassHelper_->CreateRenderpass(vkb_device_))
+    if (!vkRenderpassHelper_->CreateRenderpass(vkb_device_.device))
     {
         return false;
     }
@@ -312,7 +312,7 @@ bool VulkanEngine::CreatePipeline()
     };
     pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
     vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);
-    return vkPipelineHelper_->CreatePipeline(vkb_device_);
+    return vkPipelineHelper_->CreatePipeline(vkb_device_.device);
 }
 
 bool VulkanEngine::CreateFrameBuffer()
@@ -326,13 +326,13 @@ bool VulkanEngine::CreateFrameBuffer()
     framebuffer_config.image_views = &swapchain_image_views;
     vkFrameBufferHelper_ = std::make_unique<VulkanFrameBufferHelper>(framebuffer_config);
 
-    return vkFrameBufferHelper_->CreateFrameBuffer(vkb_device_, vkRenderpassHelper_->GetRenderpass());
+    return vkFrameBufferHelper_->CreateFrameBuffer(vkb_device_.device, vkRenderpassHelper_->GetRenderpass());
 }
 
 bool VulkanEngine::CreateCommandPool()
 {
     vkCommandBufferHelper_ = std::make_unique<VulkanCommandBufferHelper>();
-    return vkCommandBufferHelper_->CreateCommandPool(vkb_device_, vkb_device_.get_queue_index(vkb::QueueType::graphics).value());
+    return vkCommandBufferHelper_->CreateCommandPool(vkb_device_.device, vkb_device_.get_queue_index(vkb::QueueType::graphics).value());
 }
 
 bool VulkanEngine::AllocateCommandBuffer()
@@ -350,7 +350,7 @@ bool VulkanEngine::AllocateCommandBuffer()
 
 bool VulkanEngine::CreateSynchronizationObjects()
 {
-    vkSynchronizationHelper_ = std::make_unique<VulkanSynchronizationHelper>(vkb_device_);
+    vkSynchronizationHelper_ = std::make_unique<VulkanSynchronizationHelper>(vkb_device_.device);
     // create synchronization objects
     for(int i = 0; i < engine_config_.frame_count; ++i)
     {
@@ -385,10 +385,15 @@ void VulkanEngine::DrawFrame()
 
     // acquire next image
     uint32_t image_index;
-    if (!Logger::LogWithVkResult(vkAcquireNextImageKHR(vkb_device_.device, vkb_swapchain_.swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_index), 
-        "Failed to acquire next image", 
-        "Succeeded in acquiring next image"))
+    VkResult acquire_result = vkAcquireNextImageKHR(vkb_device_.device, vkb_swapchain_.swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_index);
+    if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR || acquire_result == VK_SUBOPTIMAL_KHR)
     {
+        resize_request_ = true;
+        return;
+    }
+    else if (acquire_result != VK_SUCCESS)
+    {
+        Logger::LogWithVkResult(acquire_result, "Failed to acquire next image", "Succeeded in acquiring next image");
         return;
     }
 
@@ -443,10 +448,15 @@ void VulkanEngine::DrawFrame()
     present_info.swapchainCount = 1;
     present_info.pSwapchains = &vkb_swapchain_.swapchain;
     present_info.pImageIndices = &image_index;
-    if (!Logger::LogWithVkResult(vkQueuePresentKHR(vkb_device_.get_queue(vkb::QueueType::graphics).value(), &present_info),
-        "Failed to present image",
-        "Succeeded in presenting image"))
+    VkResult present_result = vkQueuePresentKHR(vkb_device_.get_queue(vkb::QueueType::graphics).value(), &present_info);
+    if (present_result == VK_ERROR_OUT_OF_DATE_KHR || present_result == VK_SUBOPTIMAL_KHR)
     {
+        resize_request_ = true;
+        return;
+    }
+    else if (present_result != VK_SUCCESS)
+    {
+        Logger::LogWithVkResult(present_result, "Failed to present image", "Succeeded in presenting image");
         return;
     }
 
@@ -459,8 +469,10 @@ void VulkanEngine::ResizeSwapChain()
     // wait for the device to be idle
     vkDeviceWaitIdle(vkb_device_.device);
 
-    // destroy old swapchain
-    vkDestroySwapchainKHR(vkb_device_.device, vkb_swapchain_.swapchain, nullptr);
+    // destroy old vulkan objects
+    // vkDestroySwapchainKHR(vkb_device_.device, vkb_swapchain_.swapchain, nullptr);
+    vkb_swapchain_.destroy_image_views(vkb_swapchain_.get_image_views().value());
+    vkb::destroy_swapchain(vkb_swapchain_);
 
     // reset window size
     auto current_extent = vkWindowHelper_->GetCurrentWindowExtent();
@@ -477,10 +489,10 @@ void VulkanEngine::ResizeSwapChain()
         throw std::runtime_error("Failed to create Vulkan frame buffer.");
     }
 
-    // recreate command buffers
-    if (!AllocateCommandBuffer()) {
-        throw std::runtime_error("Failed to allocate Vulkan command buffer.");
-    }
+    // // recreate command buffers
+    // if (!AllocateCommandBuffer()) {
+    //     throw std::runtime_error("Failed to allocate Vulkan command buffer.");
+    // }
 
     resize_request_ = false;
 }

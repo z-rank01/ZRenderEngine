@@ -73,6 +73,22 @@ target_include_directories(VulkanEngine
     ${Vulkan_INCLUDE_DIRS}
 )
 
+# 设置特定于编译器的警告选项
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # Clang 可能的 ID 包括 "Clang", "AppleClang" 等
+    target_compile_options(VulkanEngine PRIVATE -Wall -Wextra -pedantic) # 或者仅用 -Wall
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(VulkanEngine PRIVATE /W4)
+endif()
+
+# 使用生成器表达式为 Debug 构建添加调试信息选项
+target_compile_options(VulkanEngine PRIVATE
+    $<$<CONFIG:Debug>:$<$<CXX_COMPILER_ID:GNU,Clang>:-g>>
+    $<$<CONFIG:Debug>:$<$<CXX_COMPILER_ID:MSVC>:/Zi>>
+    $<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang>:-O3>>
+    $<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:MSVC>:/O2>>
+)
+
 # 设置 IDE 中的源文件分组
 source_group(
     TREE ${CMAKE_CURRENT_SOURCE_DIR}
