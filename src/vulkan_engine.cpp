@@ -16,15 +16,23 @@ VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
     assert(instance == nullptr);
     instance = this;
 
-    vra_data_collector_ = std::make_unique<vra::VraDataCollector>();
-
-    // Initialize the states
-    engine_state_ = EWindowState::Initialized;
-    render_state_ = ERenderState::True;
-
     InitializeSDL();
     InitializeVulkan();
 
+    // vra and vma members
+    vra_data_collector_ = std::make_unique<vra::VraDataCollector>();
+    vra_dispatcher_ = std::make_unique<vra::VraDispatcher>();
+
+    VmaAllocatorCreateInfo allocatorCreateInfo = {};
+    allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+    allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+    allocatorCreateInfo.physicalDevice = vkb_physical_device_.physical_device;
+    allocatorCreateInfo.device = vkb_device_.device;
+    allocatorCreateInfo.instance = vkb_instance_.instance;
+
+    vmaCreateAllocator(&allocatorCreateInfo, &vma_allocator_);
+
+    // test vra functions
     TestVraFunctions();
 }
 
@@ -208,7 +216,7 @@ bool VulkanEngine::CreateSurface()
 bool VulkanEngine::CreatePhysicalDevice()
 {
     //vulkan 1.3 features
-	VkPhysicalDeviceVulkan13Features features_13{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+	VkPhysicalDeviceVulkan13Features features_13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 	features_13.synchronization2 = true;
 
     vkb::PhysicalDeviceSelector selector{vkb_instance_};
@@ -584,42 +592,49 @@ void VulkanEngine::TestVraFunctions()
     const std::vector<uint16_t> indices = {
         0, 1, 2, 2, 3, 0};
 
+    
+    // get graphics queue family index
+    uint32_t graphics_queue_family_index = vkb_device_.get_queue_index(vkb::QueueType::graphics).value();
+    std::vector<uint32_t> queue_family_indices = {graphics_queue_family_index};
+
     // create vertex buffer
-    vra::VraBufferDesc vertex_buffer_desc;
-    vertex_buffer_desc.usage_flags_ = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    vertex_buffer_desc.sharing_mode_ = VK_SHARING_MODE_EXCLUSIVE;
-    vertex_buffer_desc.queue_family_index_count_ = 1;
-    vertex_buffer_desc.pQueueFamilyIndices_ = std::vector<uint32_t>(1, vkb_device_.get_queue_index(vkb::QueueType::graphics).value()).data();
-    vra::VraRawData vertex_raw_data;
-    vertex_raw_data.pData_ = vertices.data();
-    vertex_raw_data.size_ = vertices.size() * sizeof(Vertex);
-
-    vra::VraDataBehavior vertex_data_behavior;
-    vertex_data_behavior.frequency = vra::VraDataBehavior::UpdateFrequency::RarelyOrNever;
-    vertex_data_behavior.allowPersistentMapping = true;
-
+    vra::VraBufferDesc vertex_buffer_desc{
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, // usage_flags_
+        VK_SHARING_MODE_EXCLUSIVE,                                            // sharing_mode_
+        queue_family_indices.size(),                                          // queue_family_index_count_
+        queue_family_indices.data()                                           // pQueueFamilyIndices_
+    };
+    vra::VraRawData vertex_raw_data{
+        vertices.data(),                 // pData_
+        vertices.size() * sizeof(Vertex) // size_
+    };
+    vra::VraDataUpdateRate vertex_data_update_rate = vra::VraDataUpdateRate::RarelyOrNever;
     vra::ResourceId data_id = 0;
+    vra::VraDataDesc vertex_data_desc(vra::VraDataMemoryPattern::Static_Upload, vertex_data_update_rate, vertex_buffer_desc);
 
-    vra::VraDataDesc vertex_data_desc(vra::VraDataMemoryPattern::Static_Upload, vertex_data_behavior, vertex_buffer_desc, vra::VraImageDesc());
     vra_data_collector_->CollectBufferData(vertex_data_desc, vertex_raw_data, data_id);
 
     // create index buffer
-    vra::VraBufferDesc index_buffer_desc;
-    index_buffer_desc.usage_flags_ = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    index_buffer_desc.sharing_mode_ = VK_SHARING_MODE_EXCLUSIVE;
-    index_buffer_desc.queue_family_index_count_ = 1;
-    index_buffer_desc.pQueueFamilyIndices_ = std::vector<uint32_t>(1, vkb_device_.get_queue_index(vkb::QueueType::graphics).value()).data();
-    vra::VraRawData index_raw_data;
-    index_raw_data.pData_ = indices.data();
-    index_raw_data.size_ = indices.size() * sizeof(uint16_t);
-
-    vra::VraDataBehavior index_data_behavior;
-    index_data_behavior.frequency = vra::VraDataBehavior::UpdateFrequency::RarelyOrNever;
-    index_data_behavior.allowPersistentMapping = true;
-
+    vra::VraBufferDesc index_buffer_desc{
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,    // usage_flags_
+        VK_SHARING_MODE_EXCLUSIVE,                                              // sharing_mode_
+        queue_family_indices.size(),                                            // queue_family_index_count_
+        queue_family_indices.data()                                             // pQueueFamilyIndices_
+    };
+    vra::VraRawData index_raw_data{
+        indices.data(),                                                         // pData_
+        indices.size() * sizeof(uint16_t)                                       // size_
+    };
+    vra::VraDataUpdateRate index_data_update_rate = vra::VraDataUpdateRate::RarelyOrNever;
     vra::ResourceId index_data_id = 1;
-    vra::VraDataDesc index_data_desc(vra::VraDataMemoryPattern::Static_Upload, index_data_behavior, index_buffer_desc, vra::VraImageDesc());
+    vra::VraDataDesc index_data_desc(vra::VraDataMemoryPattern::Static_Upload, index_data_update_rate, index_buffer_desc);
+
     vra_data_collector_->CollectBufferData(index_data_desc, index_raw_data, index_data_id);
 
-    vra_data_collector_->GroupAllBufferData();
+    // group all buffer data
+    vra_data_collector_->GroupAllBufferData(vkb_physical_device_.properties);
+
+    // generate all buffers
+
+    vra_dispatcher_->GenerateAllBuffers(*vra_data_collector_, vma_allocator_);
 }

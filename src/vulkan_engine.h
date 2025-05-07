@@ -116,8 +116,12 @@ private:
 
     SVulkanSwapChainConfig swapchain_config_;
 
-    // vulkan helper members
+    // vra and vma members
+    VmaAllocator vma_allocator_;
     std::unique_ptr<vra::VraDataCollector> vra_data_collector_;
+    std::unique_ptr<vra::VraDispatcher> vra_dispatcher_;
+
+    // vulkan helper members
     std::unique_ptr<VulkanSDLWindowHelper> vkWindowHelper_;
     std::unique_ptr<VulkanShaderHelper> vkShaderHelper_;
     std::unique_ptr<VulkanRenderpassHelper> vkRenderpassHelper_;
