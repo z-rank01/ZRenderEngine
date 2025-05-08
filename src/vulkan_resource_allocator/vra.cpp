@@ -9,19 +9,15 @@ namespace vra
     // --- Data Collector Implementation ---
     // -------------------------------------
 
-    VraDataCollector::VraDataCollector()
-    {
-        RegisterDefaultGroups();
-    }
-
     VraDataCollector::~VraDataCollector()
     {
+        Clear();
     }
 
-    void VraDataCollector::RegisterBufferGroup(
+    void VraDataCollector::RegisterDataGroup(
         std::string name,
         std::function<bool(const VraDataDesc &)> predicate,
-        std::function<void(GroupedBufferData &, ResourceId, const VraDataDesc &, const VraRawData &, const VkPhysicalDeviceProperties &)> group_action)
+        std::function<void(ResourceId, VraGroupedDataHandle &, const VraDataDesc &, const VraRawData &)> group_action)
     {
         // Check if group with this name already exists to prevent duplicates
         if (group_name_to_index_map_.count(name))
@@ -32,177 +28,227 @@ namespace vra
             // A more robust system might throw or return a bool.
             return;
         }
-        registered_groups_.push_back(VraBufferGroup{std::move(name), std::move(predicate), std::move(group_action)});
+        registered_groups_.push_back(VraDataGroup{std::move(name), std::move(predicate), std::move(group_action)});
         group_name_to_index_map_[registered_groups_.back().name] = registered_groups_.size() - 1;
     }
 
     void VraDataCollector::RegisterDefaultGroups()
     {
         // Static Local Group
-        RegisterBufferGroup(
+        RegisterDataGroup(
             "static_local_group",
             [](const VraDataDesc &desc)
-            { 
-                return desc.GetMemoryPattern() == VraDataMemoryPattern::Static_Local; 
-            },
-            [](GroupedBufferData &group, ResourceId id, const VraDataDesc &desc, const VraRawData &raw_data, const VkPhysicalDeviceProperties & /*props*/)
             {
-                if (raw_data.pData_ != nullptr && raw_data.size_ > 0)
-                {
-                    group.offsets[id] = group.total_size;
-                    const uint8_t *data_ptr = static_cast<const uint8_t *>(raw_data.pData_);
-                    group.consolidated_data.insert(group.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
-                    group.total_size += raw_data.size_;
-                }
-                else
-                {
-                    group.offsets[id] = group.total_size;
-                }
-                group.combined_usage_flags |= desc.GetBufferDesc().usage_flags_;
-            });
+                return desc.GetMemoryPattern() == VraDataMemoryPattern::GPU_Only;
+            },
+            [](ResourceId id, VraGroupedDataHandle &group, const VraDataDesc &desc, const VraRawData &raw_data)
+            {
+                const auto &current_item_buffer_create_info = desc.GetBufferCreateInfo();
 
-        // Static Upload Group
-        RegisterBufferGroup(
-            "static_upload_group",
-            [](const VraDataDesc &desc)
-            { 
-                return desc.GetMemoryPattern() == VraDataMemoryPattern::Static_Upload; 
-            },
-            [](GroupedBufferData &group, ResourceId id, const VraDataDesc &desc, const VraRawData &raw_data, const VkPhysicalDeviceProperties & /*props*/)
-            {
-                if (raw_data.pData_ != nullptr && raw_data.size_ > 0)
+                if (!group.initialized)
                 {
-                    group.offsets[id] = group.total_size;
-                    const uint8_t *data_ptr = static_cast<const uint8_t *>(raw_data.pData_);
-                    group.consolidated_data.insert(group.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
-                    group.total_size += raw_data.size_;
+                    group.data_desc = desc; // Initialize the group's entire VraDataDesc
+                    group.initialized = true;
                 }
                 else
                 {
-                    group.offsets[id] = group.total_size;
+                    auto &group_ci_ref = group.data_desc.GetBufferCreateInfo();
+                    if (current_item_buffer_create_info.usage == 0 ||
+                        current_item_buffer_create_info.sharingMode != group_ci_ref.sharingMode)
+                    {
+                        return; // Incompatible
+                    }
+
+                    group_ci_ref.usage |= current_item_buffer_create_info.usage;
+                    group_ci_ref.flags |= current_item_buffer_create_info.flags;
+                    if (current_item_buffer_create_info.queueFamilyIndexCount > group_ci_ref.queueFamilyIndexCount &&
+                        current_item_buffer_create_info.sharingMode == VK_SHARING_MODE_CONCURRENT)
+                    {
+                        group_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
+                        group_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
+                    }
                 }
-                group.combined_usage_flags |= desc.GetBufferDesc().usage_flags_;
+
+                if (raw_data.pData_ != nullptr && raw_data.size_ > 0)
+                {
+                    group.offsets[id] = group.consolidated_data.size();
+                    const uint8_t *data_ptr = static_cast<const uint8_t *>(raw_data.pData_);
+                    group.consolidated_data.insert(group.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
+                }
+                else
+                {
+                    group.offsets[id] = group.consolidated_data.size();
+                }
+
+                group.data_desc.GetBufferCreateInfo().size = group.consolidated_data.size();
             });
 
         // Dynamic Sequential Group
-        RegisterBufferGroup(
+        RegisterDataGroup(
             "dynamic_sequential_group",
             [](const VraDataDesc &desc)
-            { 
-                return desc.GetMemoryPattern() == VraDataMemoryPattern::Dynamic_Sequential; 
-            },
-            [](GroupedBufferData &group, ResourceId id, const VraDataDesc &desc, const VraRawData &raw_data, const VkPhysicalDeviceProperties &props)
             {
-                if (raw_data.pData_ != nullptr && raw_data.size_ > 0)
+                return desc.GetMemoryPattern() == VraDataMemoryPattern::CPU_GPU;
+            },
+            [&physical_device_properties = this->physical_device_properties_](ResourceId id, VraGroupedDataHandle &group, const VraDataDesc &desc, const VraRawData &raw_data)
+            {
+                const auto &current_item_buffer_create_info = desc.GetBufferCreateInfo();
+                // Get a modifiable reference to the group's VkBufferCreateInfo
+                auto &group_ci_ref = group.data_desc.GetBufferCreateInfo();
+
+                if (!group.initialized)
                 {
-                    size_t current_offset_in_group = group.total_size;
-                    // Use minUniformBufferOffsetAlignment for dynamic sequential UBOs, as an example.
-                    // A more robust system might get specific alignment from VraBufferDesc or a group property.
-                    size_t alignment = static_cast<size_t>(props.limits.minUniformBufferOffsetAlignment);
-
-                    if (alignment > 0)
-                    { // Ensure alignment is valid
-                        size_t aligned_offset_in_group = (current_offset_in_group + alignment - 1) & ~(alignment - 1);
-                        size_t padding = aligned_offset_in_group - current_offset_in_group;
-                        if (padding > 0)
-                        {
-                            group.consolidated_data.insert(group.consolidated_data.end(), padding, 0); // Add padding bytes
-                            group.total_size += padding;
-                        }
-                    }
-                    group.offsets[id] = group.total_size;
-
-                    const uint8_t *data_ptr = static_cast<const uint8_t *>(raw_data.pData_);
-                    group.consolidated_data.insert(group.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
-                    group.total_size += raw_data.size_;
+                    group.data_desc = desc; // Initialize the group's entire VraDataDesc
+                    group.initialized = true;
+                    // group_ci_ref now refers to the CI within the newly set group.data_desc
+                }
+                else if (current_item_buffer_create_info.usage == 0 || 
+                         current_item_buffer_create_info.sharingMode != group_ci_ref.sharingMode)
+                {
+                    return; // Incompatible
                 }
                 else
                 {
-                    group.offsets[id] = group.total_size;
+                    // Merge into group_ci_ref
+                    group_ci_ref.usage |= current_item_buffer_create_info.usage;
+                    group_ci_ref.flags |= current_item_buffer_create_info.flags;
+                    if (current_item_buffer_create_info.queueFamilyIndexCount > group_ci_ref.queueFamilyIndexCount &&
+                        current_item_buffer_create_info.sharingMode == VK_SHARING_MODE_CONCURRENT)
+                    {
+                        group_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
+                        group_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
+                    }
                 }
-                group.combined_usage_flags |= desc.GetBufferDesc().usage_flags_;
+
+                // Combine data with alignment
+                size_t base_offset_for_item = group.consolidated_data.size();
+                size_t aligned_offset_for_item = base_offset_for_item;
+
+                // Apply alignment if the group's buffer usage suggests it (e.g., UBO, SSBO)
+                if ((group_ci_ref.usage & (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) != 0) {
+                    size_t alignment_requirement = physical_device_properties.limits.minUniformBufferOffsetAlignment; 
+                    // TODO: Consider other alignment requirements if necessary, e.g., minStorageBufferOffsetAlignment
+                    if (alignment_requirement > 0) {
+                        aligned_offset_for_item = (base_offset_for_item + alignment_requirement - 1) & ~(alignment_requirement - 1);
+                    }
+                }
+
+                size_t padding_needed = aligned_offset_for_item - base_offset_for_item;
+                if (padding_needed > 0) {
+                    group.consolidated_data.insert(group.consolidated_data.end(), padding_needed, (uint8_t)0); // Pad with zeros
+                }
+
+                group.offsets[id] = aligned_offset_for_item; // Store the correctly aligned offset
+
+                if (raw_data.pData_ != nullptr && raw_data.size_ > 0)
+                {
+                    const uint8_t *data_ptr = static_cast<const uint8_t *>(raw_data.pData_);
+                    group.consolidated_data.insert(group.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
+                }
+                
+                group_ci_ref.size = group.consolidated_data.size();
             });
     }
 
-    bool VraDataCollector::CollectBufferData(VraDataDesc desc, VraRawData data, ResourceId &id)
+    bool VraDataCollector::Collect(VraDataDesc desc, VraRawData data, ResourceId &id)
     {
-        if (buffer_desc_map_.size() >= MAX_BUFFER_COUNT)
+        // check buffer conditions
+        if (desc.GetBufferCreateInfo().usage == 0 ||
+            buffer_desc_map_.size() >= MAX_BUFFER_COUNT ||
+            buffer_desc_map_.count(id) ||
+            data.pData_ == nullptr ||
+            data.size_ == 0)
         {
-            // Optional: Log warning or error
             return false;
         }
-        if (buffer_desc_map_.count(id))
-        {
-            // Optional: Log warning or error - ID already exists
-            return false; // Don't overwrite, require unique IDs
-        }
-        if (data.pData_ == nullptr || data.size_ == 0)
-        {
-            // Optional: Log warning - Empty data collected
-            // Allow collecting zero-size buffers if it's a valid use case, otherwise return false
-        }
 
+        // store buffer data
         buffer_desc_map_[id] = desc;
         buffer_data_map_[id] = data;
+
         return true;
     }
 
-    bool VraDataCollector::CollectImageData(VraDataDesc desc, VraRawData data, ResourceId &id)
+    VkMemoryPropertyFlags VraDataCollector::GetSuggestMemoryFlags(std::string group_name)
     {
-        if (image_desc_map_.size() >= MAX_IMAGE_COUNT)
+        if (group_name_to_index_map_.find(group_name) == group_name_to_index_map_.cend())
         {
-            // Optional: Log warning or error
-            return false;
+            std::cerr << "Group name " << group_name << " not found" << std::endl;
+            return VkMemoryPropertyFlagBits();
         }
-        if (image_desc_map_.count(id))
+        const VraDataDesc &data_desc = registered_groups_[group_name_to_index_map_[group_name]].grouped_data_handle.data_desc;
+        const VraDataMemoryPattern &data_pattern = data_desc.GetMemoryPattern();
+        const VraDataUpdateRate &data_update_rate = data_desc.GetUpdateRate();
+        switch (data_pattern)
         {
-            // Optional: Log warning or error - ID already exists
-            return false;
+        case VraDataMemoryPattern::GPU_Only:
+            return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        case VraDataMemoryPattern::CPU_GPU:
+            if (data_update_rate == VraDataUpdateRate::Frequent)
+                return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            else if (data_update_rate == VraDataUpdateRate::RarelyOrNever)
+                return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+
+        case VraDataMemoryPattern::GPU_CPU:
+            if (data_update_rate == VraDataUpdateRate::Frequent)
+                return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            else if (data_update_rate == VraDataUpdateRate::RarelyOrNever)
+                return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+        case VraDataMemoryPattern::SOC:
+            return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+        case VraDataMemoryPattern::Stream_Ring:
+            if (data_update_rate == VraDataUpdateRate::Frequent)
+                return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            else if (data_update_rate == VraDataUpdateRate::RarelyOrNever)
+                return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+        default:
+            return VkMemoryPropertyFlagBits();
         }
-        // Add validation for image data/desc if necessary
-        image_desc_map_[id] = desc;
-        image_data_map_[id] = data;
-        return true;
     }
 
-    std::optional<std::reference_wrapper<const VraDataDesc>> VraDataCollector::GetBufferDesc(ResourceId id) const
+    VmaAllocationCreateFlags VraDataCollector::GetSuggestVmaMemoryFlags(std::string group_name)
     {
-        auto it = buffer_desc_map_.find(id);
-        if (it != buffer_desc_map_.end())
+        if (group_name_to_index_map_.find(group_name) == group_name_to_index_map_.cend())
         {
-            return std::cref(it->second);
+            std::cerr << "Group name " << group_name << " not found" << std::endl;
+            return VmaAllocationCreateFlags();
         }
-        return std::nullopt;
-    }
+        const VraDataDesc &data_desc = registered_groups_[group_name_to_index_map_[group_name]].grouped_data_handle.data_desc;
+        const VraDataMemoryPattern &data_pattern = data_desc.GetMemoryPattern();
+        const VraDataUpdateRate &data_update_rate = data_desc.GetUpdateRate();
+        switch (data_pattern)
+        {
+        case VraDataMemoryPattern::GPU_Only:
+            return VmaAllocationCreateFlags();
 
-    std::optional<std::reference_wrapper<const VraRawData>> VraDataCollector::GetBufferData(ResourceId id) const
-    {
-        auto it = buffer_data_map_.find(id);
-        if (it != buffer_data_map_.end())
-        {
-            return std::cref(it->second);
-        }
-        return std::nullopt;
-    }
+        case VraDataMemoryPattern::CPU_GPU:
+            if (data_update_rate == VraDataUpdateRate::Frequent)
+                return VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            else if (data_update_rate == VraDataUpdateRate::RarelyOrNever)
+                return VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-    std::optional<std::reference_wrapper<const VraDataDesc>> VraDataCollector::GetImageDesc(ResourceId id) const
-    {
-        auto it = image_desc_map_.find(id);
-        if (it != image_desc_map_.end())
-        {
-            return std::cref(it->second);
-        }
-        return std::nullopt;
-    }
+        case VraDataMemoryPattern::GPU_CPU:
+            if (data_update_rate == VraDataUpdateRate::Frequent)
+                return VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            else if (data_update_rate == VraDataUpdateRate::RarelyOrNever)
+                return VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
 
-    std::optional<std::reference_wrapper<const VraRawData>> VraDataCollector::GetImageData(ResourceId id) const
-    {
-        auto it = image_data_map_.find(id);
-        if (it != image_data_map_.end())
-        {
-            return std::cref(it->second);
+        case VraDataMemoryPattern::SOC:
+            return VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        case VraDataMemoryPattern::Stream_Ring:
+            if (data_update_rate == VraDataUpdateRate::Frequent)
+                return VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            else if (data_update_rate == VraDataUpdateRate::RarelyOrNever)
+                return VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+        default:
+            return VmaAllocationCreateFlags();
         }
-        return std::nullopt;
     }
 
     void VraDataCollector::ClearGroupedBufferData()
@@ -213,16 +259,14 @@ namespace vra
         }
     }
 
-    void VraDataCollector::ClearAllCollectedData()
+    void VraDataCollector::Clear()
     {
         buffer_desc_map_.clear();
         buffer_data_map_.clear();
-        image_desc_map_.clear();
-        image_data_map_.clear();
         ClearGroupedBufferData();
     }
 
-    void VraDataCollector::GroupAllBufferData(const VkPhysicalDeviceProperties &physical_device_properties)
+    void VraDataCollector::Execute()
     {
         ClearGroupedBufferData();
 
@@ -270,7 +314,7 @@ namespace vra
             {
                 if (strategy.predicate(desc))
                 {
-                    strategy.group_action(strategy.grouped_data_handle, id, desc, raw_data, physical_device_properties);
+                    strategy.group_method(id, strategy.grouped_data_handle, desc, raw_data);
                     break; // Assume buffer belongs to only one group based on predicate
                 }
             }
@@ -280,134 +324,11 @@ namespace vra
         for (auto &strategy : registered_groups_)
         {
             // The original dynamic_sequential_group did not shrink_to_fit.
-            // You might want a flag in VraBufferGroup to control this behavior.
+            // You might want a flag in VraDataGroup to control this behavior.
             if (strategy.name != "dynamic_sequential_group")
             {
                 strategy.grouped_data_handle.consolidated_data.shrink_to_fit();
             }
-        }
-    }
-
-    size_t VraDataCollector::GetBufferOffset(ResourceId id) const
-    {
-        for (const auto &strategy : registered_groups_)
-        {
-            auto it = strategy.grouped_data_handle.offsets.find(id);
-            if (it != strategy.grouped_data_handle.offsets.end())
-            {
-                return it->second;
-            }
-        }
-        return std::numeric_limits<size_t>::max();
-    }
-
-    const GroupedBufferData *VraDataCollector::GetGroupData(const std::string &name) const
-    {
-        auto it = group_name_to_index_map_.find(name);
-        if (it != group_name_to_index_map_.end())
-        {
-            if (it->second < registered_groups_.size())
-            { // Boundary check
-                return &registered_groups_[it->second].grouped_data_handle;
-            }
-        }
-        return nullptr;
-    }
-
-    // -------------------------------------
-    // --- Data Dispatcher Implementation ---
-    // -------------------------------------
-
-    bool VraDispatcher::GenerateAllBuffers(const VraDataCollector &data_collector, const VmaAllocator &vma_allocator)
-    {
-        auto group_names = data_collector.GetAllGroupNames();
-        for (const auto &group_name : group_names)
-        {
-            auto group_data = data_collector.GetGroupData(group_name);
-            if (!group_data || group_data->offsets.size() == 0)
-                continue;
-            auto data_desc = data_collector.GetBufferDesc(group_data->offsets.begin()->first).value().get();
-
-            VkBufferCreateInfo buffer_info = {};
-            buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            buffer_info.size = group_data->total_size;
-            buffer_info.usage = group_data->combined_usage_flags;
-            buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            buffer_info.queueFamilyIndexCount = data_desc.GetBufferDesc().queue_family_index_count_;
-            buffer_info.pQueueFamilyIndices = data_desc.GetBufferDesc().pQueueFamilyIndices_;
-
-            VmaAllocationCreateInfo alloc_info = {};
-            alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-            alloc_info.flags = GetAllocationCreateFlags(data_desc.GetMemoryPattern());
-
-            VkBuffer buffer;
-            VmaAllocation allocation;
-            VmaAllocationInfo allocation_info;
-            if (vmaCreateBuffer(vma_allocator, &buffer_info, &alloc_info, &buffer, &allocation, &allocation_info) != VK_SUCCESS)
-            {
-                std::cerr << "Failed to create buffer" << std::endl;
-                return false;
-            }
-
-            // create a managed buffer
-            ManagedVmaBuffer managed_buffer{
-                buffer,
-                buffer_info.usage,
-                allocation,
-                vma_allocator,
-                allocation_info};
-            buffer_map_[group_name].push_back(std::move(managed_buffer));
-
-            // create a staging buffer if needed
-            if (data_desc.GetMemoryPattern() == VraDataMemoryPattern::Static_Upload)
-            {
-                // create a staging buffer
-                VkBufferCreateInfo staging_buffer_info = {};
-                staging_buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-                staging_buffer_info.size = group_data->total_size;
-                staging_buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-                staging_buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-                staging_buffer_info.queueFamilyIndexCount = data_desc.GetBufferDesc().queue_family_index_count_;
-                staging_buffer_info.pQueueFamilyIndices = data_desc.GetBufferDesc().pQueueFamilyIndices_;
-
-                VmaAllocationCreateInfo staging_alloc_info = {};
-                staging_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-                staging_alloc_info.flags = GetAllocationCreateFlags(VraDataMemoryPattern::Dynamic_Sequential);
-
-                VkBuffer staging_buffer;
-                VmaAllocation staging_allocation;
-                VmaAllocationInfo staging_allocation_info;
-                if (vmaCreateBuffer(vma_allocator, &staging_buffer_info, &staging_alloc_info, &staging_buffer, &staging_allocation, &staging_allocation_info) != VK_SUCCESS)
-                {
-                    std::cerr << "Failed to create staging buffer" << std::endl;
-                    return false;
-                }
-
-                // create a managed staging buffer
-                ManagedVmaBuffer managed_staging_buffer{
-                    staging_buffer,
-                    staging_buffer_info.usage,
-                    staging_allocation,
-                    vma_allocator,
-                    staging_allocation_info};
-                buffer_map_[group_name].push_back(std::move(managed_staging_buffer));
-            }
-        }
-        return true;
-    }
-
-    VmaAllocationCreateFlags VraDispatcher::GetAllocationCreateFlags(VraDataMemoryPattern pattern)
-    {
-        switch (pattern)
-        {
-        case VraDataMemoryPattern::Dynamic_Sequential:
-            return VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        case VraDataMemoryPattern::Dynamic_Random:
-            return VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        case VraDataMemoryPattern::Static_Local:
-        case VraDataMemoryPattern::Static_Upload:
-        default:
-            return 0;
         }
     }
 

@@ -3,14 +3,14 @@
 #include <thread>
 #include <iostream> // For error logging
 
-VulkanEngine* instance = nullptr;
+VulkanEngine *instance = nullptr;
 
-VulkanEngine& VulkanEngine::GetInstance()
+VulkanEngine &VulkanEngine::GetInstance()
 {
     return *instance;
 }
 
-VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
+VulkanEngine::VulkanEngine(const SEngineConfig &config) : engine_config_(config)
 {
     // only one engine initialization is allowed with the application.
     assert(instance == nullptr);
@@ -20,8 +20,7 @@ VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
     InitializeVulkan();
 
     // vra and vma members
-    vra_data_collector_ = std::make_unique<vra::VraDataCollector>();
-    vra_dispatcher_ = std::make_unique<vra::VraDispatcher>();
+    vra_data_collector_ = std::make_unique<vra::VraDataCollector>(vkb_physical_device_.physical_device);
 
     VmaAllocatorCreateInfo allocatorCreateInfo = {};
     allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
@@ -56,11 +55,11 @@ void VulkanEngine::InitializeSDL()
 {
     vkWindowHelper_ = std::make_unique<VulkanSDLWindowHelper>();
     if (!vkWindowHelper_->GetWindowBuilder()
-        .SetWindowName(engine_config_.window_config.title.c_str())
-        .SetWindowSize(engine_config_.window_config.width, engine_config_.window_config.height)
-        .SetWindowFlags(SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN)
-        .SetInitFlags(SDL_INIT_VIDEO | SDL_INIT_EVENTS)
-        .Build())
+             .SetWindowName(engine_config_.window_config.title.c_str())
+             .SetWindowSize(engine_config_.window_config.width, engine_config_.window_config.height)
+             .SetWindowFlags(SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN)
+             .SetInitFlags(SDL_INIT_VIDEO | SDL_INIT_EVENTS)
+             .Build())
     {
         throw std::runtime_error("Failed to create SDL window.");
     }
@@ -70,48 +69,57 @@ void VulkanEngine::InitializeVulkan()
 {
     GenerateFrameStructs();
 
-    if (!CreateInstance()) {
+    if (!CreateInstance())
+    {
         throw std::runtime_error("Failed to create Vulkan instance.");
     }
 
-    if (!CreateSurface()) {
+    if (!CreateSurface())
+    {
         throw std::runtime_error("Failed to create Vulkan surface.");
     }
 
-    if (!CreatePhysicalDevice()) {
+    if (!CreatePhysicalDevice())
+    {
         throw std::runtime_error("Failed to create Vulkan physical device.");
     }
 
-    if (!CreateLogicalDevice()) {
+    if (!CreateLogicalDevice())
+    {
         throw std::runtime_error("Failed to create Vulkan logical device.");
     }
 
-    if (!CreateSwapChain()) {
+    if (!CreateSwapChain())
+    {
         throw std::runtime_error("Failed to create Vulkan swap chain.");
     }
 
-    if (!CreatePipeline()) {
+    if (!CreatePipeline())
+    {
         throw std::runtime_error("Failed to create Vulkan pipeline.");
     }
 
-    if (!CreateFrameBuffer()) {
+    if (!CreateFrameBuffer())
+    {
         throw std::runtime_error("Failed to create Vulkan frame buffer.");
     }
 
-    if (!CreateCommandPool()) {
+    if (!CreateCommandPool())
+    {
         throw std::runtime_error("Failed to create Vulkan command pool.");
     }
 
-    if (!AllocateCommandBuffer()) {
+    if (!AllocatePerFrameCommandBuffer())
+    {
         throw std::runtime_error("Failed to allocate Vulkan command buffer.");
     }
 
-    if (!CreateSynchronizationObjects()) {
+    if (!CreateSynchronizationObjects())
+    {
         throw std::runtime_error("Failed to create Vulkan synchronization objects.");
     }
 
     // test vra functions
-    
 }
 
 // Main loop
@@ -149,7 +157,7 @@ void VulkanEngine::Run()
         // do not draw if we are minimized
         if (render_state_ == ERenderState::False)
         {
-            // throttle the speed to avoid the endless spinning 
+            // throttle the speed to avoid the endless spinning
             constexpr auto sleep_duration_ms = 100;
             std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration_ms));
             continue;
@@ -177,7 +185,8 @@ void VulkanEngine::Draw()
 void VulkanEngine::GenerateFrameStructs()
 {
     output_frames_.resize(engine_config_.frame_count);
-    for (int i = 0; i < engine_config_.frame_count; ++i) {
+    for (int i = 0; i < engine_config_.frame_count; ++i)
+    {
         output_frames_[i].image_index = i;
         output_frames_[i].queue_id = "graphic_queue";
         output_frames_[i].command_buffer_id = "graphic_command_buffer_" + std::to_string(i);
@@ -190,16 +199,17 @@ void VulkanEngine::GenerateFrameStructs()
 bool VulkanEngine::CreateInstance()
 {
     vkb::InstanceBuilder builder;
-    
-    auto inst_ret = builder
-        .set_app_name(engine_config_.window_config.title.c_str())
-        .set_engine_name("Vulkan Engine")
-        .require_api_version(1, 3, 0)
-        .use_default_debug_messenger()
-        .enable_validation_layers(engine_config_.use_validation_layers)
-        .build();
 
-    if (!inst_ret) {
+    auto inst_ret = builder
+                        .set_app_name(engine_config_.window_config.title.c_str())
+                        .set_engine_name("Vulkan Engine")
+                        .require_api_version(1, 3, 0)
+                        .use_default_debug_messenger()
+                        .enable_validation_layers(engine_config_.use_validation_layers)
+                        .build();
+
+    if (!inst_ret)
+    {
         std::cout << "Failed to create Vulkan instance. Error: " << inst_ret.error().message() << std::endl;
         return false;
     }
@@ -215,20 +225,21 @@ bool VulkanEngine::CreateSurface()
 
 bool VulkanEngine::CreatePhysicalDevice()
 {
-    //vulkan 1.3 features
-	VkPhysicalDeviceVulkan13Features features_13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
-	features_13.synchronization2 = true;
+    // vulkan 1.3 features
+    VkPhysicalDeviceVulkan13Features features_13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+    features_13.synchronization2 = true;
 
     vkb::PhysicalDeviceSelector selector{vkb_instance_};
     auto phys_ret = selector
-        .set_surface(vkWindowHelper_->GetSurface())
-        .set_minimum_version(1, 3)
-        .set_required_features_13(features_13)
-        .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
-        .require_present()
-        .select();
+                        .set_surface(vkWindowHelper_->GetSurface())
+                        .set_minimum_version(1, 3)
+                        .set_required_features_13(features_13)
+                        .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
+                        .require_present()
+                        .select();
 
-    if (!phys_ret) {
+    if (!phys_ret)
+    {
         std::cout << "Failed to select Vulkan Physical Device. Error: " << phys_ret.error().message() << std::endl;
         return false;
     }
@@ -241,7 +252,8 @@ bool VulkanEngine::CreateLogicalDevice()
 {
     vkb::DeviceBuilder device_builder{vkb_physical_device_};
     auto dev_ret = device_builder.build();
-    if (!dev_ret) {
+    if (!dev_ret)
+    {
         std::cout << "Failed to create Vulkan device. Error: " << dev_ret.error().message() << std::endl;
         return false;
     }
@@ -254,13 +266,14 @@ bool VulkanEngine::CreateSwapChain()
 {
     vkb::SwapchainBuilder swapchain_builder{vkb_device_};
     auto swap_ret = swapchain_builder
-        .set_desired_format({VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
-        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-        .set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height)
-        .set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
-        .build();
+                        .set_desired_format({VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
+                        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+                        .set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height)
+                        .set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+                        .build();
 
-    if (!swap_ret) {
+    if (!swap_ret)
+    {
         std::cout << "Failed to create Vulkan swapchain. Error: " << swap_ret.error().message() << std::endl;
         return false;
     }
@@ -288,10 +301,10 @@ bool VulkanEngine::CreatePipeline()
     std::string shader_path = engine_config_.general_config.working_directory + "src\\shader\\";
     std::string vertex_shader_path = shader_path + "triangle.vert.spv";
     std::string fragment_shader_path = shader_path + "triangle.frag.spv";
-    configs.push_back({ EShaderType::kVertexShader, vertex_shader_path.c_str() });
-    configs.push_back({ EShaderType::kFragmentShader, fragment_shader_path.c_str() });
+    configs.push_back({EShaderType::kVertexShader, vertex_shader_path.c_str()});
+    configs.push_back({EShaderType::kFragmentShader, fragment_shader_path.c_str()});
 
-    for (const auto& config : configs)
+    for (const auto &config : configs)
     {
         std::vector<uint32_t> shader_code;
         if (!vkShaderHelper_->ReadShaderCode(config.shader_path, shader_code))
@@ -310,7 +323,7 @@ bool VulkanEngine::CreatePipeline()
     // create renderpass
     SVulkanRenderpassConfig renderpass_config;
     renderpass_config.color_format = vkb_swapchain_.image_format;
-    renderpass_config.depth_format = VK_FORMAT_D32_SFLOAT; // TODO: Make configurable
+    renderpass_config.depth_format = VK_FORMAT_D32_SFLOAT;  // TODO: Make configurable
     renderpass_config.sample_count = VK_SAMPLE_COUNT_1_BIT; // TODO: Make configurable
     vkRenderpassHelper_ = std::make_unique<VulkanRenderpassHelper>(renderpass_config);
     if (!vkRenderpassHelper_->CreateRenderpass(vkb_device_.device))
@@ -322,9 +335,8 @@ bool VulkanEngine::CreatePipeline()
     SVulkanPipelineConfig pipeline_config;
     pipeline_config.swap_chain_config = &swapchain_config_;
     pipeline_config.shader_module_map = {
-        { EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader) },
-        { EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader) }
-    };
+        {EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader)},
+        {EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader)}};
     pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
     vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);
     return vkPipelineHelper_->CreatePipeline(vkb_device_.device);
@@ -350,11 +362,11 @@ bool VulkanEngine::CreateCommandPool()
     return vkCommandBufferHelper_->CreateCommandPool(vkb_device_.device, vkb_device_.get_queue_index(vkb::QueueType::graphics).value());
 }
 
-bool VulkanEngine::AllocateCommandBuffer()
+bool VulkanEngine::AllocatePerFrameCommandBuffer()
 {
-    for(int i = 0; i < engine_config_.frame_count; ++i)
+    for (int i = 0; i < engine_config_.frame_count; ++i)
     {
-        if (!vkCommandBufferHelper_->AllocateCommandBuffer({ VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1 }, output_frames_[i].command_buffer_id))
+        if (!vkCommandBufferHelper_->AllocateCommandBuffer({VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1}, output_frames_[i].command_buffer_id))
         {
             Logger::LogError("Failed to allocate command buffer for frame " + std::to_string(i));
             return false;
@@ -367,15 +379,17 @@ bool VulkanEngine::CreateSynchronizationObjects()
 {
     vkSynchronizationHelper_ = std::make_unique<VulkanSynchronizationHelper>(vkb_device_.device);
     // create synchronization objects
-    for(int i = 0; i < engine_config_.frame_count; ++i)
+    for (int i = 0; i < engine_config_.frame_count; ++i)
     {
-        if (!vkSynchronizationHelper_->CreateSemaphore(output_frames_[i].image_available_sempaphore_id)) return false;
-        if (!vkSynchronizationHelper_->CreateSemaphore(output_frames_[i].render_finished_sempaphore_id)) return false;
-        if (!vkSynchronizationHelper_->CreateFence(output_frames_[i].fence_id)) return false;
+        if (!vkSynchronizationHelper_->CreateSemaphore(output_frames_[i].image_available_sempaphore_id))
+            return false;
+        if (!vkSynchronizationHelper_->CreateSemaphore(output_frames_[i].render_finished_sempaphore_id))
+            return false;
+        if (!vkSynchronizationHelper_->CreateFence(output_frames_[i].fence_id))
+            return false;
     }
     return true;
 }
-
 
 // ----------------------------------
 // private function to draw the frame
@@ -389,9 +403,10 @@ void VulkanEngine::DrawFrame()
     auto current_render_finished_semaphore_id = output_frames_[frame_index_].render_finished_sempaphore_id;
     auto current_command_buffer_id = output_frames_[frame_index_].command_buffer_id;
     auto current_queue_id = output_frames_[frame_index_].queue_id;
-    
+
     // wait for last frame to finish
-    if (!vkSynchronizationHelper_->WaitForFence(current_fence_id)) return;
+    if (!vkSynchronizationHelper_->WaitForFence(current_fence_id))
+        return;
 
     // get semaphores
     auto image_available_semaphore = vkSynchronizationHelper_->GetSemaphore(current_image_available_semaphore_id);
@@ -413,11 +428,14 @@ void VulkanEngine::DrawFrame()
     }
 
     // reset fence before submitting
-    if (!vkSynchronizationHelper_->ResetFence(current_fence_id)) return;
+    if (!vkSynchronizationHelper_->ResetFence(current_fence_id))
+        return;
 
     // record command buffer
-    if (!vkCommandBufferHelper_->ResetCommandBuffer(current_command_buffer_id)) return;
-    if (!RecordCommand(image_index, current_command_buffer_id)) return;
+    if (!vkCommandBufferHelper_->ResetCommandBuffer(current_command_buffer_id))
+        return;
+    if (!RecordCommand(image_index, current_command_buffer_id))
+        return;
 
     // submit command buffer
     VkCommandBufferSubmitInfo command_buffer_submit_info{};
@@ -443,8 +461,8 @@ void VulkanEngine::DrawFrame()
     submit_info.signalSemaphoreInfoCount = 1;
     submit_info.pSignalSemaphoreInfos = &signal_semaphore_info;
     if (!Logger::LogWithVkResult(vkQueueSubmit2(vkb_device_.get_queue(vkb::QueueType::graphics).value(), 1, &submit_info, in_flight_fence),
-        "Failed to submit command buffer",
-        "Succeeded in submitting command buffer"))
+                                 "Failed to submit command buffer",
+                                 "Succeeded in submitting command buffer"))
     {
         return;
     }
@@ -495,12 +513,14 @@ void VulkanEngine::ResizeSwapChain()
     engine_config_.window_config.height = current_extent.height;
 
     // create new swapchain
-    if (!CreateSwapChain()) {
+    if (!CreateSwapChain())
+    {
         throw std::runtime_error("Failed to create Vulkan swap chain.");
     }
 
     // recreate framebuffers
-    if (!CreateFrameBuffer()) {
+    if (!CreateFrameBuffer())
+    {
         throw std::runtime_error("Failed to create Vulkan frame buffer.");
     }
 
@@ -533,7 +553,7 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderpass_info.renderPass = vkRenderpassHelper_->GetRenderpass();
     renderpass_info.framebuffer = (*vkFrameBufferHelper_->GetFramebuffers())[image_index];
-    renderpass_info.renderArea.offset = { 0, 0 };
+    renderpass_info.renderArea.offset = {0, 0};
     renderpass_info.renderArea.extent = swapchain_config->target_swap_extent_;
     renderpass_info.clearValueCount = 1;
     renderpass_info.pClearValues = &clear_color;
@@ -554,7 +574,7 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
-    scissor.offset = { 0, 0 };
+    scissor.offset = {0, 0};
     scissor.extent = swapchain_config->target_swap_extent_;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
@@ -571,7 +591,6 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     return true;
 }
 
-
 /// --------------------------------
 /// test vra functions
 /// --------------------------------
@@ -584,57 +603,132 @@ void VulkanEngine::TestVraFunctions()
         glm::vec3 color;
     };
 
-    const std::vector<Vertex> vertices = {
+    // raw data
+    const std::vector<Vertex> vertices = 
+    {
         {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
         {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
-
-    const std::vector<uint16_t> indices = {
-        0, 1, 2, 2, 3, 0};
-
-    
-    // get graphics queue family index
-    uint32_t graphics_queue_family_index = vkb_device_.get_queue_index(vkb::QueueType::graphics).value();
-    std::vector<uint32_t> queue_family_indices = {graphics_queue_family_index};
-
-    // create vertex buffer
-    vra::VraBufferDesc vertex_buffer_desc{
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, // usage_flags_
-        VK_SHARING_MODE_EXCLUSIVE,                                            // sharing_mode_
-        queue_family_indices.size(),                                          // queue_family_index_count_
-        queue_family_indices.data()                                           // pQueueFamilyIndices_
+        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    };
+    const std::vector<uint16_t> indices =
+    {
+         0, 1, 2, 2, 3, 0
     };
     vra::VraRawData vertex_raw_data{
         vertices.data(),                 // pData_
         vertices.size() * sizeof(Vertex) // size_
     };
-    vra::VraDataUpdateRate vertex_data_update_rate = vra::VraDataUpdateRate::RarelyOrNever;
-    vra::ResourceId data_id = 0;
-    vra::VraDataDesc vertex_data_desc(vra::VraDataMemoryPattern::Static_Upload, vertex_data_update_rate, vertex_buffer_desc);
-
-    vra_data_collector_->CollectBufferData(vertex_data_desc, vertex_raw_data, data_id);
-
-    // create index buffer
-    vra::VraBufferDesc index_buffer_desc{
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,    // usage_flags_
-        VK_SHARING_MODE_EXCLUSIVE,                                              // sharing_mode_
-        queue_family_indices.size(),                                            // queue_family_index_count_
-        queue_family_indices.data()                                             // pQueueFamilyIndices_
-    };
     vra::VraRawData index_raw_data{
-        indices.data(),                                                         // pData_
-        indices.size() * sizeof(uint16_t)                                       // size_
+        indices.data(),                   // pData_
+        indices.size() * sizeof(uint16_t) // size_
     };
-    vra::VraDataUpdateRate index_data_update_rate = vra::VraDataUpdateRate::RarelyOrNever;
+
+    // TODO: change to dynamic
+    vra::ResourceId vertex_data_id = 0;
     vra::ResourceId index_data_id = 1;
-    vra::VraDataDesc index_data_desc(vra::VraDataMemoryPattern::Static_Upload, index_data_update_rate, index_buffer_desc);
+    vra::ResourceId staging_vertex_data_id = 2;
+    vra::ResourceId staging_index_data_id = 3;
 
-    vra_data_collector_->CollectBufferData(index_data_desc, index_raw_data, index_data_id);
+    // vertex buffer create info
+    VkBufferCreateInfo vertex_buffer_create_info = {};
+    vertex_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    vertex_buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    vertex_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc vertex_data_desc
+    {
+        vra::VraDataMemoryPattern::GPU_Only,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        vertex_buffer_create_info
+    };
 
-    // group all buffer data
-    vra_data_collector_->GroupAllBufferData(vkb_physical_device_.properties);
+    // index buffer create info
+    VkBufferCreateInfo index_buffer_create_info = {};
+    index_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    index_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc index_data_desc
+    {
+        vra::VraDataMemoryPattern::GPU_Only,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        index_buffer_create_info
+    };
 
-    // generate all buffers
+    // staging buffer create info
+    VkBufferCreateInfo staging_buffer_create_info = {};
+    staging_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    staging_buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    staging_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc staging_data_desc{
+        vra::VraDataMemoryPattern::CPU_GPU,
+        vra::VraDataUpdateRate::Frequent,
+        staging_buffer_create_info};
 
-    vra_dispatcher_->GenerateAllBuffers(*vra_data_collector_, vma_allocator_);
+    // collect and group
+    vra_data_collector_->Collect(vertex_data_desc, vertex_raw_data, vertex_data_id);
+    vra_data_collector_->Collect(index_data_desc, index_raw_data, index_data_id);
+    vra_data_collector_->Collect(staging_data_desc, vertex_raw_data, staging_vertex_data_id);
+    vra_data_collector_->Collect(staging_data_desc, index_raw_data, staging_index_data_id);
+    vra_data_collector_->Execute();
+
+    // generate vertex and index buffers and allocate memory
+    auto group_data = vra_data_collector_->GetGroupData("static_local_group");
+    if (!group_data || group_data->offsets.size() == 0)
+        throw std::runtime_error("Failed to get group data");
+
+    VmaAllocationCreateInfo alloc_info = {};
+    alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
+    alloc_info.flags = vra_data_collector_->GetSuggestVmaMemoryFlags("static_local_group");
+
+    VkBuffer buffer;
+    VmaAllocation allocation;
+    VmaAllocationInfo allocation_info;
+    if (vmaCreateBuffer(vma_allocator_, &group_data->data_desc.GetBufferCreateInfo(), &alloc_info, &buffer, &allocation, &allocation_info) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create buffer");
+
+
+    // generate staging buffer and copy data
+    auto staging_group_data = vra_data_collector_->GetGroupData("dynamic_sequential_group");
+    if (!staging_group_data || staging_group_data->offsets.size() == 0)
+        throw std::runtime_error("Failed to get staging group data");
+
+    VmaAllocationCreateInfo staging_alloc_info = {};
+    staging_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
+    staging_alloc_info.flags = vra_data_collector_->GetSuggestVmaMemoryFlags("dynamic_sequential_group");
+
+    VkBuffer staging_buffer;
+    VmaAllocation staging_allocation;
+    VmaAllocationInfo staging_allocation_info;
+    if (vmaCreateBuffer(vma_allocator_, &staging_group_data->data_desc.GetBufferCreateInfo(), &staging_alloc_info, &staging_buffer, &staging_allocation, &staging_allocation_info) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create staging buffer");
+
+    // copy data to staging buffer
+    void* mapped_data = nullptr;
+    vmaMapMemory(vma_allocator_, staging_allocation, &mapped_data);
+    memcpy(mapped_data, group_data->consolidated_data.data(), group_data->consolidated_data.size());
+    vmaUnmapMemory(vma_allocator_, staging_allocation);
+
+    SVulkanCommandBufferAllocationConfig config;
+    config.command_buffer_count = 1;
+    config.command_buffer_level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    vkCommandBufferHelper_->AllocateCommandBuffer(config, "copy_command_buffer");
+
+    VkCommandBuffer command_buffer = vkCommandBufferHelper_->GetCommandBuffer("copy_command_buffer");
+    VkCommandBufferBeginInfo begin_info{};
+    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(command_buffer, &begin_info);
+
+    VkBufferCopy buffer_copy_info{};
+    buffer_copy_info.srcOffset = 0;
+    buffer_copy_info.dstOffset = 0;
+    buffer_copy_info.size = staging_group_data->data_desc.GetBufferCreateInfo().size;
+    vkCmdCopyBuffer(command_buffer, staging_buffer, buffer, 1, &buffer_copy_info);
+    vkEndCommandBuffer(command_buffer);
+
+    VkSubmitInfo submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &command_buffer;
+    vkQueueSubmit(vkb_device_.get_queue(vkb::QueueType::graphics).value(), 1, &submit_info, VK_NULL_HANDLE);
+    vkQueueWaitIdle(vkb_device_.get_queue(vkb::QueueType::graphics).value());
 }

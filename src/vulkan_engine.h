@@ -119,7 +119,6 @@ private:
     // vra and vma members
     VmaAllocator vma_allocator_;
     std::unique_ptr<vra::VraDataCollector> vra_data_collector_;
-    std::unique_ptr<vra::VraDispatcher> vra_dispatcher_;
 
     // vulkan helper members
     std::unique_ptr<VulkanSDLWindowHelper> vkWindowHelper_;
@@ -143,7 +142,7 @@ private:
     bool CreatePipeline();
     bool CreateFrameBuffer();
     bool CreateCommandPool();
-    bool AllocateCommandBuffer();
+    bool AllocatePerFrameCommandBuffer();
     bool CreateSynchronizationObjects();
     // ------------------------------------
 
