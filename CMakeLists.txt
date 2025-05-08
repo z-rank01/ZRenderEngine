@@ -77,7 +77,7 @@ target_include_directories(VulkanEngine
 # 设置特定于编译器的警告选项
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Clang 可能的 ID 包括 "Clang", "AppleClang" 等
-    target_compile_options(VulkanEngine PRIVATE -Wall -Wextra -pedantic) # 或者仅用 -Wall
+    target_compile_options(VulkanEngine PRIVATE -Wall)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(VulkanEngine PRIVATE /W4)
 endif()

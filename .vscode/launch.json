@@ -8,6 +8,14 @@
       "program": "${workspaceFolder}/build/${input:buildType}/${input:executableName}.exe",
       "args": [],
       "cwd": "${workspaceFolder}/build",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "miDebuggerPath": "C:/Program Files/msys64/ucrt64/bin/gdb.exe"
     }
   ],
   "inputs": [
