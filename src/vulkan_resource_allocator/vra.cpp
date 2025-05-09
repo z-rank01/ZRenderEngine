@@ -9,12 +9,12 @@ namespace vra
     // --- Data Collector Implementation ---
     // -------------------------------------
 
-    VraDataCollector::~VraDataCollector()
+    VraDataBatcher::~VraDataBatcher()
     {
         Clear();
     }
 
-    void VraDataCollector::RegisterDataGroup(
+    void VraDataBatcher::RegisterDataGroup(
         std::string name,
         std::function<bool(const VraDataDesc &)> predicate,
         std::function<void(ResourceId, VraGroupedDataHandle &, const VraDataDesc &, const VraRawData &)> group_action)
@@ -32,7 +32,7 @@ namespace vra
         group_name_to_index_map_[registered_groups_.back().name] = registered_groups_.size() - 1;
     }
 
-    void VraDataCollector::RegisterDefaultGroups()
+    void VraDataBatcher::RegisterDefaultGroups()
     {
         // Static Local Group
         RegisterDataGroup(
@@ -150,7 +150,7 @@ namespace vra
             });
     }
 
-    bool VraDataCollector::Collect(VraDataDesc desc, VraRawData data, ResourceId &id)
+    bool VraDataBatcher::Collect(VraDataDesc desc, VraRawData data, ResourceId &id)
     {
         // check buffer conditions
         if (desc.GetBufferCreateInfo().usage == 0 ||
@@ -169,7 +169,7 @@ namespace vra
         return true;
     }
 
-    VkMemoryPropertyFlags VraDataCollector::GetSuggestMemoryFlags(std::string group_name)
+    VkMemoryPropertyFlags VraDataBatcher::GetSuggestMemoryFlags(std::string group_name)
     {
         if (group_name_to_index_map_.find(group_name) == group_name_to_index_map_.cend())
         {
@@ -210,7 +210,7 @@ namespace vra
         }
     }
 
-    VmaAllocationCreateFlags VraDataCollector::GetSuggestVmaMemoryFlags(std::string group_name)
+    VmaAllocationCreateFlags VraDataBatcher::GetSuggestVmaMemoryFlags(std::string group_name)
     {
         if (group_name_to_index_map_.find(group_name) == group_name_to_index_map_.cend())
         {
@@ -251,7 +251,7 @@ namespace vra
         }
     }
 
-    void VraDataCollector::ClearGroupedBufferData()
+    void VraDataBatcher::ClearGroupedBufferData()
     {
         for (auto &strategy : registered_groups_)
         {
@@ -259,14 +259,14 @@ namespace vra
         }
     }
 
-    void VraDataCollector::Clear()
+    void VraDataBatcher::Clear()
     {
         buffer_desc_map_.clear();
         buffer_data_map_.clear();
         ClearGroupedBufferData();
     }
 
-    void VraDataCollector::Execute()
+    void VraDataBatcher::Group()
     {
         ClearGroupedBufferData();
 

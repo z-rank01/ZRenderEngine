@@ -25,13 +25,12 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
     // vertex input
-    // here we hardcode the vertex input state to be empty, as we are not using any vertex buffer
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 0;
-    vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
-    vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &config_.vertex_input_binding_description;
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(config_.vertex_input_attribute_descriptions.size());
+    vertexInputInfo.pVertexAttributeDescriptions = config_.vertex_input_attribute_descriptions.data();
 
     // viewport and scissor
     VkViewport viewport{};

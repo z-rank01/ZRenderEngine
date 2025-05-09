@@ -19,20 +19,8 @@ VulkanEngine::VulkanEngine(const SEngineConfig &config) : engine_config_(config)
     InitializeSDL();
     InitializeVulkan();
 
-    // vra and vma members
-    vra_data_collector_ = std::make_unique<vra::VraDataCollector>(vkb_physical_device_.physical_device);
-
-    VmaAllocatorCreateInfo allocatorCreateInfo = {};
-    allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
-    allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
-    allocatorCreateInfo.physicalDevice = vkb_physical_device_.physical_device;
-    allocatorCreateInfo.device = vkb_device_.device;
-    allocatorCreateInfo.instance = vkb_instance_.instance;
-
-    vmaCreateAllocator(&allocatorCreateInfo, &vma_allocator_);
-
     // test vra functions
-    TestVraFunctions();
+    // TestVraFunctions();
 }
 
 VulkanEngine::~VulkanEngine()
@@ -94,6 +82,11 @@ void VulkanEngine::InitializeVulkan()
         throw std::runtime_error("Failed to create Vulkan swap chain.");
     }
 
+    if (!CreateResourceBuffers())
+    {
+        throw std::runtime_error("Failed to create Vulkan resource's buffers.");
+    }
+
     if (!CreatePipeline())
     {
         throw std::runtime_error("Failed to create Vulkan pipeline.");
@@ -109,6 +102,8 @@ void VulkanEngine::InitializeVulkan()
         throw std::runtime_error("Failed to create Vulkan command pool.");
     }
 
+    
+
     if (!AllocatePerFrameCommandBuffer())
     {
         throw std::runtime_error("Failed to allocate Vulkan command buffer.");
@@ -118,8 +113,6 @@ void VulkanEngine::InitializeVulkan()
     {
         throw std::runtime_error("Failed to create Vulkan synchronization objects.");
     }
-
-    // test vra functions
 }
 
 // Main loop
@@ -338,6 +331,8 @@ bool VulkanEngine::CreatePipeline()
         {EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader)},
         {EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader)}};
     pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
+    pipeline_config.vertex_input_binding_description = vertex_input_binding_description_;
+    pipeline_config.vertex_input_attribute_descriptions = {vertex_input_attribute_position_, vertex_input_attribute_color_};
     vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);
     return vkPipelineHelper_->CreatePipeline(vkb_device_.device);
 }
@@ -360,6 +355,198 @@ bool VulkanEngine::CreateCommandPool()
 {
     vkCommandBufferHelper_ = std::make_unique<VulkanCommandBufferHelper>();
     return vkCommandBufferHelper_->CreateCommandPool(vkb_device_.device, vkb_device_.get_queue_index(vkb::QueueType::graphics).value());
+}
+
+bool VulkanEngine::CreateDescriptorRelatives()
+{
+    // create descriptor pool
+
+    VkDescriptorPoolSize pool_size{};
+    pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pool_size.descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo pool_info{};
+    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.poolSizeCount = 1;
+
+    if (Logger::LogWithVkResult(vkCreateDescriptorPool(vkb_device_.device, &pool_info, nullptr, &descriptor_pool_),
+                                "Failed to create descriptor pool",
+                                "Succeeded in creating descriptor pool"))
+        return false;
+
+    // create descriptor set layout
+
+    VkDescriptorSetLayoutBinding layout_binding{};
+    layout_binding.binding = 0;
+    layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layout_binding.descriptorCount = 1;
+    layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layout_info{};
+    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layout_info.bindingCount = 1;
+    layout_info.pBindings = &layout_binding;
+
+    if (Logger::LogWithVkResult(vkCreateDescriptorSetLayout(vkb_device_.device, &layout_info, nullptr, &descriptor_set_layout_),
+                                "Failed to create descriptor set layout",
+                                "Succeeded in creating descriptor set layout"))
+        return false;
+
+    // allocate descriptor set
+
+    VkDescriptorSetAllocateInfo alloc_info{};
+    alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    alloc_info.descriptorPool = descriptor_pool_;
+    alloc_info.descriptorSetCount = 1;
+    alloc_info.pSetLayouts = &descriptor_set_layout_;
+
+    if (Logger::LogWithVkResult(vkAllocateDescriptorSets(vkb_device_.device, &alloc_info, &descriptor_set_),
+                                "Failed to allocate descriptor set",
+                                "Succeeded in allocating descriptor set"))
+        return false;
+
+    return true;
+}
+
+bool VulkanEngine::CreateResourceBuffers()
+{
+    struct Vertex
+    {
+        glm::vec2 pos;
+        glm::vec3 color;
+    };
+
+    // vra and vma members
+    vra_data_batcher_ = std::make_unique<vra::VraDataBatcher>(vkb_physical_device_.physical_device);
+
+    VmaAllocatorCreateInfo allocatorCreateInfo = {};
+    allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+    allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+    allocatorCreateInfo.physicalDevice = vkb_physical_device_.physical_device;
+    allocatorCreateInfo.device = vkb_device_.device;
+    allocatorCreateInfo.instance = vkb_instance_.instance;
+
+    vmaCreateAllocator(&allocatorCreateInfo, &vma_allocator_);
+
+    // raw data
+    const std::vector<Vertex> vertices =
+        {
+            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
+    const std::vector<uint16_t> indices =
+        {
+            0, 1, 2, 2, 3, 0};
+    vra::VraRawData vertex_raw_data{
+        vertices.data(),                 // pData_
+        vertices.size() * sizeof(Vertex) // size_
+    };
+    vra::VraRawData index_raw_data{
+        indices.data(),                   // pData_
+        indices.size() * sizeof(uint16_t) // size_
+    };
+
+    // TODO: change to dynamic
+    vra::ResourceId vertex_data_id = 0;
+    vra::ResourceId index_data_id = 1;
+    vra::ResourceId staging_vertex_data_id = 2;
+    vra::ResourceId staging_index_data_id = 3;
+
+    // vertex buffer create info
+    VkBufferCreateInfo vertex_buffer_create_info = {};
+    vertex_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    vertex_buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    vertex_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc vertex_data_desc{
+        vra::VraDataMemoryPattern::GPU_Only,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        vertex_buffer_create_info};
+
+    // index buffer create info
+    VkBufferCreateInfo index_buffer_create_info = {};
+    index_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    index_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc index_data_desc{
+        vra::VraDataMemoryPattern::GPU_Only,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        index_buffer_create_info};
+
+    // staging buffer create info
+    VkBufferCreateInfo staging_buffer_create_info = {};
+    staging_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    staging_buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    staging_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc staging_data_desc{
+        vra::VraDataMemoryPattern::CPU_GPU,
+        vra::VraDataUpdateRate::Frequent,
+        staging_buffer_create_info};
+
+    // collect and group
+    vra_data_batcher_->Collect(vertex_data_desc, vertex_raw_data, vertex_data_id);
+    vra_data_batcher_->Collect(index_data_desc, index_raw_data, index_data_id);
+    vra_data_batcher_->Collect(staging_data_desc, vertex_raw_data, staging_vertex_data_id);
+    vra_data_batcher_->Collect(staging_data_desc, index_raw_data, staging_index_data_id);
+    vra_data_batcher_->Group();
+
+    // generate vertex and index buffers and allocate memory
+    auto group_data = vra_data_batcher_->GetGroupData("static_local_group");
+    if (!group_data || group_data->offsets.size() == 0)
+    {
+        Logger::LogError("Failed to get group data(From vra)");
+        return false;
+    }
+    const auto &local_buffer_create_info = group_data->data_desc.GetBufferCreateInfo();
+
+    VmaAllocationCreateInfo alloc_info = {};
+    alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
+    alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags("static_local_group");
+    if (vmaCreateBuffer(vma_allocator_, &local_buffer_create_info, &alloc_info, &local_buffer_, &local_buffer_allocation_, &local_buffer_allocation_info_) != VK_SUCCESS)
+    {
+        Logger::LogError("Failed to create buffer(From vma)");
+        return false;
+    }
+
+    // generate staging buffer and copy data
+    auto staging_group_data = vra_data_batcher_->GetGroupData("dynamic_sequential_group");
+    if (!staging_group_data || staging_group_data->offsets.size() == 0)
+    {
+        Logger::LogError("Failed to get staging group data(From vra)");
+        return false;
+    }
+    const auto &host_buffer_create_info = staging_group_data->data_desc.GetBufferCreateInfo();
+
+    VmaAllocationCreateInfo staging_alloc_info = {};
+    staging_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
+    staging_alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags("dynamic_sequential_group");
+    if (vmaCreateBuffer(vma_allocator_, &host_buffer_create_info, &staging_alloc_info, &staging_buffer_, &staging_buffer_allocation_, &staging_buffer_allocation_info_) != VK_SUCCESS)
+    {
+        Logger::LogError("Failed to create staging buffer(From vma)");
+        return false;
+    }
+
+    // copy data to staging buffer
+    void *mapped_data = nullptr;
+    vmaMapMemory(vma_allocator_, staging_buffer_allocation_, &mapped_data);
+    memcpy(mapped_data, staging_group_data->consolidated_data.data(), staging_group_data->consolidated_data.size());
+    vmaUnmapMemory(vma_allocator_, staging_buffer_allocation_);
+
+    // vertex input binding description
+    vertex_input_binding_description_.binding = 0;
+    vertex_input_binding_description_.stride = sizeof(Vertex);
+    vertex_input_binding_description_.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    vertex_input_attribute_position_.location = 0;
+    vertex_input_attribute_position_.binding = 0;
+    vertex_input_attribute_position_.format = VK_FORMAT_R32G32_SFLOAT;
+    vertex_input_attribute_position_.offset = 0;
+
+    vertex_input_attribute_color_.location = 1;
+    vertex_input_attribute_color_.binding = 0;
+    vertex_input_attribute_color_.format = VK_FORMAT_R32G32B32_SFLOAT;
+    vertex_input_attribute_color_.offset = sizeof(glm::vec2);
+
+    return true;
 }
 
 bool VulkanEngine::AllocatePerFrameCommandBuffer()
@@ -539,8 +726,38 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
         return false;
 
     // collect needed objects
-    auto commandBuffer = vkCommandBufferHelper_->GetCommandBuffer(command_buffer_id);
+    auto command_buffer = vkCommandBufferHelper_->GetCommandBuffer(command_buffer_id);
     auto swapchain_config = &swapchain_config_;
+
+    // copy buffer from staging to local
+    VkBufferCopy buffer_copy_info{};
+    buffer_copy_info.srcOffset = 0;
+    buffer_copy_info.dstOffset = 0;
+    buffer_copy_info.size = staging_buffer_allocation_info_.size;
+    vkCmdCopyBuffer(command_buffer, staging_buffer_, local_buffer_, 1, &buffer_copy_info);
+
+    VkBufferMemoryBarrier2 buffer_memory_barrier{};
+    buffer_memory_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    buffer_memory_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    buffer_memory_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    buffer_memory_barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+    buffer_memory_barrier.dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+    buffer_memory_barrier.buffer = local_buffer_;
+    buffer_memory_barrier.offset = 0;
+    buffer_memory_barrier.size = VK_WHOLE_SIZE;
+    VkDependencyInfo dependency_info{};
+    dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependency_info.bufferMemoryBarrierCount = 1;
+    dependency_info.pBufferMemoryBarriers = &buffer_memory_barrier;
+    vkCmdPipelineBarrier2(command_buffer, &dependency_info);
+
+    // bind vertex and index buffers
+    auto vertex_offset = vra_data_batcher_->GetResourceOffset("static_local_group", 0);
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, &local_buffer_, &vertex_offset);
+    auto index_offset = vra_data_batcher_->GetResourceOffset("static_local_group", 1);
+    vkCmdBindIndexBuffer(command_buffer, local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
+
+    
 
     // begin renderpass
     VkClearValue clear_color = {};
@@ -558,10 +775,10 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     renderpass_info.clearValueCount = 1;
     renderpass_info.pClearValues = &clear_color;
 
-    vkCmdBeginRenderPass(commandBuffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRenderPass(command_buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
 
     // bind pipeline
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineHelper_->GetPipeline());
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineHelper_->GetPipeline());
 
     // dynamic state update
     VkViewport viewport{};
@@ -571,18 +788,19 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     viewport.height = static_cast<float>(swapchain_config->target_swap_extent_.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    vkCmdSetViewport(command_buffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = swapchain_config->target_swap_extent_;
-    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
     // draw
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0); // TODO: Handle vertex buffer and index buffer
+    // vkCmdDraw(command_buffer, 3, 1, 0, 0); // TODO: Handle vertex buffer and index buffer
+    vkCmdDrawIndexed(command_buffer, 3, 1, 0, 0, 0);
 
     // end renderpass
-    vkCmdEndRenderPass(commandBuffer);
+    vkCmdEndRenderPass(command_buffer);
 
     // end command recording
     if (!vkCommandBufferHelper_->EndCommandBufferRecording(command_buffer_id))
@@ -604,16 +822,14 @@ void VulkanEngine::TestVraFunctions()
     };
 
     // raw data
-    const std::vector<Vertex> vertices = 
-    {
-        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
-    };
+    const std::vector<Vertex> vertices =
+        {
+            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
     const std::vector<uint16_t> indices =
-    {
-         0, 1, 2, 2, 3, 0
-    };
+        {
+            0, 1, 2, 2, 3, 0};
     vra::VraRawData vertex_raw_data{
         vertices.data(),                 // pData_
         vertices.size() * sizeof(Vertex) // size_
@@ -634,24 +850,20 @@ void VulkanEngine::TestVraFunctions()
     vertex_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     vertex_buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     vertex_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vra::VraDataDesc vertex_data_desc
-    {
+    vra::VraDataDesc vertex_data_desc{
         vra::VraDataMemoryPattern::GPU_Only,
         vra::VraDataUpdateRate::RarelyOrNever,
-        vertex_buffer_create_info
-    };
+        vertex_buffer_create_info};
 
     // index buffer create info
     VkBufferCreateInfo index_buffer_create_info = {};
     index_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     index_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vra::VraDataDesc index_data_desc
-    {
+    vra::VraDataDesc index_data_desc{
         vra::VraDataMemoryPattern::GPU_Only,
         vra::VraDataUpdateRate::RarelyOrNever,
-        index_buffer_create_info
-    };
+        index_buffer_create_info};
 
     // staging buffer create info
     VkBufferCreateInfo staging_buffer_create_info = {};
@@ -664,71 +876,64 @@ void VulkanEngine::TestVraFunctions()
         staging_buffer_create_info};
 
     // collect and group
-    vra_data_collector_->Collect(vertex_data_desc, vertex_raw_data, vertex_data_id);
-    vra_data_collector_->Collect(index_data_desc, index_raw_data, index_data_id);
-    vra_data_collector_->Collect(staging_data_desc, vertex_raw_data, staging_vertex_data_id);
-    vra_data_collector_->Collect(staging_data_desc, index_raw_data, staging_index_data_id);
-    vra_data_collector_->Execute();
+    vra_data_batcher_->Collect(vertex_data_desc, vertex_raw_data, vertex_data_id);
+    vra_data_batcher_->Collect(index_data_desc, index_raw_data, index_data_id);
+    vra_data_batcher_->Collect(staging_data_desc, vertex_raw_data, staging_vertex_data_id);
+    vra_data_batcher_->Collect(staging_data_desc, index_raw_data, staging_index_data_id);
+    vra_data_batcher_->Group();
 
     // generate vertex and index buffers and allocate memory
-    auto group_data = vra_data_collector_->GetGroupData("static_local_group");
+    auto group_data = vra_data_batcher_->GetGroupData("static_local_group");
     if (!group_data || group_data->offsets.size() == 0)
         throw std::runtime_error("Failed to get group data");
+    const auto &local_buffer_create_info = group_data->data_desc.GetBufferCreateInfo();
 
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    alloc_info.flags = vra_data_collector_->GetSuggestVmaMemoryFlags("static_local_group");
-
-    VkBuffer buffer;
-    VmaAllocation allocation;
-    VmaAllocationInfo allocation_info;
-    if (vmaCreateBuffer(vma_allocator_, &group_data->data_desc.GetBufferCreateInfo(), &alloc_info, &buffer, &allocation, &allocation_info) != VK_SUCCESS)
+    alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags("static_local_group");
+    if (vmaCreateBuffer(vma_allocator_, &local_buffer_create_info, &alloc_info, &local_buffer_, &local_buffer_allocation_, &local_buffer_allocation_info_) != VK_SUCCESS)
         throw std::runtime_error("Failed to create buffer");
 
-
     // generate staging buffer and copy data
-    auto staging_group_data = vra_data_collector_->GetGroupData("dynamic_sequential_group");
+    auto staging_group_data = vra_data_batcher_->GetGroupData("dynamic_sequential_group");
     if (!staging_group_data || staging_group_data->offsets.size() == 0)
         throw std::runtime_error("Failed to get staging group data");
+    const auto &host_buffer_create_info = staging_group_data->data_desc.GetBufferCreateInfo();
 
     VmaAllocationCreateInfo staging_alloc_info = {};
     staging_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    staging_alloc_info.flags = vra_data_collector_->GetSuggestVmaMemoryFlags("dynamic_sequential_group");
-
-    VkBuffer staging_buffer;
-    VmaAllocation staging_allocation;
-    VmaAllocationInfo staging_allocation_info;
-    if (vmaCreateBuffer(vma_allocator_, &staging_group_data->data_desc.GetBufferCreateInfo(), &staging_alloc_info, &staging_buffer, &staging_allocation, &staging_allocation_info) != VK_SUCCESS)
+    staging_alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags("dynamic_sequential_group");
+    if (vmaCreateBuffer(vma_allocator_, &host_buffer_create_info, &staging_alloc_info, &staging_buffer_, &staging_buffer_allocation_, &staging_buffer_allocation_info_) != VK_SUCCESS)
         throw std::runtime_error("Failed to create staging buffer");
 
     // copy data to staging buffer
-    void* mapped_data = nullptr;
-    vmaMapMemory(vma_allocator_, staging_allocation, &mapped_data);
-    memcpy(mapped_data, group_data->consolidated_data.data(), group_data->consolidated_data.size());
-    vmaUnmapMemory(vma_allocator_, staging_allocation);
+    void *mapped_data = nullptr;
+    vmaMapMemory(vma_allocator_, staging_buffer_allocation_, &mapped_data);
+    memcpy(mapped_data, staging_group_data->consolidated_data.data(), staging_group_data->consolidated_data.size());
+    vmaUnmapMemory(vma_allocator_, staging_buffer_allocation_);
 
-    SVulkanCommandBufferAllocationConfig config;
-    config.command_buffer_count = 1;
-    config.command_buffer_level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vkCommandBufferHelper_->AllocateCommandBuffer(config, "copy_command_buffer");
+    // SVulkanCommandBufferAllocationConfig config;
+    // config.command_buffer_count = 1;
+    // config.command_buffer_level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    // vkCommandBufferHelper_->AllocateCommandBuffer(config, "copy_command_buffer");
 
-    VkCommandBuffer command_buffer = vkCommandBufferHelper_->GetCommandBuffer("copy_command_buffer");
-    VkCommandBufferBeginInfo begin_info{};
-    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(command_buffer, &begin_info);
+    // VkCommandBuffer command_buffer = vkCommandBufferHelper_->GetCommandBuffer("copy_command_buffer");
+    // VkCommandBufferBeginInfo begin_info{};
+    // begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    // begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    // vkBeginCommandBuffer(command_buffer, &begin_info);
 
-    VkBufferCopy buffer_copy_info{};
-    buffer_copy_info.srcOffset = 0;
-    buffer_copy_info.dstOffset = 0;
-    buffer_copy_info.size = staging_group_data->data_desc.GetBufferCreateInfo().size;
-    vkCmdCopyBuffer(command_buffer, staging_buffer, buffer, 1, &buffer_copy_info);
-    vkEndCommandBuffer(command_buffer);
+    // VkBufferCopy buffer_copy_info{};
+    // buffer_copy_info.srcOffset = 0;
+    // buffer_copy_info.dstOffset = 0;
+    // buffer_copy_info.size = host_buffer_create_info.size;
+    // vkCmdCopyBuffer(command_buffer, staging_buffer, buffer, 1, &buffer_copy_info);
+    // vkEndCommandBuffer(command_buffer);
 
-    VkSubmitInfo submit_info{};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &command_buffer;
-    vkQueueSubmit(vkb_device_.get_queue(vkb::QueueType::graphics).value(), 1, &submit_info, VK_NULL_HANDLE);
-    vkQueueWaitIdle(vkb_device_.get_queue(vkb::QueueType::graphics).value());
+    // VkSubmitInfo submit_info{};
+    // submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    // submit_info.commandBufferCount = 1;
+    // submit_info.pCommandBuffers = &command_buffer;
+    // vkQueueSubmit(vkb_device_.get_queue(vkb::QueueType::graphics).value(), 1, &submit_info, VK_NULL_HANDLE);
+    // vkQueueWaitIdle(vkb_device_.get_queue(vkb::QueueType::graphics).value());
 }

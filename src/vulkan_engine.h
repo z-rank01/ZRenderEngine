@@ -118,7 +118,21 @@ private:
 
     // vra and vma members
     VmaAllocator vma_allocator_;
-    std::unique_ptr<vra::VraDataCollector> vra_data_collector_;
+    VmaAllocation local_buffer_allocation_;
+    VmaAllocation staging_buffer_allocation_;
+    VmaAllocationInfo local_buffer_allocation_info_;
+    VmaAllocationInfo staging_buffer_allocation_info_;
+    std::unique_ptr<vra::VraDataBatcher> vra_data_batcher_;
+
+    // vulkan native members
+    VkBuffer local_buffer_;
+    VkBuffer staging_buffer_;
+    VkDescriptorPool descriptor_pool_;
+    VkDescriptorSetLayout descriptor_set_layout_;
+    VkDescriptorSet descriptor_set_;
+    VkVertexInputBindingDescription vertex_input_binding_description_;
+    VkVertexInputAttributeDescription vertex_input_attribute_position_;
+    VkVertexInputAttributeDescription vertex_input_attribute_color_;
 
     // vulkan helper members
     std::unique_ptr<VulkanSDLWindowHelper> vkWindowHelper_;
@@ -142,6 +156,8 @@ private:
     bool CreatePipeline();
     bool CreateFrameBuffer();
     bool CreateCommandPool();
+    bool CreateDescriptorRelatives();
+    bool CreateResourceBuffers();
     bool AllocatePerFrameCommandBuffer();
     bool CreateSynchronizationObjects();
     // ------------------------------------

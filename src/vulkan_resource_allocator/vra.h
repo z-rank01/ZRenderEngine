@@ -158,16 +158,16 @@ namespace vra
     };
 #pragma endregion
 
-    class VraDataCollector
+    class VraDataBatcher
     {
     public:
-        VraDataCollector() = delete;
-        VraDataCollector(VkPhysicalDevice physical_device) : physical_device_handle_(physical_device) 
+        VraDataBatcher() = delete;
+        VraDataBatcher(VkPhysicalDevice physical_device) : physical_device_handle_(physical_device) 
         {
             vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties_);
             RegisterDefaultGroups();
         }
-        ~VraDataCollector();
+        ~VraDataBatcher();
 
         // --- Data Process ---
 
@@ -178,9 +178,9 @@ namespace vra
         bool Collect(VraDataDesc data_desc, VraRawData data, ResourceId& id);
 
         /// @brief processes all collected buffer data, grouping them by memory pattern
-        void Execute();
+        void Group();
 
-        /// @brief clear all collected data
+        /// @brief clear all collected data and grouped data
         void Clear();
 
         // --- Data Access ---
@@ -233,6 +233,11 @@ namespace vra
             }
             return names;
         }
+
+        size_t GetResourceOffset(std::string group_name, ResourceId id) const
+        {
+            return GetGroupData(group_name)->offsets.at(id);
+        }
         
         /// @brief get suggest memory flags for vulkan
         /// @param id resource id
@@ -246,17 +251,21 @@ namespace vra
 
     private :
         // --- Vulkan Native Objects Cache ---
+        
         VkPhysicalDevice physical_device_handle_;
         VkPhysicalDeviceProperties physical_device_properties_;
 
         // --- Buffer specific storage ---
-        std::unordered_map<ResourceId, VraDataDesc> buffer_desc_map_;
-        std::unordered_map<ResourceId, VraRawData> buffer_data_map_;
+        
+        std::unordered_map<ResourceId, VraDataDesc> buffer_desc_map_;   // TODO: Optimize to use vector
+        std::unordered_map<ResourceId, VraRawData> buffer_data_map_;    // TODO: Optimize to use vector
 
         // --- Limits ---
+        
         static constexpr size_t MAX_BUFFER_COUNT = 4096;
 
         // --- Registered Group Strategies ---
+
         std::vector<VraDataGroup> registered_groups_;
         std::map<std::string, size_t> group_name_to_index_map_;
 

@@ -14,6 +14,8 @@ struct SVulkanPipelineConfig
     const SVulkanSwapChainConfig* swap_chain_config;
     std::map<EShaderType, VkShaderModule> shader_module_map;
     VkRenderPass renderpass;
+    VkVertexInputBindingDescription vertex_input_binding_description;
+    std::vector<VkVertexInputAttributeDescription> vertex_input_attribute_descriptions;
 };
 
 class VulkanPipelineHelper
