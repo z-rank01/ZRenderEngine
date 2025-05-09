@@ -14,9 +14,22 @@
 #include <string>     // Required for std::string
 #include <map>        // Required for std::map
 #include <iostream>
+
 namespace vra
 {
+    // - Resource ID is used to identify the resource
+    // - actual type: uint64_t
     using ResourceId = uint64_t;
+
+    // - Batch ID is used to identify the batch
+    // - actual type: char*
+    using BatchId = std::string;
+    class VraBuiltInBatchIds
+    {
+    public:
+        static constexpr BatchId GPU_Only = "GPU_Only";
+        static constexpr BatchId CPU_GPU = "CPU_GPU";
+    };
 
     // --- Forward Declarations ---
     class VraDataDesc;
@@ -52,7 +65,7 @@ namespace vra
         // Default
         Default,
 
-        // - Update frequently, e.g. UBO update; 
+        // - Update frequently, e.g. UBO update;
         // - Always has Host-Coherent
         Frequent,
 
@@ -91,36 +104,6 @@ namespace vra
         const VkBufferCreateInfo& GetBufferCreateInfo() const { return buffer_create_info_; }
         VkBufferCreateInfo& GetBufferCreateInfo() { return buffer_create_info_; }
 
-        // --- presets ---
-        static VraDataDesc StaticVertex()
-        {
-            VraDataDesc data_desc;
-            data_desc.data_pattern_ = VraDataMemoryPattern::GPU_Only;
-            data_desc.buffer_create_info_.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-            return data_desc;
-        }
-        static VraDataDesc StaticIndex()
-        {
-            VraDataDesc data_desc;
-            data_desc.data_pattern_ = VraDataMemoryPattern::GPU_Only;
-            data_desc.buffer_create_info_.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-            return data_desc;
-        }
-        static VraDataDesc DynamicUniform()
-        {
-            VraDataDesc data_desc;
-            data_desc.data_pattern_ = VraDataMemoryPattern::CPU_GPU;
-            data_desc.buffer_create_info_.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-            return data_desc;
-        }
-        static VraDataDesc IndirectDrawCommands()
-        {
-            VraDataDesc data_desc;
-            data_desc.data_pattern_ = VraDataMemoryPattern::Stream_Ring;
-            data_desc.buffer_create_info_.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-            return data_desc;
-        }
-
     private:
         // --- main members ---
         VraDataMemoryPattern data_pattern_;
@@ -128,47 +111,49 @@ namespace vra
         VkBufferCreateInfo buffer_create_info_;
     };
 
-#pragma region Group Data Defnition
-    // --- Grouped Buffer Data Structure (public for VraDataGroup) ---
-    struct VraGroupedDataHandle
-    {
-        bool initialized = false;
-        std::vector<uint8_t> consolidated_data;
-        std::unordered_map<ResourceId, size_t> offsets;
-        VraDataDesc data_desc;
-
-        void Clear()
-        {
-            initialized = false;
-            consolidated_data.clear();
-            offsets.clear();
-            data_desc = VraDataDesc{};
-        }
-    };
-
-    // --- Buffer Grouping Strategy Definition ---
-    struct VraDataGroup {
-        std::string name;
-        std::function<bool(const VraDataDesc&)> predicate;
-        std::function<void(ResourceId id, 
-                           VraGroupedDataHandle& group, 
-                           const VraDataDesc& data_desc, 
-                           const VraRawData& data)> group_method;
-        VraGroupedDataHandle grouped_data_handle; // Each strategy instance owns its data
-    };
-#pragma endregion
-
     class VraDataBatcher
     {
+        /// @brief VraBatchHandle is a struct that contains a vector of uint8_t, an unordered_map of ResourceId and size_t, and a VraDataDesc.
+        /// @brief VraBatchHandle is used to store batch information like consolidated data, offsets, and data description.
+        struct VraBatchHandle
+        {
+            bool initialized = false;
+            std::vector<uint8_t> consolidated_data;
+            std::unordered_map<ResourceId, size_t> offsets;
+            VraDataDesc data_desc;
+
+            void Clear()
+            {
+                initialized = false;
+                consolidated_data.clear();
+                offsets.clear();
+                data_desc = VraDataDesc{};
+            }
+        };
+
+        /// @brief VraBatcher is a struct that contains a batch id, a predicate, and a batch method.
+        /// @brief VraBatcher is used to batch buffer data by memory pattern and update rate according to the predicate with the batch method
+        struct VraBatcher
+        {
+            const BatchId batch_id;
+            std::function<bool(const VraDataDesc &)> predicate;
+            std::function<void(ResourceId id,
+                               VraBatchHandle &batch,
+                               const VraDataDesc &data_desc,
+                               const VraRawData &data)>
+                batch_method;
+            VraBatchHandle batch_handle; // Each strategy instance owns its data
+        };
+
     public:
         VraDataBatcher() = delete;
         VraDataBatcher(VkPhysicalDevice physical_device) : physical_device_handle_(physical_device) 
         {
             vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties_);
-            RegisterDefaultGroups();
+            RegisterDefaultBatcher();
         }
         ~VraDataBatcher();
-
+        
         // --- Data Process ---
 
         /// @brief Collects buffer data description and raw data pointer.
@@ -178,76 +163,76 @@ namespace vra
         bool Collect(VraDataDesc data_desc, VraRawData data, ResourceId& id);
 
         /// @brief processes all collected buffer data, grouping them by memory pattern
-        void Group();
+        void Batch();
 
         /// @brief clear all collected data and grouped data
         void Clear();
 
         // --- Data Access ---
 
-        /// @brief register buffer group strategy
-        /// @param name register name
+        /// @brief register buffer batch strategy
+        /// @param batch_id register batch id
         /// @param predicate predicate before grouping
-        /// @param group_method action when grouping
-        void RegisterDataGroup(
-            std::string name,
+        /// @param batch_method action when grouping
+        void RegisterBatcher(
+            const BatchId batch_id,
             std::function<bool(const VraDataDesc &)> predicate,
-            std::function<void(ResourceId id, VraGroupedDataHandle &group, const VraDataDesc &data_desc, const VraRawData &data)> group_method);
+            std::function<void(ResourceId id, VraBatchHandle &batch, const VraDataDesc &data_desc, const VraRawData &data)> batch_method);
 
-        /// @brief get group index
-        /// @param name group name
-        /// @return group index
-        size_t GetGroupIndex(const std::string &name) const
+        /// @brief get batch index
+        /// @param batch_id batch id
+        /// @return batch index
+        size_t GetBatchIndex(const BatchId& batch_id) const
         {
-            auto it = group_name_to_index_map_.find(name);
-            if (it != group_name_to_index_map_.end())
+            auto it = batch_id_to_index_map_.find(batch_id);
+            if (it != batch_id_to_index_map_.end())
             {
                 return it->second;
             }
             return std::numeric_limits<size_t>::max();
         }
 
-        /// @brief get group data
-        /// @param name group name
-        /// @return group data
-        const VraGroupedDataHandle* GetGroupData(const std::string& name) const
+        /// @brief get batch data
+        /// @param batch_id batch id
+        /// @return batch data
+        const VraBatchHandle* GetBatch(const BatchId& batch_id) const
         {
-            auto it = group_name_to_index_map_.find(name);
-            if (it != group_name_to_index_map_.end())
+            auto it = batch_id_to_index_map_.find(batch_id);
+            if (it != batch_id_to_index_map_.end())
             {
-                if (it->second < registered_groups_.size())
+                if (it->second < registered_batchers_.size())
                 { // Boundary check
-                    return &registered_groups_[it->second].grouped_data_handle;
+                    return &registered_batchers_[it->second].batch_handle;
                 }
             }
             return nullptr;
         }
         
-        /// @brief get all group names
-        /// @return all group names
-        std::vector<std::string> GetAllGroupNames() const 
+        /// @brief get all batch ids
+        /// @return all batch ids
+        std::vector<BatchId> GetAllBatchIDs() const 
         { 
-            std::vector<std::string> names;
-            for (const auto& group : registered_groups_) {
-                names.push_back(group.name);
+            std::vector<BatchId> ids;
+            for (const auto& batch : registered_batchers_) {
+                ids.push_back(batch.batch_id);
             }
-            return names;
+            return ids;
         }
 
-        size_t GetResourceOffset(std::string group_name, ResourceId id) const
+        size_t GetResourceOffset(BatchId batch_id, ResourceId id) const
         {
-            return GetGroupData(group_name)->offsets.at(id);
+            return GetBatch(batch_id)->offsets.at(id);
         }
         
         /// @brief get suggest memory flags for vulkan
-        /// @param id resource id
+        /// @param batch_id batch id
         /// @return suggest memory flags
-        VkMemoryPropertyFlags GetSuggestMemoryFlags(std::string group_name);
+        VkMemoryPropertyFlags GetSuggestMemoryFlags(BatchId batch_id);
 
         /// @brief get suggest vma memory flags for vulkan
-        /// @param id resource id
+        /// @param batch_id batch id
         /// @return suggest vma memory flags
-        VmaAllocationCreateFlags GetSuggestVmaMemoryFlags(std::string group_name);
+        VmaAllocationCreateFlags GetSuggestVmaMemoryFlags(BatchId batch_id);
 
     private :
         // --- Vulkan Native Objects Cache ---
@@ -266,139 +251,14 @@ namespace vra
 
         // --- Registered Group Strategies ---
 
-        std::vector<VraDataGroup> registered_groups_;
-        std::map<std::string, size_t> group_name_to_index_map_;
+        std::vector<VraBatcher> registered_batchers_;
+        std::map<BatchId, size_t> batch_id_to_index_map_;
 
         /// @brief clear grouped buffer data
-        void ClearGroupedBufferData();
+        void ClearBatch();
 
         /// @brief register default grouping strategies
-        void RegisterDefaultGroups();
-    };
-
-    class ManagedVmaBuffer
-    {
-    private:
-        // vulkan native
-        VkBuffer buffer_ = VK_NULL_HANDLE;
-        VkBufferUsageFlags usage_ = 0;
-
-        // vma allocations
-        VmaAllocation allocation_ = VK_NULL_HANDLE;
-        VmaAllocator allocator_ = VK_NULL_HANDLE; // neccessary for destruction
-        VmaAllocationInfo allocationInfo_{};      // store allocation info (size, mapped pointer, etc.)
-    
-    public:
-        // constructor
-        ManagedVmaBuffer() = default;
-        ManagedVmaBuffer(VkBuffer buf, VkBufferUsageFlags usage, VmaAllocation alloc, VmaAllocator allocatr, const VmaAllocationInfo &info)
-            : buffer_(buf), usage_(usage), allocation_(alloc), allocator_(allocatr), allocationInfo_(info)
-        {
-            assert(allocator_ != VK_NULL_HANDLE && "Allocator must be valid for destruction!");
-        }
-        // default destructor - cleanup work is done by shared_ptr's deleter
-        ~ManagedVmaBuffer() = default;
-
-        // --- Copy and Move ---
-        ManagedVmaBuffer(const ManagedVmaBuffer &) = delete;
-        ManagedVmaBuffer &operator=(const ManagedVmaBuffer &) = delete;
-        ManagedVmaBuffer(ManagedVmaBuffer &&other) noexcept
-            : buffer_(std::exchange(other.buffer_, VK_NULL_HANDLE)),
-              usage_(std::exchange(other.usage_, 0)),
-              allocation_(std::exchange(other.allocation_, VK_NULL_HANDLE)),
-              allocator_(std::exchange(other.allocator_, VK_NULL_HANDLE)),
-              allocationInfo_(other.allocationInfo_)
-        {
-        }
-        ManagedVmaBuffer &operator=(ManagedVmaBuffer &&other) noexcept
-        {
-            if (this != &other)
-            {
-                if (buffer_ != VK_NULL_HANDLE && allocator_ != VK_NULL_HANDLE)
-                {
-                    vmaDestroyBuffer(allocator_, buffer_, allocation_);
-                }
-
-                buffer_ = std::exchange(other.buffer_, VK_NULL_HANDLE);
-                usage_ = std::exchange(other.usage_, 0);
-                allocation_ = std::exchange(other.allocation_, VK_NULL_HANDLE);
-                allocator_ = std::exchange(other.allocator_, VK_NULL_HANDLE);
-                allocationInfo_ = other.allocationInfo_;
-            }
-            return *this;
-        }
-
-        // --- Helper methods (example) ---
-        VkBuffer Get() const { return buffer_; }
-        VkDeviceSize GetSize() const { return allocationInfo_.size; }
-        VkBufferUsageFlags GetUsage() const { return usage_; }
-    };
-
-    class ManagedVmaImage
-    {
-    private:
-        // vulkan native
-        VkImage image_ = VK_NULL_HANDLE;
-        VkImageView imageView_ = VK_NULL_HANDLE;
-        VkFormat format_ = VK_FORMAT_UNDEFINED;
-        VkExtent3D extent_ = {};
-        VkDevice device_ = VK_NULL_HANDLE; // handle for destruction
-
-        // vma allocations
-        VmaAllocation allocation_ = VK_NULL_HANDLE;
-        VmaAllocator allocator_ = VK_NULL_HANDLE;
-        VmaAllocationInfo allocationInfo_{};
-
-    public:
-        // constructor
-        ManagedVmaImage() = default;
-        ManagedVmaImage(VkImage img, VkImageView view, VkFormat fmt, VkExtent3D ext, VmaAllocation alloc, VmaAllocator allocatr, VkDevice dev, const VmaAllocationInfo &info)
-            : image_(img), imageView_(view), format_(fmt), extent_(ext), allocation_(alloc), allocator_(allocatr), device_(dev), allocationInfo_(info)
-        {
-            assert(allocator_ != VK_NULL_HANDLE && "Allocator must be valid for destruction!");
-            assert(device_ != VK_NULL_HANDLE && "Device must be valid for ImageView destruction!");
-        }
-
-        // default destructor - cleanup work is done by shared_ptr's deleter
-        ~ManagedVmaImage() = default;
-
-        // --- Copy and Move ---
-        ManagedVmaImage(const ManagedVmaImage &) = delete;
-        ManagedVmaImage &operator=(const ManagedVmaImage &) = delete;
-        ManagedVmaImage(ManagedVmaImage &&other) noexcept
-            : image_(std::exchange(other.image_, VK_NULL_HANDLE)),
-              imageView_(std::exchange(other.imageView_, VK_NULL_HANDLE)),
-              format_(std::exchange(other.format_, VK_FORMAT_UNDEFINED)),
-              extent_(std::exchange(other.extent_, {})),
-              allocation_(std::exchange(other.allocation_, VK_NULL_HANDLE)),
-              allocator_(std::exchange(other.allocator_, VK_NULL_HANDLE)),
-              device_(std::exchange(other.device_, VK_NULL_HANDLE)),
-              allocationInfo_(other.allocationInfo_)
-        {
-        }
-
-        ManagedVmaImage &operator=(ManagedVmaImage &&other) noexcept
-        {
-            if (this != &other)
-            {
-                image_ = std::exchange(other.image_, VK_NULL_HANDLE);
-                imageView_ = std::exchange(other.imageView_, VK_NULL_HANDLE);
-                format_ = std::exchange(other.format_, VK_FORMAT_UNDEFINED);
-                extent_ = std::exchange(other.extent_, {});
-                allocation_ = std::exchange(other.allocation_, VK_NULL_HANDLE);
-                allocator_ = std::exchange(other.allocator_, VK_NULL_HANDLE);
-                device_ = std::exchange(other.device_, VK_NULL_HANDLE);
-                allocationInfo_ = other.allocationInfo_;
-            }
-            return *this;
-        }
-
-        // --- Helper methods (example) ---
-        VkImage GetImage() const { return image_; }
-        VkImageView GetView() const { return imageView_; }
-        VkFormat GetFormat() const { return format_; }
-        VkExtent3D GetExtent() const { return extent_; }
-        VkDeviceSize GetSize() const { return allocationInfo_.size; }
+        void RegisterDefaultBatcher();
     };
 
     class VraDescriptorAllocator

@@ -487,10 +487,10 @@ bool VulkanEngine::CreateResourceBuffers()
     vra_data_batcher_->Collect(index_data_desc, index_raw_data, index_data_id);
     vra_data_batcher_->Collect(staging_data_desc, vertex_raw_data, staging_vertex_data_id);
     vra_data_batcher_->Collect(staging_data_desc, index_raw_data, staging_index_data_id);
-    vra_data_batcher_->Group();
+    vra_data_batcher_->Batch();
 
     // generate vertex and index buffers and allocate memory
-    auto group_data = vra_data_batcher_->GetGroupData("static_local_group");
+    auto group_data = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::GPU_Only);
     if (!group_data || group_data->offsets.size() == 0)
     {
         Logger::LogError("Failed to get group data(From vra)");
@@ -500,7 +500,7 @@ bool VulkanEngine::CreateResourceBuffers()
 
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags("static_local_group");
+    alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::GPU_Only);
     if (vmaCreateBuffer(vma_allocator_, &local_buffer_create_info, &alloc_info, &local_buffer_, &local_buffer_allocation_, &local_buffer_allocation_info_) != VK_SUCCESS)
     {
         Logger::LogError("Failed to create buffer(From vma)");
@@ -508,7 +508,7 @@ bool VulkanEngine::CreateResourceBuffers()
     }
 
     // generate staging buffer and copy data
-    auto staging_group_data = vra_data_batcher_->GetGroupData("dynamic_sequential_group");
+    auto staging_group_data = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::CPU_GPU);
     if (!staging_group_data || staging_group_data->offsets.size() == 0)
     {
         Logger::LogError("Failed to get staging group data(From vra)");
@@ -518,7 +518,7 @@ bool VulkanEngine::CreateResourceBuffers()
 
     VmaAllocationCreateInfo staging_alloc_info = {};
     staging_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    staging_alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags("dynamic_sequential_group");
+    staging_alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::CPU_GPU);
     if (vmaCreateBuffer(vma_allocator_, &host_buffer_create_info, &staging_alloc_info, &staging_buffer_, &staging_buffer_allocation_, &staging_buffer_allocation_info_) != VK_SUCCESS)
     {
         Logger::LogError("Failed to create staging buffer(From vma)");
@@ -752,9 +752,9 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdPipelineBarrier2(command_buffer, &dependency_info);
 
     // bind vertex and index buffers
-    auto vertex_offset = vra_data_batcher_->GetResourceOffset("static_local_group", 0);
+    auto vertex_offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::GPU_Only, 0);
     vkCmdBindVertexBuffers(command_buffer, 0, 1, &local_buffer_, &vertex_offset);
-    auto index_offset = vra_data_batcher_->GetResourceOffset("static_local_group", 1);
+    auto index_offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::GPU_Only, 1);
     vkCmdBindIndexBuffer(command_buffer, local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
 
     
@@ -880,29 +880,29 @@ void VulkanEngine::TestVraFunctions()
     vra_data_batcher_->Collect(index_data_desc, index_raw_data, index_data_id);
     vra_data_batcher_->Collect(staging_data_desc, vertex_raw_data, staging_vertex_data_id);
     vra_data_batcher_->Collect(staging_data_desc, index_raw_data, staging_index_data_id);
-    vra_data_batcher_->Group();
+    vra_data_batcher_->Batch();
 
     // generate vertex and index buffers and allocate memory
-    auto group_data = vra_data_batcher_->GetGroupData("static_local_group");
+    auto group_data = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::GPU_Only);
     if (!group_data || group_data->offsets.size() == 0)
         throw std::runtime_error("Failed to get group data");
     const auto &local_buffer_create_info = group_data->data_desc.GetBufferCreateInfo();
 
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags("static_local_group");
+    alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::GPU_Only);
     if (vmaCreateBuffer(vma_allocator_, &local_buffer_create_info, &alloc_info, &local_buffer_, &local_buffer_allocation_, &local_buffer_allocation_info_) != VK_SUCCESS)
         throw std::runtime_error("Failed to create buffer");
 
     // generate staging buffer and copy data
-    auto staging_group_data = vra_data_batcher_->GetGroupData("dynamic_sequential_group");
+    auto staging_group_data = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::CPU_GPU);
     if (!staging_group_data || staging_group_data->offsets.size() == 0)
         throw std::runtime_error("Failed to get staging group data");
     const auto &host_buffer_create_info = staging_group_data->data_desc.GetBufferCreateInfo();
 
     VmaAllocationCreateInfo staging_alloc_info = {};
     staging_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    staging_alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags("dynamic_sequential_group");
+    staging_alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::CPU_GPU);
     if (vmaCreateBuffer(vma_allocator_, &host_buffer_create_info, &staging_alloc_info, &staging_buffer_, &staging_buffer_allocation_, &staging_buffer_allocation_info_) != VK_SUCCESS)
         throw std::runtime_error("Failed to create staging buffer");
 
