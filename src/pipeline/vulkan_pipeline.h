@@ -16,6 +16,7 @@ struct SVulkanPipelineConfig
     VkRenderPass renderpass;
     VkVertexInputBindingDescription vertex_input_binding_description;
     std::vector<VkVertexInputAttributeDescription> vertex_input_attribute_descriptions;
+    std::vector<VkDescriptorSetLayout> descriptor_set_layouts;
 };
 
 class VulkanPipelineHelper

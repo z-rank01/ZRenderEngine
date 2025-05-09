@@ -106,8 +106,8 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
     // pipeline layout
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0; // Optional
-    pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
+    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(config_.descriptor_set_layouts.size());
+    pipelineLayoutInfo.pSetLayouts = config_.descriptor_set_layouts.data();
     pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
     pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 

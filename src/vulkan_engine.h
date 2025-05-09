@@ -66,26 +66,12 @@ struct SOutputFrame
     std::string fence_id;
 };
 
-// struct SVulkanSwapChainConfig
-// {
-//     VkSurfaceFormatKHR target_surface_format_;
-//     VkPresentModeKHR target_present_mode_;
-//     VkExtent2D target_swap_extent_;
-//     uint32_t target_image_count_;
-//     std::vector<const char*> device_extensions_;
-
-//     // Default constructor
-//     SVulkanSwapChainConfig() 
-//     {
-//         target_surface_format_.format = VK_FORMAT_B8G8R8A8_UNORM;
-//         target_surface_format_.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-//         target_present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
-//         target_swap_extent_.width = 800;
-//         target_swap_extent_.height = 600;
-//         target_image_count_ = 2; // Double buffering
-//         device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-//     }
-// };
+struct SMvpMatrix
+{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 projection;
+};
 
 class VulkanEngine
 {
@@ -120,13 +106,24 @@ private:
     VmaAllocator vma_allocator_;
     VmaAllocation local_buffer_allocation_;
     VmaAllocation staging_buffer_allocation_;
+    std::vector<VmaAllocation> uniform_buffer_allocation_;
     VmaAllocationInfo local_buffer_allocation_info_;
     VmaAllocationInfo staging_buffer_allocation_info_;
+    std::vector<VmaAllocationInfo> uniform_buffer_allocation_info_;
     std::unique_ptr<vra::VraDataBatcher> vra_data_batcher_;
+
+    // TODO: change to dynamic
+    vra::ResourceId vertex_data_id_ = 0;
+    vra::ResourceId index_data_id_ = 1;
+    vra::ResourceId staging_vertex_data_id_ = 2;
+    vra::ResourceId staging_index_data_id_ = 3;
+    vra::ResourceId uniform_buffer_id_ = 4;
+
 
     // vulkan native members
     VkBuffer local_buffer_;
     VkBuffer staging_buffer_;
+    std::vector<VkBuffer> uniform_buffer_;
     VkDescriptorPool descriptor_pool_;
     VkDescriptorSetLayout descriptor_set_layout_;
     VkDescriptorSet descriptor_set_;
@@ -142,6 +139,9 @@ private:
     std::unique_ptr<VulkanCommandBufferHelper> vkCommandBufferHelper_;
     std::unique_ptr<VulkanFrameBufferHelper> vkFrameBufferHelper_;
     std::unique_ptr<VulkanSynchronizationHelper> vkSynchronizationHelper_;
+    // uniform data
+    std::vector<SMvpMatrix> mvp_matrices_;
+    std::vector<void *> uniform_buffer_mapped_data_;
     
     void InitializeSDL();
     void InitializeVulkan();
@@ -157,7 +157,8 @@ private:
     bool CreateFrameBuffer();
     bool CreateCommandPool();
     bool CreateDescriptorRelatives();
-    bool CreateResourceBuffers();
+    bool CreateVertexInputBuffers();
+    bool CreateUniformBuffers();
     bool AllocatePerFrameCommandBuffer();
     bool CreateSynchronizationObjects();
     // ------------------------------------

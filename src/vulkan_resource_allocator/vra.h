@@ -27,8 +27,11 @@ namespace vra
     class VraBuiltInBatchIds
     {
     public:
-        static constexpr BatchId GPU_Only = "GPU_Only";
-        static constexpr BatchId CPU_GPU = "CPU_GPU";
+        static const BatchId GPU_Only;
+        static const BatchId CPU_GPU_Rarely;
+        static const BatchId CPU_GPU_Frequently;
+        static const BatchId GPU_CPU_Rarely;
+        static const BatchId GPU_CPU_Frequently;
     };
 
     // --- Forward Declarations ---

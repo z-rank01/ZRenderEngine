@@ -5,6 +5,12 @@
 
 namespace vra
 {
+    static const BatchId GPU_Only = "GPU_Only";
+    static const BatchId CPU_GPU_Rarely = "CPU_GPU_Rarely";
+    static const BatchId CPU_GPU_Frequently = "CPU_GPU_Frequently";
+    static const BatchId GPU_CPU_Rarely = "GPU_CPU_Rarely";
+    static const BatchId GPU_CPU_Frequently = "GPU_CPU_Frequently";
+
     // -------------------------------------
     // --- Data Collector Implementation ---
     // -------------------------------------
@@ -15,12 +21,11 @@ namespace vra
     }
 
     void VraDataBatcher::RegisterBatcher(
-        const BatchId group_id,
+        const BatchId batch_id,
         std::function<bool(const VraDataDesc &)> predicate,
-        std::function<void(ResourceId, VraBatchHandle &, const VraDataDesc &, const VraRawData &)> group_action)
+        std::function<void(ResourceId, VraBatchHandle &, const VraDataDesc &, const VraRawData &)> batch_action)
     {
-        // Check if group with this name already exists to prevent duplicates
-        if (batch_id_to_index_map_.count(group_id))
+        if (batch_id_to_index_map_.count(batch_id))
         {
             // Optionally throw an error or log a warning
             // For now, let's overwrite or ignore if names clash, but unique names are better.
@@ -28,104 +33,103 @@ namespace vra
             // A more robust system might throw or return a bool.
             return;
         }
-        registered_batchers_.push_back(VraBatcher{std::move(group_id), std::move(predicate), std::move(group_action)});
+        registered_batchers_.push_back(VraBatcher{std::move(batch_id), std::move(predicate), std::move(batch_action)});
         batch_id_to_index_map_[registered_batchers_.back().batch_id] = registered_batchers_.size() - 1;
     }
 
     void VraDataBatcher::RegisterDefaultBatcher()
     {
-        // Static Local Group
         RegisterBatcher(
             vra::VraBuiltInBatchIds::GPU_Only,
             [](const VraDataDesc &desc)
             {
-                return desc.GetMemoryPattern() == VraDataMemoryPattern::GPU_Only;
+                return desc.GetMemoryPattern() == VraDataMemoryPattern::GPU_Only && desc.GetUpdateRate() == VraDataUpdateRate::RarelyOrNever;
             },
-            [](ResourceId id, VraBatchHandle &group, const VraDataDesc &desc, const VraRawData &raw_data)
+            [](ResourceId id, VraBatchHandle &batch, const VraDataDesc &desc, const VraRawData &raw_data)
             {
                 const auto &current_item_buffer_create_info = desc.GetBufferCreateInfo();
 
-                if (!group.initialized)
+                if (!batch.initialized)
                 {
-                    group.data_desc = desc; // Initialize the group's entire VraDataDesc
-                    group.initialized = true;
+                    batch.data_desc = desc; // Initialize the batch's entire VraDataDesc
+                    batch.initialized = true;
                 }
                 else
                 {
-                    auto &group_ci_ref = group.data_desc.GetBufferCreateInfo();
+                    auto &batch_ci_ref = batch.data_desc.GetBufferCreateInfo();
                     if (current_item_buffer_create_info.usage == 0 ||
-                        current_item_buffer_create_info.sharingMode != group_ci_ref.sharingMode)
+                        current_item_buffer_create_info.sharingMode != batch_ci_ref.sharingMode)
                     {
                         return; // Incompatible
                     }
 
-                    group_ci_ref.usage |= current_item_buffer_create_info.usage;
-                    group_ci_ref.flags |= current_item_buffer_create_info.flags;
-                    if (current_item_buffer_create_info.queueFamilyIndexCount > group_ci_ref.queueFamilyIndexCount &&
+                    batch_ci_ref.usage |= current_item_buffer_create_info.usage;
+                    batch_ci_ref.flags |= current_item_buffer_create_info.flags;
+                    if (current_item_buffer_create_info.queueFamilyIndexCount > batch_ci_ref.queueFamilyIndexCount &&
                         current_item_buffer_create_info.sharingMode == VK_SHARING_MODE_CONCURRENT)
                     {
-                        group_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
-                        group_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
+                        batch_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
+                        batch_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
                     }
                 }
 
                 if (raw_data.pData_ != nullptr && raw_data.size_ > 0)
                 {
-                    group.offsets[id] = group.consolidated_data.size();
+                    batch.offsets[id] = batch.consolidated_data.size();
                     const uint8_t *data_ptr = static_cast<const uint8_t *>(raw_data.pData_);
-                    group.consolidated_data.insert(group.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
+                    batch.consolidated_data.insert(batch.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
                 }
                 else
                 {
-                    group.offsets[id] = group.consolidated_data.size();
+                    batch.offsets[id] = batch.consolidated_data.size();
                 }
 
-                group.data_desc.GetBufferCreateInfo().size = group.consolidated_data.size();
+                batch.data_desc.GetBufferCreateInfo().size = batch.consolidated_data.size();
             });
 
-        // Dynamic Sequential Group
+        // Dynamic Sequential Batch
         RegisterBatcher(
-            "CPU_GPU",
+            vra::VraBuiltInBatchIds::CPU_GPU_Rarely,
             [](const VraDataDesc &desc)
             {
-                return desc.GetMemoryPattern() == VraDataMemoryPattern::CPU_GPU;
+                return desc.GetMemoryPattern() == VraDataMemoryPattern::CPU_GPU && desc.GetUpdateRate() == VraDataUpdateRate::RarelyOrNever;
             },
-            [&physical_device_properties = this->physical_device_properties_](ResourceId id, VraBatchHandle &group, const VraDataDesc &desc, const VraRawData &raw_data)
+            [&physical_device_properties = this->physical_device_properties_](ResourceId id, VraBatchHandle &batch, const VraDataDesc &desc, const VraRawData &raw_data)
             {
                 const auto &current_item_buffer_create_info = desc.GetBufferCreateInfo();
-                // Get a modifiable reference to the group's VkBufferCreateInfo
-                auto &group_ci_ref = group.data_desc.GetBufferCreateInfo();
+                // Get a modifiable reference to the batch's VkBufferCreateInfo
+                auto &batch_ci_ref = batch.data_desc.GetBufferCreateInfo();
 
-                if (!group.initialized)
+                if (!batch.initialized)
                 {
-                    group.data_desc = desc; // Initialize the group's entire VraDataDesc
-                    group.initialized = true;
-                    // group_ci_ref now refers to the CI within the newly set group.data_desc
+                    batch.data_desc = desc; // Initialize the batch's entire VraDataDesc
+                    batch.initialized = true;
+                    // batch_ci_ref now refers to the CI within the newly set batch.data_desc
                 }
                 else if (current_item_buffer_create_info.usage == 0 || 
-                         current_item_buffer_create_info.sharingMode != group_ci_ref.sharingMode)
+                         current_item_buffer_create_info.sharingMode != batch_ci_ref.sharingMode)
                 {
                     return; // Incompatible
                 }
                 else
                 {
-                    // Merge into group_ci_ref
-                    group_ci_ref.usage |= current_item_buffer_create_info.usage;
-                    group_ci_ref.flags |= current_item_buffer_create_info.flags;
-                    if (current_item_buffer_create_info.queueFamilyIndexCount > group_ci_ref.queueFamilyIndexCount &&
+                    // Merge into batch_ci_ref
+                    batch_ci_ref.usage |= current_item_buffer_create_info.usage;
+                    batch_ci_ref.flags |= current_item_buffer_create_info.flags;
+                    if (current_item_buffer_create_info.queueFamilyIndexCount > batch_ci_ref.queueFamilyIndexCount &&
                         current_item_buffer_create_info.sharingMode == VK_SHARING_MODE_CONCURRENT)
                     {
-                        group_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
-                        group_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
+                        batch_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
+                        batch_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
                     }
                 }
 
                 // Combine data with alignment
-                size_t base_offset_for_item = group.consolidated_data.size();
+                size_t base_offset_for_item = batch.consolidated_data.size();
                 size_t aligned_offset_for_item = base_offset_for_item;
 
-                // Apply alignment if the group's buffer usage suggests it (e.g., UBO, SSBO)
-                if ((group_ci_ref.usage & (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) != 0)
+                // Apply alignment if the batch's buffer usage suggests it (e.g., UBO, SSBO)
+                if ((batch_ci_ref.usage & (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) != 0)
                 {
                     size_t alignment_requirement = physical_device_properties.limits.minUniformBufferOffsetAlignment; 
                     // TODO: Consider other alignment requirements if necessary, e.g., minStorageBufferOffsetAlignment
@@ -138,18 +142,87 @@ namespace vra
                 size_t padding_needed = aligned_offset_for_item - base_offset_for_item;
                 if (padding_needed > 0)
                 {
-                    group.consolidated_data.insert(group.consolidated_data.end(), padding_needed, (uint8_t)0); // Pad with zeros
+                    batch.consolidated_data.insert(batch.consolidated_data.end(), padding_needed, (uint8_t)0); // Pad with zeros
                 }
 
-                group.offsets[id] = aligned_offset_for_item; // Store the correctly aligned offset
+                batch.offsets[id] = aligned_offset_for_item; // Store the correctly aligned offset
 
                 if (raw_data.pData_ != nullptr && raw_data.size_ > 0)
                 {
                     const uint8_t *data_ptr = static_cast<const uint8_t *>(raw_data.pData_);
-                    group.consolidated_data.insert(group.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
+                    batch.consolidated_data.insert(batch.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
                 }
                 
-                group_ci_ref.size = group.consolidated_data.size();
+                batch_ci_ref.size = batch.consolidated_data.size();
+            });
+
+        // Dynamic Sequential Batch (Frequently)
+        RegisterBatcher(
+            vra::VraBuiltInBatchIds::CPU_GPU_Frequently,
+            [](const VraDataDesc &desc)
+            {
+                return desc.GetMemoryPattern() == VraDataMemoryPattern::CPU_GPU && desc.GetUpdateRate() == VraDataUpdateRate::Frequent;
+            },
+            [&physical_device_properties = this->physical_device_properties_](ResourceId id, VraBatchHandle &batch, const VraDataDesc &desc, const VraRawData &raw_data)
+            {
+                const auto &current_item_buffer_create_info = desc.GetBufferCreateInfo();
+                // Get a modifiable reference to the batch's VkBufferCreateInfo
+                auto &batch_ci_ref = batch.data_desc.GetBufferCreateInfo();
+
+                if (!batch.initialized)
+                {
+                    batch.data_desc = desc; // Initialize the batch's entire VraDataDesc
+                    batch.initialized = true;
+                    // batch_ci_ref now refers to the CI within the newly set batch.data_desc
+                }
+                else if (current_item_buffer_create_info.usage == 0 ||
+                         current_item_buffer_create_info.sharingMode != batch_ci_ref.sharingMode)
+                {
+                    return; // Incompatible
+                }
+                else
+                {
+                    // Merge into batch_ci_ref
+                    batch_ci_ref.usage |= current_item_buffer_create_info.usage;
+                    batch_ci_ref.flags |= current_item_buffer_create_info.flags;
+                    if (current_item_buffer_create_info.queueFamilyIndexCount > batch_ci_ref.queueFamilyIndexCount &&
+                        current_item_buffer_create_info.sharingMode == VK_SHARING_MODE_CONCURRENT)
+                    {
+                        batch_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
+                        batch_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
+                    }
+                }
+
+                // Combine data with alignment
+                size_t base_offset_for_item = batch.consolidated_data.size();
+                size_t aligned_offset_for_item = base_offset_for_item;
+
+                // Apply alignment if the batch's buffer usage suggests it (e.g., UBO, SSBO)
+                if ((batch_ci_ref.usage & (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) != 0)
+                {
+                    size_t alignment_requirement = physical_device_properties.limits.minUniformBufferOffsetAlignment;
+                    // TODO: Consider other alignment requirements if necessary, e.g., minStorageBufferOffsetAlignment
+                    if (alignment_requirement > 0)
+                    {
+                        aligned_offset_for_item = (base_offset_for_item + alignment_requirement - 1) & ~(alignment_requirement - 1);
+                    }
+                }
+
+                size_t padding_needed = aligned_offset_for_item - base_offset_for_item;
+                if (padding_needed > 0)
+                {
+                    batch.consolidated_data.insert(batch.consolidated_data.end(), padding_needed, (uint8_t)0); // Pad with zeros
+                }
+
+                batch.offsets[id] = aligned_offset_for_item; // Store the correctly aligned offset
+
+                if (raw_data.pData_ != nullptr && raw_data.size_ > 0)
+                {
+                    const uint8_t *data_ptr = static_cast<const uint8_t *>(raw_data.pData_);
+                    batch.consolidated_data.insert(batch.consolidated_data.end(), data_ptr, data_ptr + raw_data.size_);
+                }
+
+                batch_ci_ref.size = batch.consolidated_data.size();
             });
     }
 
@@ -172,14 +245,14 @@ namespace vra
         return true;
     }
 
-    VkMemoryPropertyFlags VraDataBatcher::GetSuggestMemoryFlags(BatchId group_id)
+    VkMemoryPropertyFlags VraDataBatcher::GetSuggestMemoryFlags(BatchId batch_id)
     {
-        if (batch_id_to_index_map_.find(group_id) == batch_id_to_index_map_.cend())
+        if (batch_id_to_index_map_.find(batch_id) == batch_id_to_index_map_.cend())
         {
-            std::cerr << "Group id " << group_id << " not found" << std::endl;
+            std::cerr << "Batch id " << batch_id << " not found" << std::endl;
             return VkMemoryPropertyFlagBits();
         }
-        const VraDataDesc &data_desc = registered_batchers_[batch_id_to_index_map_[group_id]].batch_handle.data_desc;
+        const VraDataDesc &data_desc = registered_batchers_[batch_id_to_index_map_[batch_id]].batch_handle.data_desc;
         const VraDataMemoryPattern &data_pattern = data_desc.GetMemoryPattern();
         const VraDataUpdateRate &data_update_rate = data_desc.GetUpdateRate();
         switch (data_pattern)
@@ -213,14 +286,14 @@ namespace vra
         }
     }
 
-    VmaAllocationCreateFlags VraDataBatcher::GetSuggestVmaMemoryFlags(BatchId group_id)
+    VmaAllocationCreateFlags VraDataBatcher::GetSuggestVmaMemoryFlags(BatchId batch_id)
     {
-        if (batch_id_to_index_map_.find(group_id) == batch_id_to_index_map_.cend())
+        if (batch_id_to_index_map_.find(batch_id) == batch_id_to_index_map_.cend())
         {
-            std::cerr << "Group id " << group_id << " not found" << std::endl;
+            std::cerr << "Batch id " << batch_id << " not found" << std::endl;
             return VmaAllocationCreateFlags();
         }
-        const VraDataDesc &data_desc = registered_batchers_[batch_id_to_index_map_[group_id]].batch_handle.data_desc;
+        const VraDataDesc &data_desc = registered_batchers_[batch_id_to_index_map_[batch_id]].batch_handle.data_desc;
         const VraDataMemoryPattern &data_pattern = data_desc.GetMemoryPattern();
         const VraDataUpdateRate &data_update_rate = data_desc.GetUpdateRate();
         switch (data_pattern)
@@ -274,7 +347,7 @@ namespace vra
         ClearBatch();
 
         // Optional: Estimate sizes and reserve capacity
-        std::vector<size_t> estimated_group_sizes(registered_batchers_.size(), 0);
+        std::vector<size_t> estimated_batch_sizes(registered_batchers_.size(), 0);
         for (const auto &buffer_pair : buffer_data_map_)
         {
             const VraRawData &raw_data = buffer_pair.second;
@@ -287,23 +360,23 @@ namespace vra
             {
                 if (registered_batchers_[i].predicate(desc))
                 {
-                    // Basic estimation, doesn't account for padding in dynamic groups yet.
+                    // Basic estimation, doesn't account for padding in dynamic batches yet.
                     // For a more accurate estimation, the predicate or a dedicated estimation function
                     // in the strategy would be needed if padding is significant.
-                    estimated_group_sizes[i] += raw_data.size_;
+                    estimated_batch_sizes[i] += raw_data.size_;
                     break;
                 }
             }
         }
         for (size_t i = 0; i < registered_batchers_.size(); ++i)
         {
-            if (estimated_group_sizes[i] > 0)
+            if (estimated_batch_sizes[i] > 0)
             { // Only reserve if there's an estimate
-                registered_batchers_[i].batch_handle.consolidated_data.reserve(estimated_group_sizes[i]);
+                registered_batchers_[i].batch_handle.consolidated_data.reserve(estimated_batch_sizes[i]);
             }
         }
 
-        // Group data
+        // Batch data
         for (const auto &pair : buffer_data_map_)
         {
             ResourceId id = pair.first;
@@ -318,15 +391,15 @@ namespace vra
                 if (strategy.predicate(desc))
                 {
                     strategy.batch_method(id, strategy.batch_handle, desc, raw_data);
-                    break; // Assume buffer belongs to only one group based on predicate
+                    break; // Assume buffer belongs to only one batch based on predicate
                 }
             }
         }
 
-        // Shrink to fit for non-dynamic groups (as per original logic)
+        // Shrink to fit for non-dynamic batches (as per original logic)
         for (auto &strategy : registered_batchers_)
         {
-            // The original dynamic_sequential_group did not shrink_to_fit.
+            // The original dynamic_sequential_batch did not shrink_to_fit.
             // You might want a flag in VraBatcher to control this behavior.
             if (strategy.batch_id != "CPU_GPU")
             {
