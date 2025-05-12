@@ -16,11 +16,12 @@ VulkanEngine::VulkanEngine(const SEngineConfig &config) : engine_config_(config)
     assert(instance == nullptr);
     instance = this;
 
-    mvp_matrices_ = std::vector<SMvpMatrix>(engine_config_.frame_count);
-    uniform_buffer_mapped_data_ = std::vector<void *>(engine_config_.frame_count);
+    mvp_matrices_ = std::vector<SMvpMatrix>(engine_config_.frame_count, {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f)});
+    camera_ = SCamera{glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f)};
 
     InitializeSDL();
     InitializeVulkan();
+    InitializeCamera();
 
     // test vra functions
     // TestVraFunctions();
@@ -28,33 +29,67 @@ VulkanEngine::VulkanEngine(const SEngineConfig &config) : engine_config_(config)
 
 VulkanEngine::~VulkanEngine()
 {
-    vkShaderHelper_.release();
-    vkWindowHelper_.release();
-    vkRenderpassHelper_.release();
-    vkPipelineHelper_.release();
-    vkFrameBufferHelper_.release();
-    vkCommandBufferHelper_.release();
-    vkSynchronizationHelper_.release();
-    vra_data_batcher_.release();
+    // 等待设备空闲，确保没有正在进行的操作
+    vkDeviceWaitIdle(vkb_device_.device);
 
-    // destroy descriptor relatives
-    vkDestroyDescriptorPool(vkb_device_.device, descriptor_pool_, nullptr);
-    vkDestroyDescriptorSetLayout(vkb_device_.device, descriptor_set_layout_, nullptr);
-
-    // destroy vertex input buffers
-    vmaDestroyBuffer(vma_allocator_, local_buffer_, local_buffer_allocation_);
-    vmaDestroyBuffer(vma_allocator_, staging_buffer_, staging_buffer_allocation_);
-
-    // destroy uniform buffers
-    for (int i = 0; i < engine_config_.frame_count; ++i)
-    {
-        vmaDestroyBuffer(vma_allocator_, uniform_buffer_[i], uniform_buffer_allocation_[i]);
+    // 解除内存映射
+    if (uniform_buffer_mapped_data_) {
+        vmaUnmapMemory(vma_allocator_, uniform_buffer_allocation_);
+        uniform_buffer_mapped_data_ = nullptr;
     }
-    vmaDestroyAllocator(vma_allocator_);
 
+    // 销毁描述符相关资源
+    if (descriptor_pool_ != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(vkb_device_.device, descriptor_pool_, nullptr);
+        descriptor_pool_ = VK_NULL_HANDLE;
+    }
+    
+    if (descriptor_set_layout_ != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(vkb_device_.device, descriptor_set_layout_, nullptr);
+        descriptor_set_layout_ = VK_NULL_HANDLE;
+    }
+
+    // 销毁VMA缓冲区
+    if (local_buffer_ != VK_NULL_HANDLE) {
+        vmaDestroyBuffer(vma_allocator_, local_buffer_, local_buffer_allocation_);
+        local_buffer_ = VK_NULL_HANDLE;
+    }
+    
+    if (staging_buffer_ != VK_NULL_HANDLE) {
+        vmaDestroyBuffer(vma_allocator_, staging_buffer_, staging_buffer_allocation_);
+        staging_buffer_ = VK_NULL_HANDLE;
+    }
+    
+    if (uniform_buffer_ != VK_NULL_HANDLE) {
+        vmaDestroyBuffer(vma_allocator_, uniform_buffer_, uniform_buffer_allocation_);
+        uniform_buffer_ = VK_NULL_HANDLE;
+    }
+
+    // 销毁VMA分配器
+    if (vma_allocator_ != VK_NULL_HANDLE) {
+        vmaDestroyAllocator(vma_allocator_);
+        vma_allocator_ = VK_NULL_HANDLE;
+    }
+
+    // release unique pointer
+    vkShaderHelper_.reset();
+    vkWindowHelper_.reset();
+    vkRenderpassHelper_.reset();
+    vkPipelineHelper_.reset();
+    vkFrameBufferHelper_.reset();
+    vkCommandBufferHelper_.reset();
+    vkSynchronizationHelper_.reset();
+
+    // 销毁vkBootstrap资源
     vkb::destroy_swapchain(vkb_swapchain_);
     vkb::destroy_device(vkb_device_);
     vkb::destroy_instance(vkb_instance_);
+
+    // 清理SDL资源
+    SDL_Quit();
+
+    // 重置单例指针
+    instance = nullptr;
 }
 
 // Initialize the engine
@@ -111,7 +146,7 @@ void VulkanEngine::InitializeVulkan()
         throw std::runtime_error("Failed to create Vulkan uniform buffers.");
     }
 
-    if (!CreateDescriptorRelatives())
+    if (!CreateAndWriteDescriptorRelatives())
     {
         throw std::runtime_error("Failed to create Vulkan descriptor relatives.");
     }
@@ -142,19 +177,46 @@ void VulkanEngine::InitializeVulkan()
     }
 }
 
+void VulkanEngine::InitializeCamera()
+{
+    // 将相机放在一个能看到三角形的位置
+    camera_.position = glm::vec3(0.0f, 0.0f, 3.0f);   // 在z轴正方向3个单位
+    camera_.yaw = -90.0f;                             // 朝向-z方向（朝向原点）
+    camera_.pitch = 0.0f;                             // 水平视角
+    camera_.movement_speed = 5.0f;
+    camera_.mouse_sensitivity = 0.5f;
+    camera_.zoom = 45.0f;
+    camera_.world_up = glm::vec3(0.0f, -1.0f, 0.0f);  // Vulkan中Y轴向下
+    
+    // 初始化相机向量
+    camera_.front = glm::vec3(0.0f, 0.0f, -1.0f);     // 看向-z方向
+    camera_.right = glm::vec3(1.0f, 0.0f, 0.0f);      // 右方向为+x
+    camera_.up = glm::vec3(0.0f, -1.0f, 0.0f);        // 上方向为-y（因为Vulkan中Y轴向下）
+}
+
 // Main loop
 void VulkanEngine::Run()
 {
     engine_state_ = EWindowState::Running;
 
     SDL_Event event;
+    
+    Uint64 last_time = SDL_GetTicks();
+    float delta_time = 0.0f;
 
     // main loop
     while (engine_state_ != EWindowState::Stopped)
     {
+        // 计算帧间时间差
+        Uint64 current_time = SDL_GetTicks();
+        delta_time = (current_time - last_time) / 1000.0f; // 转换为秒
+        last_time = current_time;
+
         // Handle events on queue
         while (SDL_PollEvent(&event))
         {
+            ProcessInput(event);
+            
             // close the window when user alt-f4s or clicks the X button
             if (event.type == SDL_EVENT_QUIT)
             {
@@ -174,6 +236,9 @@ void VulkanEngine::Run()
             }
         }
 
+        // 处理键盘输入更新相机
+        ProcessKeyboardInput(delta_time);
+
         // do not draw if we are minimized
         if (render_state_ == ERenderState::False)
         {
@@ -188,8 +253,198 @@ void VulkanEngine::Run()
             ResizeSwapChain();
         }
 
+        // 更新视图矩阵
+        UpdateUniformBuffer(frame_index_);
+
+        // render a frame
         Draw();
     }
+
+    // wait until the GPU is completely idle before cleaning up
+    vkDeviceWaitIdle(vkb_device_.device);
+}
+
+void VulkanEngine::ProcessInput(SDL_Event& event)
+{
+    // key down event
+    if (event.type == SDL_EVENT_KEY_DOWN) 
+    {
+        // ESC key to exit
+        if (event.key.key == SDLK_ESCAPE) 
+        {
+            engine_state_ = EWindowState::Stopped;
+        }
+    }
+    
+    // mouse button down event
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) 
+    {
+        float mouse_x, mouse_y;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+        last_x_ = mouse_x;
+        last_y_ = mouse_y;
+        
+        if (event.button.button == SDL_BUTTON_RIGHT) 
+        {
+            camera_rotation_mode_ = true;
+            // 保存当前鼠标位置
+            last_x_ = mouse_x;
+            last_y_ = mouse_y;
+        }
+        else if (event.button.button == SDL_BUTTON_MIDDLE) 
+        {
+            camera_pan_mode_ = true;
+        }
+    }
+    
+    // mouse button up event
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) 
+    {
+        if (event.button.button == SDL_BUTTON_RIGHT) 
+        {
+            camera_rotation_mode_ = false;
+        }
+        else if (event.button.button == SDL_BUTTON_MIDDLE) 
+        {
+            camera_pan_mode_ = false;
+        }
+    }
+    
+    // mouse motion event
+    if (event.type == SDL_EVENT_MOUSE_MOTION) 
+    {
+        float x_pos = static_cast<float>(event.motion.x);
+        float y_pos = static_cast<float>(event.motion.y);
+        float x_offset = x_pos - last_x_;
+        float y_offset = last_y_ - y_pos;
+        last_x_ = x_pos;
+        last_y_ = y_pos;
+        
+        if (camera_rotation_mode_)
+        {
+            // 使用基于时间的平滑插值
+            float smooth_factor = 0.1f; // 平滑系数，值越小越平滑
+            float target_x_offset = x_offset * camera_.mouse_sensitivity;
+            float target_y_offset = y_offset * camera_.mouse_sensitivity;
+            
+            // 应用平滑插值
+            x_offset = target_x_offset * smooth_factor;
+            y_offset = target_y_offset * smooth_factor;
+
+            // 更新yaw和pitch
+            camera_.yaw += x_offset;
+            camera_.pitch += y_offset;
+
+            // 限制pitch角度
+            if (camera_.pitch > 89.0f) camera_.pitch = 89.0f;
+            if (camera_.pitch < -89.0f) camera_.pitch = -89.0f;
+
+            // 计算新的相机方向
+            glm::vec3 direction;
+            direction.x = cos(glm::radians(camera_.yaw)) * cos(glm::radians(camera_.pitch));
+            direction.y = sin(glm::radians(camera_.pitch));
+            direction.z = sin(glm::radians(camera_.yaw)) * cos(glm::radians(camera_.pitch));
+            camera_.front = glm::normalize(direction);
+
+            // 更新right和up向量
+            camera_.right = glm::normalize(glm::cross(camera_.front, camera_.world_up));
+            camera_.up = glm::normalize(glm::cross(camera_.right, camera_.front));
+        }
+        
+        if (camera_pan_mode_)
+        {
+            float pan_speed_multiplier = 0.005f;
+            float smooth_factor = 0.1f; // 平滑系数
+            
+            // 计算目标移动量
+            float target_x_offset = x_offset * camera_.movement_speed * pan_speed_multiplier;
+            float target_y_offset = y_offset * camera_.movement_speed * pan_speed_multiplier;
+            
+            // 应用平滑插值
+            float smooth_x_offset = target_x_offset * smooth_factor;
+            float smooth_y_offset = target_y_offset * smooth_factor;
+            
+            // 应用移动
+            camera_.position.x += smooth_x_offset;
+            camera_.position.y += smooth_y_offset;
+        }
+    }
+    
+    // mouse wheel event
+    if (event.type == SDL_EVENT_MOUSE_WHEEL) 
+    {
+        float zoom_factor = 0.1f * camera_.movement_speed;
+        float distance = glm::length(camera_.position);
+        
+        if (event.wheel.y > 0)
+        {
+            if (distance > 0.5f)
+            {
+                camera_.position *= (1.0f - zoom_factor);
+            }
+        }
+        else if (event.wheel.y < 0)
+        {
+            camera_.position *= (1.0f + zoom_factor);
+        }
+        
+        ProcessMouseScroll(static_cast<float>(event.wheel.y));
+    }
+}
+
+void VulkanEngine::ProcessKeyboardInput(float delta_time)
+{
+    // get the keyboard state
+    const bool* keyboard_state = SDL_GetKeyboardState(nullptr);
+    
+    float velocity = camera_.movement_speed * delta_time;
+    
+    // 在屏幕空间中移动
+    glm::vec3 movement(0.0f);
+    
+    // 上下移动（Y轴）
+    if (keyboard_state[SDL_SCANCODE_W] || keyboard_state[SDL_SCANCODE_UP]) 
+    {
+        movement.y += velocity; // 向上移动（Y轴正方向）
+    }
+    if (keyboard_state[SDL_SCANCODE_S] || keyboard_state[SDL_SCANCODE_DOWN]) 
+    {
+        movement.y -= velocity; // 向下移动
+    }
+    
+    // 左右移动（X轴）
+    if (keyboard_state[SDL_SCANCODE_A] || keyboard_state[SDL_SCANCODE_LEFT]) 
+    {
+        movement.x -= velocity; // 向左移动（X轴负方向）
+    }
+    if (keyboard_state[SDL_SCANCODE_D] || keyboard_state[SDL_SCANCODE_RIGHT]) 
+    {
+        movement.x += velocity; // 向右移动（X轴正方向）
+    }
+    
+    // 前后移动（Z轴）
+    if (keyboard_state[SDL_SCANCODE_Q]) 
+    {
+        movement.z += velocity; // 向后移动
+    }
+    if (keyboard_state[SDL_SCANCODE_E]) 
+    {
+        movement.z -= velocity; // 向前移动
+    }
+    
+    // 应用平滑移动
+    float smooth_factor = 0.1f; // 平滑系数
+    camera_.position += movement * smooth_factor;
+}
+
+void VulkanEngine::ProcessMouseScroll(float yoffset)
+{
+    // adjust the field of view
+    camera_.zoom -= yoffset;
+    if (camera_.zoom < 1.0f)
+        camera_.zoom = 1.0f;
+    if (camera_.zoom > 45.0f)
+        camera_.zoom = 45.0f;
 }
 
 // Main render loop
@@ -312,58 +567,6 @@ bool VulkanEngine::CreateSwapChain()
     return true;
 }
 
-bool VulkanEngine::CreatePipeline()
-{
-    // create shader
-    vkShaderHelper_ = std::make_unique<VulkanShaderHelper>(vkb_device_.device);
-
-    std::vector<SVulkanShaderConfig> configs;
-    std::string shader_path = engine_config_.general_config.working_directory + "src\\shader\\";
-    std::string vertex_shader_path = shader_path + "triangle.vert.spv";
-    std::string fragment_shader_path = shader_path + "triangle.frag.spv";
-    configs.push_back({EShaderType::kVertexShader, vertex_shader_path.c_str()});
-    configs.push_back({EShaderType::kFragmentShader, fragment_shader_path.c_str()});
-
-    for (const auto &config : configs)
-    {
-        std::vector<uint32_t> shader_code;
-        if (!vkShaderHelper_->ReadShaderCode(config.shader_path, shader_code))
-        {
-            Logger::LogError("Failed to read shader code from " + std::string(config.shader_path));
-            return false;
-        }
-
-        if (!vkShaderHelper_->CreateShaderModule(vkb_device_.device, shader_code, config.shader_type))
-        {
-            Logger::LogError("Failed to create shader module for " + std::string(config.shader_path));
-            return false;
-        }
-    }
-
-    // create renderpass
-    SVulkanRenderpassConfig renderpass_config;
-    renderpass_config.color_format = vkb_swapchain_.image_format;
-    renderpass_config.depth_format = VK_FORMAT_D32_SFLOAT;  // TODO: Make configurable
-    renderpass_config.sample_count = VK_SAMPLE_COUNT_1_BIT; // TODO: Make configurable
-    vkRenderpassHelper_ = std::make_unique<VulkanRenderpassHelper>(renderpass_config);
-    if (!vkRenderpassHelper_->CreateRenderpass(vkb_device_.device))
-    {
-        return false;
-    }
-
-    // create pipeline
-    SVulkanPipelineConfig pipeline_config;
-    pipeline_config.swap_chain_config = &swapchain_config_;
-    pipeline_config.shader_module_map = {
-        {EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader)},
-        {EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader)}};
-    pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
-    pipeline_config.vertex_input_binding_description = vertex_input_binding_description_;
-    pipeline_config.vertex_input_attribute_descriptions = {vertex_input_attribute_position_, vertex_input_attribute_color_};
-    vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);
-    return vkPipelineHelper_->CreatePipeline(vkb_device_.device);
-}
-
 bool VulkanEngine::CreateFrameBuffer()
 {
     // create frame buffer
@@ -382,58 +585,6 @@ bool VulkanEngine::CreateCommandPool()
 {
     vkCommandBufferHelper_ = std::make_unique<VulkanCommandBufferHelper>();
     return vkCommandBufferHelper_->CreateCommandPool(vkb_device_.device, vkb_device_.get_queue_index(vkb::QueueType::graphics).value());
-}
-
-bool VulkanEngine::CreateDescriptorRelatives()
-{
-    // create descriptor pool
-
-    VkDescriptorPoolSize pool_size{};
-    pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    pool_size.descriptorCount = engine_config_.frame_count;
-
-    VkDescriptorPoolCreateInfo pool_info{};
-    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    pool_info.poolSizeCount = 1;
-    pool_info.pPoolSizes = &pool_size;
-
-    if (Logger::LogWithVkResult(vkCreateDescriptorPool(vkb_device_.device, &pool_info, nullptr, &descriptor_pool_),
-                                "Failed to create descriptor pool",
-                                "Succeeded in creating descriptor pool"))
-        return false;
-
-    // create descriptor set layout
-
-    VkDescriptorSetLayoutBinding layout_binding{};
-    layout_binding.binding = 0;
-    layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    layout_binding.descriptorCount = 1;
-    layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutCreateInfo layout_info{};
-    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layout_info.bindingCount = 1;
-    layout_info.pBindings = &layout_binding;
-
-    if (Logger::LogWithVkResult(vkCreateDescriptorSetLayout(vkb_device_.device, &layout_info, nullptr, &descriptor_set_layout_),
-                                "Failed to create descriptor set layout",
-                                "Succeeded in creating descriptor set layout"))
-        return false;
-
-    // allocate descriptor set
-
-    VkDescriptorSetAllocateInfo alloc_info{};
-    alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    alloc_info.descriptorPool = descriptor_pool_;
-    alloc_info.descriptorSetCount = 1;
-    alloc_info.pSetLayouts = &descriptor_set_layout_;
-
-    if (Logger::LogWithVkResult(vkAllocateDescriptorSets(vkb_device_.device, &alloc_info, &descriptor_set_),
-                                "Failed to allocate descriptor set",
-                                "Succeeded in allocating descriptor set"))
-        return false;
-
-    return true;
 }
 
 bool VulkanEngine::CreateVertexInputBuffers()
@@ -459,12 +610,14 @@ bool VulkanEngine::CreateVertexInputBuffers()
     // raw data
     const std::vector<Vertex> vertices =
         {
-            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
+            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},    // 顶点 - 红色
+            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},     // 右下 - 绿色
+            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}     // 左下 - 蓝色
+        };
     const std::vector<uint16_t> indices =
         {
-            0, 1, 2, 2, 3, 0};
+            0, 1, 2  // 逆时针顺序
+        };
     vra::VraRawData vertex_raw_data{
         vertices.data(),                 // pData_
         vertices.size() * sizeof(Vertex) // size_
@@ -549,9 +702,12 @@ bool VulkanEngine::CreateVertexInputBuffers()
 
     // copy data to staging buffer
     void *mapped_data = nullptr;
+    
+    vmaInvalidateAllocation(vma_allocator_, staging_buffer_allocation_, 0, staging_group_data->consolidated_data.size());
     vmaMapMemory(vma_allocator_, staging_buffer_allocation_, &mapped_data);
     memcpy(mapped_data, staging_group_data->consolidated_data.data(), staging_group_data->consolidated_data.size());
     vmaUnmapMemory(vma_allocator_, staging_buffer_allocation_);
+    vmaFlushAllocation(vma_allocator_, local_buffer_allocation_, 0, local_buffer_allocation_info_.size);
 
     // vertex input binding description
     vertex_input_binding_description_.binding = 0;
@@ -575,6 +731,7 @@ bool VulkanEngine::CreateUniformBuffers()
 {
     for(int i = 0; i < engine_config_.frame_count; ++i)
     {
+        auto current_mvp_matrix = mvp_matrices_[i];
         VkBufferCreateInfo buffer_create_info = {};
         buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
@@ -585,9 +742,10 @@ bool VulkanEngine::CreateUniformBuffers()
             vra::VraDataUpdateRate::Frequent,
             buffer_create_info};
         vra::VraRawData raw_data{
-            mvp_matrices_.data(),
+            &current_mvp_matrix,
             sizeof(SMvpMatrix)};
-        vra_data_batcher_->Collect(data_desc, raw_data, uniform_buffer_id_);
+        uniform_buffer_id_.push_back(FRAME_INDEX_TO_UNIFORM_BUFFER_ID(i));
+        vra_data_batcher_->Collect(data_desc, std::move(raw_data), uniform_buffer_id_.back());
     }
 
     vra_data_batcher_->Batch();
@@ -603,20 +761,144 @@ bool VulkanEngine::CreateUniformBuffers()
     VmaAllocationCreateInfo allocation_create_info = {};
     allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
     allocation_create_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::CPU_GPU_Frequently);
-
-    if (Logger::LogWithVkResult(vmaCreateBuffer(vma_allocator_, &uniform_buffer_create_info, &allocation_create_info, &uniform_buffer_[0], &uniform_buffer_allocation_[0], &uniform_buffer_allocation_info_[0]),
+    allocation_create_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    if (!Logger::LogWithVkResult(vmaCreateBuffer(
+                                    vma_allocator_, 
+                                    &uniform_buffer_create_info, 
+                                    &allocation_create_info, 
+                                    &uniform_buffer_, 
+                                    &uniform_buffer_allocation_, 
+                                    &uniform_buffer_allocation_info_),
                                 "Failed to create uniform buffer",
                                 "Succeeded in creating uniform buffer"))
         return false;
 
-    for (int i = 0; i < engine_config_.frame_count; ++i)
-    {
-        vmaMapMemory(vma_allocator_, uniform_buffer_allocation_[i], &uniform_buffer_mapped_data_[i]);
-        memcpy(uniform_buffer_mapped_data_[i], group_data->consolidated_data.data(), group_data->consolidated_data.size());
-        vmaUnmapMemory(vma_allocator_, uniform_buffer_allocation_[i]);
-    }
+    return true;
+}
+
+bool VulkanEngine::CreateAndWriteDescriptorRelatives()
+{
+    // create descriptor pool
+    VkDescriptorType dynamic_uniform_buffer_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+
+    VkDescriptorPoolSize pool_size{};
+    pool_size.type = dynamic_uniform_buffer_type;
+    pool_size.descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo pool_info{};
+    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.poolSizeCount = 1;
+    pool_info.pPoolSizes = &pool_size;
+    pool_info.maxSets = 1;
+
+    if (!Logger::LogWithVkResult(vkCreateDescriptorPool(vkb_device_.device, &pool_info, nullptr, &descriptor_pool_),
+                                "Failed to create descriptor pool",
+                                "Succeeded in creating descriptor pool"))
+        return false;
+
+    // create descriptor set layout
+
+    VkDescriptorSetLayoutBinding layout_binding{};
+    layout_binding.binding = 0;
+    layout_binding.descriptorType = dynamic_uniform_buffer_type;
+    layout_binding.descriptorCount = 1;
+    layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layout_info{};
+    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layout_info.bindingCount = 1;
+    layout_info.pBindings = &layout_binding;
+
+    if (!Logger::LogWithVkResult(vkCreateDescriptorSetLayout(vkb_device_.device, &layout_info, nullptr, &descriptor_set_layout_),
+                                "Failed to create descriptor set layout",
+                                "Succeeded in creating descriptor set layout"))
+        return false;
+
+    // allocate descriptor set
+
+    VkDescriptorSetAllocateInfo alloc_info{};
+    alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    alloc_info.descriptorPool = descriptor_pool_;
+    alloc_info.descriptorSetCount = 1;
+    alloc_info.pSetLayouts = &descriptor_set_layout_;
+
+    if (!Logger::LogWithVkResult(vkAllocateDescriptorSets(vkb_device_.device, &alloc_info, &descriptor_set_),
+                                "Failed to allocate descriptor set",
+                                "Succeeded in allocating descriptor set"))
+        return false;
+
+    // write descriptor set
+    VkDescriptorBufferInfo buffer_info{};
+    buffer_info.buffer = uniform_buffer_;
+    buffer_info.offset = 0;
+    buffer_info.range = sizeof(SMvpMatrix);
+
+    VkWriteDescriptorSet descriptor_write{};
+    descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptor_write.dstSet = descriptor_set_;
+    descriptor_write.dstBinding = 0;
+    descriptor_write.dstArrayElement = 0;
+    descriptor_write.descriptorType = dynamic_uniform_buffer_type;
+    descriptor_write.descriptorCount = 1;
+    descriptor_write.pBufferInfo = &buffer_info;
+
+    vkUpdateDescriptorSets(vkb_device_.device, 1, &descriptor_write, 0, nullptr);
 
     return true;
+}
+
+bool VulkanEngine::CreatePipeline()
+{
+    // create shader
+    vkShaderHelper_ = std::make_unique<VulkanShaderHelper>(vkb_device_.device);
+
+    std::vector<SVulkanShaderConfig> configs;
+    std::string shader_path = engine_config_.general_config.working_directory + "src\\shader\\";
+    std::string vertex_shader_path = shader_path + "triangle.vert.spv";
+    std::string fragment_shader_path = shader_path + "triangle.frag.spv";
+    configs.push_back({EShaderType::kVertexShader, vertex_shader_path.c_str()});
+    configs.push_back({EShaderType::kFragmentShader, fragment_shader_path.c_str()});
+
+    for (const auto &config : configs)
+    {
+        std::vector<uint32_t> shader_code;
+        if (!vkShaderHelper_->ReadShaderCode(config.shader_path, shader_code))
+        {
+            Logger::LogError("Failed to read shader code from " + std::string(config.shader_path));
+            return false;
+        }
+
+        if (!vkShaderHelper_->CreateShaderModule(vkb_device_.device, shader_code, config.shader_type))
+        {
+            Logger::LogError("Failed to create shader module for " + std::string(config.shader_path));
+            return false;
+        }
+    }
+
+    // create renderpass
+    SVulkanRenderpassConfig renderpass_config;
+    renderpass_config.color_format = vkb_swapchain_.image_format;
+    renderpass_config.depth_format = VK_FORMAT_D32_SFLOAT;  // TODO: Make configurable
+    renderpass_config.sample_count = VK_SAMPLE_COUNT_1_BIT; // TODO: Make configurable
+    vkRenderpassHelper_ = std::make_unique<VulkanRenderpassHelper>(renderpass_config);
+    if (!vkRenderpassHelper_->CreateRenderpass(vkb_device_.device))
+    {
+        return false;
+    }
+
+    // create pipeline
+    SVulkanPipelineConfig pipeline_config;
+    pipeline_config.swap_chain_config = &swapchain_config_;
+    pipeline_config.shader_module_map = {
+        {EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader)},
+        {EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader)}};
+    pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
+    pipeline_config.vertex_input_binding_description = vertex_input_binding_description_;
+    pipeline_config.vertex_input_attribute_descriptions = {vertex_input_attribute_position_, vertex_input_attribute_color_};
+    pipeline_config.descriptor_set_layouts.push_back(descriptor_set_layout_);
+
+    vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);
+    return vkPipelineHelper_->CreatePipeline(vkb_device_.device);
 }
 
 bool VulkanEngine::AllocatePerFrameCommandBuffer()
@@ -791,6 +1073,9 @@ void VulkanEngine::ResizeSwapChain()
 
 bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffer_id)
 {
+    // 更新当前帧的 Uniform Buffer
+    UpdateUniformBuffer(image_index);
+    
     // begin command recording
     if (!vkCommandBufferHelper_->BeginCommandBufferRecording(command_buffer_id, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT))
         return false;
@@ -848,6 +1133,19 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     // bind pipeline
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineHelper_->GetPipeline());
 
+    // bind descriptor set
+    auto offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::CPU_GPU_Frequently, uniform_buffer_id_[frame_index_]);
+    uint32_t dynamic_offset = static_cast<uint32_t>(offset);
+    vkCmdBindDescriptorSets(
+        command_buffer, 
+        VK_PIPELINE_BIND_POINT_GRAPHICS, 
+        vkPipelineHelper_->GetPipelineLayout(), 
+        0, 
+        1, 
+        &descriptor_set_, 
+        1, 
+        &dynamic_offset);
+
     // dynamic state update
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -877,6 +1175,45 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     return true;
 }
 
+void VulkanEngine::UpdateUniformBuffer(uint32_t current_frame_index)
+{
+    // 更新模型矩阵
+    mvp_matrices_[current_frame_index].model = glm::mat4(1.0f);
+    
+    // 更新视图矩阵
+    mvp_matrices_[current_frame_index].view = glm::lookAt(
+        camera_.position,                 // 相机位置
+        camera_.position + camera_.front, // 相机看向的点 (当前位置 + 前方向量)
+        camera_.up                        // 相机上方向 (通过UpdateCameraVectors计算得到)
+    );
+
+    // 更新投影矩阵
+    mvp_matrices_[current_frame_index].projection = glm::perspective(
+        glm::radians(camera_.zoom),            // FOV
+        swapchain_config_.target_swap_extent_.width / (float)swapchain_config_.target_swap_extent_.height, // 宽高比
+        0.1f,                                  // 近平面
+        100.0f                                 // 远平面
+    );
+    
+    // Vulkan的NDC坐标系Y轴向下，需要翻转Y轴
+    mvp_matrices_[current_frame_index].projection[1][1] *= -1;
+    
+    // 获取当前帧在大uniform buffer中的偏移量
+    auto offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::CPU_GPU_Frequently, uniform_buffer_id_[current_frame_index]);
+    
+    // 如果我们还没有映射内存，先映射它（只在首次调用时执行）
+    if (uniform_buffer_mapped_data_ == nullptr) {
+        vmaMapMemory(vma_allocator_, uniform_buffer_allocation_, &uniform_buffer_mapped_data_);
+    }
+    
+    // 计算当前帧数据在映射内存中的位置，并只更新当前帧的数据
+    uint8_t* data_location = static_cast<uint8_t*>(uniform_buffer_mapped_data_) + offset;
+    memcpy(data_location, &mvp_matrices_[current_frame_index], sizeof(SMvpMatrix));
+    
+    // 如果使用的是非HOST_COHERENT内存，需要显式刷新
+    vmaFlushAllocation(vma_allocator_, uniform_buffer_allocation_, offset, sizeof(SMvpMatrix));
+}
+
 /// --------------------------------
 /// test vra functions
 /// --------------------------------
@@ -892,12 +1229,14 @@ void VulkanEngine::TestVraFunctions()
     // raw data
     const std::vector<Vertex> vertices =
         {
-            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
+            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},    // 顶点 - 红色
+            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},     // 右下 - 绿色
+            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}     // 左下 - 蓝色
+        };
     const std::vector<uint16_t> indices =
         {
-            0, 1, 2, 2, 3, 0};
+            0, 1, 2  // 逆时针顺序
+        };
     vra::VraRawData vertex_raw_data{
         vertices.data(),                 // pData_
         vertices.size() * sizeof(Vertex) // size_

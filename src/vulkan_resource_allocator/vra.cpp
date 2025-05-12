@@ -5,11 +5,11 @@
 
 namespace vra
 {
-    static const BatchId GPU_Only = "GPU_Only";
-    static const BatchId CPU_GPU_Rarely = "CPU_GPU_Rarely";
-    static const BatchId CPU_GPU_Frequently = "CPU_GPU_Frequently";
-    static const BatchId GPU_CPU_Rarely = "GPU_CPU_Rarely";
-    static const BatchId GPU_CPU_Frequently = "GPU_CPU_Frequently";
+    const BatchId VraBuiltInBatchIds::GPU_Only = "GPU_Only";
+    const BatchId VraBuiltInBatchIds::CPU_GPU_Rarely = "CPU_GPU_Rarely";
+    const BatchId VraBuiltInBatchIds::CPU_GPU_Frequently = "CPU_GPU_Frequently";
+    const BatchId VraBuiltInBatchIds::GPU_CPU_Rarely = "GPU_CPU_Rarely";
+    const BatchId VraBuiltInBatchIds::GPU_CPU_Frequently = "GPU_CPU_Frequently";
 
     // -------------------------------------
     // --- Data Collector Implementation ---

@@ -31,7 +31,7 @@ int main()
     SEngineConfig config;
     config.window_config = window_config;
     config.general_config = general_config;
-    config.frame_count = 2;
+    config.frame_count = 3;
     config.use_validation_layers = true;
     
 

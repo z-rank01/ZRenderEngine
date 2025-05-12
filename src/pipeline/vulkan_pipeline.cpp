@@ -60,8 +60,8 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
     rasterizer.rasterizerDiscardEnable = VK_FALSE; // Disable if you want to draw
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL; // Fill the polygon
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT; // Cull back faces
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE; 
+    rasterizer.cullMode = VK_CULL_MODE_NONE; // 禁用背面剔除，使三角形在任何角度都可见
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; 
     rasterizer.depthBiasEnable = VK_FALSE;
     rasterizer.depthBiasConstantFactor = 0.0f; // Optional
     rasterizer.depthBiasClamp = 0.0f; // Optional

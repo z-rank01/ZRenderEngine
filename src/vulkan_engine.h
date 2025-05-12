@@ -14,6 +14,7 @@
 
 #include "synchronization/vulkan_synchronization.h"
 #include "utility/config_reader.h"
+#include "utility/logger.h"
 
 #include "vulkan_resource_allocator/vra.h"
 
@@ -22,6 +23,8 @@
 #include <memory>
 #include <VkBootstrap.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/constants.hpp>
 
 enum class EWindowState : std::uint8_t
 {
@@ -73,6 +76,47 @@ struct SMvpMatrix
     glm::mat4 projection;
 };
 
+struct SCamera
+{
+    glm::vec3 position;
+    glm::vec3 front;
+    glm::vec3 up;
+    glm::vec3 right;
+    glm::vec3 world_up;
+    float yaw;
+    float pitch;
+    float movement_speed;
+    float mouse_sensitivity;
+    float zoom;
+
+    SCamera(glm::vec3 pos = glm::vec3(0.0f, 0.0f, 0.0f),
+            glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f),
+            float initial_yaw = -90.0f,
+            float initial_pitch = 0.0f)
+        : position(pos), world_up(up), yaw(initial_yaw), pitch(initial_pitch),
+          movement_speed(2.5f), mouse_sensitivity(0.1f), zoom(45.0f)
+    {
+        UpdateCameraVectors();
+    }
+
+    void UpdateCameraVectors()
+    {
+        if (pitch > 89.0f) pitch = 89.0f;
+        if (pitch < -89.0f) pitch = -89.0f;
+
+        // 在Vulkan坐标系中计算相机方向：+X向右，+Y向下，+Z向屏幕外
+        glm::vec3 new_front;
+        new_front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+        new_front.y = sin(glm::radians(pitch)); // Y轴向下
+        new_front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+        front = glm::normalize(new_front);
+        
+        // 计算右向量和上向量
+        right = glm::normalize(glm::cross(front, world_up));
+        up = glm::normalize(glm::cross(right, front));
+    }
+};
+
 class VulkanEngine
 {
 public:
@@ -86,12 +130,14 @@ public:
     static VulkanEngine& GetInstance();
 
 private:
+#define FRAME_INDEX_TO_UNIFORM_BUFFER_ID(frame_index) (frame_index + 4)
     // engine members
     uint8_t frame_index_ = 0;
     bool resize_request_ = false;
     EWindowState engine_state_;
     ERenderState render_state_;
     SEngineConfig engine_config_;
+    SCamera camera_;
     std::vector<SOutputFrame> output_frames_;
 
     // vulkan bootstrap members
@@ -106,10 +152,10 @@ private:
     VmaAllocator vma_allocator_;
     VmaAllocation local_buffer_allocation_;
     VmaAllocation staging_buffer_allocation_;
-    std::vector<VmaAllocation> uniform_buffer_allocation_;
+    VmaAllocation uniform_buffer_allocation_;
     VmaAllocationInfo local_buffer_allocation_info_;
     VmaAllocationInfo staging_buffer_allocation_info_;
-    std::vector<VmaAllocationInfo> uniform_buffer_allocation_info_;
+    VmaAllocationInfo uniform_buffer_allocation_info_;
     std::unique_ptr<vra::VraDataBatcher> vra_data_batcher_;
 
     // TODO: change to dynamic
@@ -117,13 +163,13 @@ private:
     vra::ResourceId index_data_id_ = 1;
     vra::ResourceId staging_vertex_data_id_ = 2;
     vra::ResourceId staging_index_data_id_ = 3;
-    vra::ResourceId uniform_buffer_id_ = 4;
+    std::vector<vra::ResourceId> uniform_buffer_id_;
 
 
     // vulkan native members
     VkBuffer local_buffer_;
     VkBuffer staging_buffer_;
-    std::vector<VkBuffer> uniform_buffer_;
+    VkBuffer uniform_buffer_;
     VkDescriptorPool descriptor_pool_;
     VkDescriptorSetLayout descriptor_set_layout_;
     VkDescriptorSet descriptor_set_;
@@ -139,12 +185,21 @@ private:
     std::unique_ptr<VulkanCommandBufferHelper> vkCommandBufferHelper_;
     std::unique_ptr<VulkanFrameBufferHelper> vkFrameBufferHelper_;
     std::unique_ptr<VulkanSynchronizationHelper> vkSynchronizationHelper_;
+    
     // uniform data
     std::vector<SMvpMatrix> mvp_matrices_;
-    std::vector<void *> uniform_buffer_mapped_data_;
+    void * uniform_buffer_mapped_data_;
     
+    // Input handling members
+    float last_x_ = 0.0f;
+    float last_y_ = 0.0f;
+    bool camera_rotation_mode_ = false;  // 相机旋转模式标志（右键）
+    bool camera_pan_mode_ = false;       // 相机平移模式标志（中键）
+    float orbit_distance_ = 0.0f;      // 轨道旋转时与中心的距离
+
     void InitializeSDL();
     void InitializeVulkan();
+    void InitializeCamera();
 
     // --- Vulkan Initialization Steps ---
     void GenerateFrameStructs();
@@ -156,7 +211,7 @@ private:
     bool CreatePipeline();
     bool CreateFrameBuffer();
     bool CreateCommandPool();
-    bool CreateDescriptorRelatives();
+    bool CreateAndWriteDescriptorRelatives();
     bool CreateVertexInputBuffers();
     bool CreateUniformBuffers();
     bool AllocatePerFrameCommandBuffer();
@@ -167,9 +222,15 @@ private:
     void DrawFrame();
     void ResizeSwapChain();
     bool RecordCommand(uint32_t image_index, std::string command_buffer_id);
-    // --------------------------------------
+    void UpdateUniformBuffer(uint32_t current_frame_index);
+    // -------------------------
 
     // --- VRA Test Functions ---
     void TestVraFunctions();
     // --------------------------
+
+    // 相机控制函数
+    void ProcessInput(SDL_Event& event);
+    void ProcessKeyboardInput(float delta_time);
+    void ProcessMouseScroll(float yoffset);
 };
