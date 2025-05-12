@@ -192,6 +192,13 @@ void VulkanEngine::InitializeCamera()
     camera_.front = glm::vec3(0.0f, 0.0f, -1.0f);     // 看向-z方向
     camera_.right = glm::vec3(1.0f, 0.0f, 0.0f);      // 右方向为+x
     camera_.up = glm::vec3(0.0f, -1.0f, 0.0f);        // 上方向为-y（因为Vulkan中Y轴向下）
+    
+    // 初始化聚焦点相关参数
+    camera_.focus_point = glm::vec3(0.0f);            // 默认聚焦在原点
+    camera_.has_focus_point = true;                   // 默认启用聚焦点
+    camera_.focus_distance = 3.0f;                    // 默认聚焦距离
+    camera_.min_focus_distance = 0.5f;                // 最小聚焦距离
+    camera_.max_focus_distance = 100.0f;              // 最大聚焦距离
 }
 
 // Main loop
@@ -322,10 +329,25 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
         
         if (camera_rotation_mode_)
         {
+            // 计算当前到聚焦点的距离
+            float current_distance = camera_.has_focus_point ? 
+                glm::length(camera_.position - camera_.focus_point) : 
+                camera_.focus_distance;
+            
+            // 根据距离计算灵敏度缩放因子
+            float distance_scale = glm::clamp(
+                current_distance / camera_.focus_distance,
+                camera_.min_focus_distance / camera_.focus_distance,
+                camera_.max_focus_distance / camera_.focus_distance
+            );
+            
+            // 应用距离缩放
+            float sensitivity_scale = 1.0f / distance_scale;
+            
             // 使用基于时间的平滑插值
-            float smooth_factor = 0.1f; // 平滑系数，值越小越平滑
-            float target_x_offset = x_offset * camera_.mouse_sensitivity;
-            float target_y_offset = y_offset * camera_.mouse_sensitivity;
+            float smooth_factor = 0.1f;
+            float target_x_offset = x_offset * camera_.mouse_sensitivity * sensitivity_scale;
+            float target_y_offset = y_offset * camera_.mouse_sensitivity * sensitivity_scale;
             
             // 应用平滑插值
             x_offset = target_x_offset * smooth_factor;
@@ -353,12 +375,24 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
         
         if (camera_pan_mode_)
         {
-            float pan_speed_multiplier = 0.005f;
-            float smooth_factor = 0.1f; // 平滑系数
+            // 计算当前到聚焦点的距离
+            float current_distance = camera_.has_focus_point ? 
+                glm::length(camera_.position - camera_.focus_point) : 
+                camera_.focus_distance;
             
-            // 计算目标移动量
-            float target_x_offset = x_offset * camera_.movement_speed * pan_speed_multiplier;
-            float target_y_offset = y_offset * camera_.movement_speed * pan_speed_multiplier;
+            // 根据距离计算灵敏度缩放因子
+            float distance_scale = glm::clamp(
+                current_distance / camera_.focus_distance,
+                camera_.min_focus_distance / camera_.focus_distance,
+                camera_.max_focus_distance / camera_.focus_distance
+            );
+            
+            float pan_speed_multiplier = 0.005f;
+            float smooth_factor = 0.1f;
+            
+            // 计算目标移动量（考虑距离缩放）
+            float target_x_offset = x_offset * camera_.movement_speed * pan_speed_multiplier / distance_scale;
+            float target_y_offset = y_offset * camera_.movement_speed * pan_speed_multiplier / distance_scale;
             
             // 应用平滑插值
             float smooth_x_offset = target_x_offset * smooth_factor;
@@ -1337,4 +1371,25 @@ void VulkanEngine::TestVraFunctions()
     // submit_info.pCommandBuffers = &command_buffer;
     // vkQueueSubmit(vkb_device_.get_queue(vkb::QueueType::graphics).value(), 1, &submit_info, VK_NULL_HANDLE);
     // vkQueueWaitIdle(vkb_device_.get_queue(vkb::QueueType::graphics).value());
+}
+
+// 添加聚焦到物体的函数
+void VulkanEngine::FocusOnObject(const glm::vec3& object_position, float target_distance)
+{
+    camera_.focus_point = object_position;
+    camera_.has_focus_point = true;
+    
+    // 计算相机应该移动到的位置
+    glm::vec3 direction = glm::normalize(camera_.position - object_position);
+    camera_.position = object_position + direction * target_distance;
+    
+    // 更新相机朝向
+    camera_.front = glm::normalize(object_position - camera_.position);
+    camera_.right = glm::normalize(glm::cross(camera_.front, camera_.world_up));
+    camera_.up = glm::normalize(glm::cross(camera_.right, camera_.front));
+    
+    // 更新yaw和pitch
+    glm::vec3 front = camera_.front;
+    camera_.pitch = glm::degrees(asin(front.y));
+    camera_.yaw = glm::degrees(atan2(front.z, front.x));
 }

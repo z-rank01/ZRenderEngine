@@ -88,6 +88,13 @@ struct SCamera
     float movement_speed;
     float mouse_sensitivity;
     float zoom;
+    
+    // 聚焦点相关
+    glm::vec3 focus_point;
+    bool has_focus_point;
+    float focus_distance;
+    float min_focus_distance;
+    float max_focus_distance;
 
     SCamera(glm::vec3 pos = glm::vec3(0.0f, 0.0f, 0.0f),
             glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f),
@@ -233,4 +240,7 @@ private:
     void ProcessInput(SDL_Event& event);
     void ProcessKeyboardInput(float delta_time);
     void ProcessMouseScroll(float yoffset);
+
+    // 聚焦到物体的函数
+    void FocusOnObject(const glm::vec3& object_position, float target_distance);
 };
