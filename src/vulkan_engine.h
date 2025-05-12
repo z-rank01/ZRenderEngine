@@ -232,15 +232,9 @@ private:
     void UpdateUniformBuffer(uint32_t current_frame_index);
     // -------------------------
 
-    // --- VRA Test Functions ---
-    void TestVraFunctions();
-    // --------------------------
-
-    // 相机控制函数
+    // --- camera control ---
     void ProcessInput(SDL_Event& event);
     void ProcessKeyboardInput(float delta_time);
     void ProcessMouseScroll(float yoffset);
-
-    // 聚焦到物体的函数
     void FocusOnObject(const glm::vec3& object_position, float target_distance);
 };

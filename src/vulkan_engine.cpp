@@ -16,15 +16,10 @@ VulkanEngine::VulkanEngine(const SEngineConfig &config) : engine_config_(config)
     assert(instance == nullptr);
     instance = this;
 
-    mvp_matrices_ = std::vector<SMvpMatrix>(engine_config_.frame_count, {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f)});
-    camera_ = SCamera{glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f)};
-
+    // initialize SDL, vulkan, and camera
     InitializeSDL();
     InitializeVulkan();
     InitializeCamera();
-
-    // test vra functions
-    // TestVraFunctions();
 }
 
 VulkanEngine::~VulkanEngine()
@@ -179,26 +174,29 @@ void VulkanEngine::InitializeVulkan()
 
 void VulkanEngine::InitializeCamera()
 {
-    // 将相机放在一个能看到三角形的位置
-    camera_.position = glm::vec3(0.0f, 0.0f, 3.0f);   // 在z轴正方向3个单位
-    camera_.yaw = -90.0f;                             // 朝向-z方向（朝向原点）
-    camera_.pitch = 0.0f;                             // 水平视角
+    // initialize mvp matrices
+    mvp_matrices_ = std::vector<SMvpMatrix>(engine_config_.frame_count, {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f)});
+
+    // initialize camera
+    camera_.position = glm::vec3(0.0f, 0.0f, 3.0f);   // 3 units away from origin
+    camera_.yaw = -90.0f;                             // look at origin
+    camera_.pitch = 0.0f;                             // horizontal view
     camera_.movement_speed = 5.0f;
     camera_.mouse_sensitivity = 0.5f;
     camera_.zoom = 45.0f;
-    camera_.world_up = glm::vec3(0.0f, -1.0f, 0.0f);  // Vulkan中Y轴向下
+    camera_.world_up = glm::vec3(0.0f, -1.0f, 0.0f);  // Y-axis is down in Vulkan
     
-    // 初始化相机向量
-    camera_.front = glm::vec3(0.0f, 0.0f, -1.0f);     // 看向-z方向
-    camera_.right = glm::vec3(1.0f, 0.0f, 0.0f);      // 右方向为+x
-    camera_.up = glm::vec3(0.0f, -1.0f, 0.0f);        // 上方向为-y（因为Vulkan中Y轴向下）
+    // initialize camera vectors
+    camera_.front = glm::vec3(0.0f, 0.0f, -1.0f);     // look at -z direction
+    camera_.right = glm::vec3(1.0f, 0.0f, 0.0f);      // right direction is +x
+    camera_.up = glm::vec3(0.0f, -1.0f, 0.0f);        // up direction is -y (because Y-axis is down in Vulkan)
     
-    // 初始化聚焦点相关参数
-    camera_.focus_point = glm::vec3(0.0f);            // 默认聚焦在原点
-    camera_.has_focus_point = true;                   // 默认启用聚焦点
-    camera_.focus_distance = 3.0f;                    // 默认聚焦距离
-    camera_.min_focus_distance = 0.5f;                // 最小聚焦距离
-    camera_.max_focus_distance = 100.0f;              // 最大聚焦距离
+    // initialize focus point related parameters
+    camera_.focus_point = glm::vec3(0.0f);            // default focus on origin
+    camera_.has_focus_point = true;                   // default enable focus point
+    camera_.focus_distance = 3.0f;                    // default focus distance
+    camera_.min_focus_distance = 0.5f;                // minimum focus distance
+    camera_.max_focus_distance = 100.0f;              // maximum focus distance
 }
 
 // Main loop
@@ -214,12 +212,12 @@ void VulkanEngine::Run()
     // main loop
     while (engine_state_ != EWindowState::Stopped)
     {
-        // 计算帧间时间差
+        // calculate the time difference between frames
         Uint64 current_time = SDL_GetTicks();
-        delta_time = (current_time - last_time) / 1000.0f; // 转换为秒
+        delta_time = (current_time - last_time) / 1000.0f; // convert to seconds
         last_time = current_time;
 
-        // Handle events on queue
+        // handle events on queue
         while (SDL_PollEvent(&event))
         {
             ProcessInput(event);
@@ -243,7 +241,7 @@ void VulkanEngine::Run()
             }
         }
 
-        // 处理键盘输入更新相机
+        // process keyboard input to update camera
         ProcessKeyboardInput(delta_time);
 
         // do not draw if we are minimized
@@ -260,7 +258,7 @@ void VulkanEngine::Run()
             ResizeSwapChain();
         }
 
-        // 更新视图矩阵
+        // update the view matrix
         UpdateUniformBuffer(frame_index_);
 
         // render a frame
@@ -294,7 +292,7 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
         if (event.button.button == SDL_BUTTON_RIGHT) 
         {
             camera_rotation_mode_ = true;
-            // 保存当前鼠标位置
+            // save the current mouse position
             last_x_ = mouse_x;
             last_y_ = mouse_y;
         }
@@ -329,58 +327,58 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
         
         if (camera_rotation_mode_)
         {
-            // 计算当前到聚焦点的距离
+            // calculate the current distance to the focus point
             float current_distance = camera_.has_focus_point ? 
                 glm::length(camera_.position - camera_.focus_point) : 
                 camera_.focus_distance;
             
-            // 根据距离计算灵敏度缩放因子
+            // calculate the distance scale based on the distance
             float distance_scale = glm::clamp(
                 current_distance / camera_.focus_distance,
                 camera_.min_focus_distance / camera_.focus_distance,
                 camera_.max_focus_distance / camera_.focus_distance
             );
             
-            // 应用距离缩放
+            // apply the distance scale
             float sensitivity_scale = 1.0f / distance_scale;
             
-            // 使用基于时间的平滑插值
+            // use the smooth interpolation based on time
             float smooth_factor = 0.1f;
             float target_x_offset = x_offset * camera_.mouse_sensitivity * sensitivity_scale;
             float target_y_offset = y_offset * camera_.mouse_sensitivity * sensitivity_scale;
             
-            // 应用平滑插值
+            // apply the smooth interpolation
             x_offset = target_x_offset * smooth_factor;
             y_offset = target_y_offset * smooth_factor;
 
-            // 更新yaw和pitch
+            // update the yaw and pitch
             camera_.yaw += x_offset;
             camera_.pitch += y_offset;
 
-            // 限制pitch角度
+            // limit the pitch angle
             if (camera_.pitch > 89.0f) camera_.pitch = 89.0f;
             if (camera_.pitch < -89.0f) camera_.pitch = -89.0f;
 
-            // 计算新的相机方向
+            // calculate the new camera direction
             glm::vec3 direction;
             direction.x = cos(glm::radians(camera_.yaw)) * cos(glm::radians(camera_.pitch));
             direction.y = sin(glm::radians(camera_.pitch));
             direction.z = sin(glm::radians(camera_.yaw)) * cos(glm::radians(camera_.pitch));
             camera_.front = glm::normalize(direction);
 
-            // 更新right和up向量
+            // update the right and up vectors
             camera_.right = glm::normalize(glm::cross(camera_.front, camera_.world_up));
             camera_.up = glm::normalize(glm::cross(camera_.right, camera_.front));
         }
         
         if (camera_pan_mode_)
         {
-            // 计算当前到聚焦点的距离
+            // calculate the current distance to the focus point
             float current_distance = camera_.has_focus_point ? 
                 glm::length(camera_.position - camera_.focus_point) : 
                 camera_.focus_distance;
             
-            // 根据距离计算灵敏度缩放因子
+            // calculate the distance scale based on the distance
             float distance_scale = glm::clamp(
                 current_distance / camera_.focus_distance,
                 camera_.min_focus_distance / camera_.focus_distance,
@@ -390,15 +388,15 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
             float pan_speed_multiplier = 0.005f;
             float smooth_factor = 0.1f;
             
-            // 计算目标移动量（考虑距离缩放）
+            // calculate the target movement amount (considering the distance scale)
             float target_x_offset = x_offset * camera_.movement_speed * pan_speed_multiplier / distance_scale;
             float target_y_offset = y_offset * camera_.movement_speed * pan_speed_multiplier / distance_scale;
             
-            // 应用平滑插值
+            // apply the smooth interpolation
             float smooth_x_offset = target_x_offset * smooth_factor;
             float smooth_y_offset = target_y_offset * smooth_factor;
             
-            // 应用移动
+            // apply the movement
             camera_.position.x += smooth_x_offset;
             camera_.position.y += smooth_y_offset;
         }
@@ -433,41 +431,41 @@ void VulkanEngine::ProcessKeyboardInput(float delta_time)
     
     float velocity = camera_.movement_speed * delta_time;
     
-    // 在屏幕空间中移动
+    // move in the screen space
     glm::vec3 movement(0.0f);
     
-    // 上下移动（Y轴）
+    // move up (Y-axis)
     if (keyboard_state[SDL_SCANCODE_W] || keyboard_state[SDL_SCANCODE_UP]) 
     {
-        movement.y += velocity; // 向上移动（Y轴正方向）
+        movement.y += velocity; // move up (Y-axis positive direction)
     }
     if (keyboard_state[SDL_SCANCODE_S] || keyboard_state[SDL_SCANCODE_DOWN]) 
     {
-        movement.y -= velocity; // 向下移动
+        movement.y -= velocity; // move down (Y-axis negative direction)
     }
     
-    // 左右移动（X轴）
+    // move left (l-axis)t (X-axis)
     if (keyboard_state[SDL_SCANCODE_A] || keyboard_state[SDL_SCANCODE_LEFT]) 
     {
-        movement.x -= velocity; // 向左移动（X轴负方向）
+        movement.x -= velocity; // move left (l-axis negative direction)X-axis negative direction)
     }
     if (keyboard_state[SDL_SCANCODE_D] || keyboard_state[SDL_SCANCODE_RIGHT]) 
     {
-        movement.x += velocity; // 向右移动（X轴正方向）
+        movement.x += velocity; // move right (X-axis positive direction)
     }
     
-    // 前后移动（Z轴）
+    // move front (Z-axis)
     if (keyboard_state[SDL_SCANCODE_Q]) 
     {
-        movement.z += velocity; // 向后移动
+        movement.z += velocity; // move back (Z-axis negative direction)
     }
     if (keyboard_state[SDL_SCANCODE_E]) 
     {
-        movement.z -= velocity; // 向前移动
+        movement.z -= velocity; // move front (Z-axis positive direction)
     }
     
-    // 应用平滑移动
-    float smooth_factor = 0.1f; // 平滑系数
+    // apply the smooth movement
+    float smooth_factor = 0.1f; // smooth factor
     camera_.position += movement * smooth_factor;
 }
 
@@ -1211,184 +1209,59 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
 
 void VulkanEngine::UpdateUniformBuffer(uint32_t current_frame_index)
 {
-    // 更新模型矩阵
+    // update the model matrix
     mvp_matrices_[current_frame_index].model = glm::mat4(1.0f);
     
-    // 更新视图矩阵
+    // update the view matrix
     mvp_matrices_[current_frame_index].view = glm::lookAt(
-        camera_.position,                 // 相机位置
-        camera_.position + camera_.front, // 相机看向的点 (当前位置 + 前方向量)
-        camera_.up                        // 相机上方向 (通过UpdateCameraVectors计算得到)
+        camera_.position,                 // camera position
+        camera_.position + camera_.front, // camera looking at point (current position + front direction vector)
+        camera_.up                        // camera up direction (calculated by UpdateCameraVectors)
     );
 
-    // 更新投影矩阵
+    // update the projection matrix
     mvp_matrices_[current_frame_index].projection = glm::perspective(
         glm::radians(camera_.zoom),            // FOV
-        swapchain_config_.target_swap_extent_.width / (float)swapchain_config_.target_swap_extent_.height, // 宽高比
-        0.1f,                                  // 近平面
-        100.0f                                 // 远平面
+        swapchain_config_.target_swap_extent_.width / (float)swapchain_config_.target_swap_extent_.height, // aspect ratio
+        0.1f,                                  // near plane
+        100.0f                                 // far plane
     );
     
-    // Vulkan的NDC坐标系Y轴向下，需要翻转Y轴
+    // reverse the Y-axis in Vulkan's NDC coordinate system
     mvp_matrices_[current_frame_index].projection[1][1] *= -1;
     
-    // 获取当前帧在大uniform buffer中的偏移量
+    // get the offset of the current frame in the uniform buffer
     auto offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::CPU_GPU_Frequently, uniform_buffer_id_[current_frame_index]);
     
-    // 如果我们还没有映射内存，先映射它（只在首次调用时执行）
+    // if the memory is not mapped, map it (only executed when called for the first time)
     if (uniform_buffer_mapped_data_ == nullptr) {
         vmaMapMemory(vma_allocator_, uniform_buffer_allocation_, &uniform_buffer_mapped_data_);
     }
     
-    // 计算当前帧数据在映射内存中的位置，并只更新当前帧的数据
+    // calculate the position of the current frame data in the mapped memory, and only update the data of the current frame
     uint8_t* data_location = static_cast<uint8_t*>(uniform_buffer_mapped_data_) + offset;
     memcpy(data_location, &mvp_matrices_[current_frame_index], sizeof(SMvpMatrix));
     
-    // 如果使用的是非HOST_COHERENT内存，需要显式刷新
+    // if the memory is not HOST_COHERENT, flush it explicitly
     vmaFlushAllocation(vma_allocator_, uniform_buffer_allocation_, offset, sizeof(SMvpMatrix));
 }
 
-/// --------------------------------
-/// test vra functions
-/// --------------------------------
-
-void VulkanEngine::TestVraFunctions()
-{
-    struct Vertex
-    {
-        glm::vec2 pos;
-        glm::vec3 color;
-    };
-
-    // raw data
-    const std::vector<Vertex> vertices =
-        {
-            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},    // 顶点 - 红色
-            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},     // 右下 - 绿色
-            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}     // 左下 - 蓝色
-        };
-    const std::vector<uint16_t> indices =
-        {
-            0, 1, 2  // 逆时针顺序
-        };
-    vra::VraRawData vertex_raw_data{
-        vertices.data(),                 // pData_
-        vertices.size() * sizeof(Vertex) // size_
-    };
-    vra::VraRawData index_raw_data{
-        indices.data(),                   // pData_
-        indices.size() * sizeof(uint16_t) // size_
-    };
-
-    // vertex buffer create info
-    VkBufferCreateInfo vertex_buffer_create_info = {};
-    vertex_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    vertex_buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    vertex_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vra::VraDataDesc vertex_data_desc{
-        vra::VraDataMemoryPattern::GPU_Only,
-        vra::VraDataUpdateRate::RarelyOrNever,
-        vertex_buffer_create_info};
-
-    // index buffer create info
-    VkBufferCreateInfo index_buffer_create_info = {};
-    index_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    index_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vra::VraDataDesc index_data_desc{
-        vra::VraDataMemoryPattern::GPU_Only,
-        vra::VraDataUpdateRate::RarelyOrNever,
-        index_buffer_create_info};
-
-    // staging buffer create info
-    VkBufferCreateInfo staging_buffer_create_info = {};
-    staging_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    staging_buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    staging_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vra::VraDataDesc staging_data_desc{
-        vra::VraDataMemoryPattern::CPU_GPU,
-        vra::VraDataUpdateRate::RarelyOrNever,
-        staging_buffer_create_info};
-
-    // collect and group
-    vra_data_batcher_->Collect(vertex_data_desc, vertex_raw_data, vertex_data_id_);
-    vra_data_batcher_->Collect(index_data_desc, index_raw_data, index_data_id_);
-    vra_data_batcher_->Collect(staging_data_desc, vertex_raw_data, staging_vertex_data_id_);
-    vra_data_batcher_->Collect(staging_data_desc, index_raw_data, staging_index_data_id_);
-    vra_data_batcher_->Batch();
-
-    // generate vertex and index buffers and allocate memory
-    auto group_data = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::GPU_Only);
-    if (!group_data || group_data->offsets.size() == 0)
-        throw std::runtime_error("Failed to get group data");
-    const auto &local_buffer_create_info = group_data->data_desc.GetBufferCreateInfo();
-
-    VmaAllocationCreateInfo alloc_info = {};
-    alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::GPU_Only);
-    if (vmaCreateBuffer(vma_allocator_, &local_buffer_create_info, &alloc_info, &local_buffer_, &local_buffer_allocation_, &local_buffer_allocation_info_) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create buffer");
-
-    // generate staging buffer and copy data
-    auto staging_group_data = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::CPU_GPU_Rarely);
-    if (!staging_group_data || staging_group_data->offsets.size() == 0)
-        throw std::runtime_error("Failed to get staging group data");
-    const auto &host_buffer_create_info = staging_group_data->data_desc.GetBufferCreateInfo();
-
-    VmaAllocationCreateInfo staging_alloc_info = {};
-    staging_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    staging_alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::CPU_GPU_Rarely);
-    if (vmaCreateBuffer(vma_allocator_, &host_buffer_create_info, &staging_alloc_info, &staging_buffer_, &staging_buffer_allocation_, &staging_buffer_allocation_info_) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create staging buffer");
-
-    // copy data to staging buffer
-    void *mapped_data = nullptr;
-    vmaMapMemory(vma_allocator_, staging_buffer_allocation_, &mapped_data);
-    memcpy(mapped_data, staging_group_data->consolidated_data.data(), staging_group_data->consolidated_data.size());
-    vmaUnmapMemory(vma_allocator_, staging_buffer_allocation_);
-
-    // SVulkanCommandBufferAllocationConfig config;
-    // config.command_buffer_count = 1;
-    // config.command_buffer_level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    // vkCommandBufferHelper_->AllocateCommandBuffer(config, "copy_command_buffer");
-
-    // VkCommandBuffer command_buffer = vkCommandBufferHelper_->GetCommandBuffer("copy_command_buffer");
-    // VkCommandBufferBeginInfo begin_info{};
-    // begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    // begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    // vkBeginCommandBuffer(command_buffer, &begin_info);
-
-    // VkBufferCopy buffer_copy_info{};
-    // buffer_copy_info.srcOffset = 0;
-    // buffer_copy_info.dstOffset = 0;
-    // buffer_copy_info.size = host_buffer_create_info.size;
-    // vkCmdCopyBuffer(command_buffer, staging_buffer, buffer, 1, &buffer_copy_info);
-    // vkEndCommandBuffer(command_buffer);
-
-    // VkSubmitInfo submit_info{};
-    // submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    // submit_info.commandBufferCount = 1;
-    // submit_info.pCommandBuffers = &command_buffer;
-    // vkQueueSubmit(vkb_device_.get_queue(vkb::QueueType::graphics).value(), 1, &submit_info, VK_NULL_HANDLE);
-    // vkQueueWaitIdle(vkb_device_.get_queue(vkb::QueueType::graphics).value());
-}
-
-// 添加聚焦到物体的函数
+// add a function to focus on an object
 void VulkanEngine::FocusOnObject(const glm::vec3& object_position, float target_distance)
 {
     camera_.focus_point = object_position;
     camera_.has_focus_point = true;
     
-    // 计算相机应该移动到的位置
+    // calculate the position the camera should move to
     glm::vec3 direction = glm::normalize(camera_.position - object_position);
     camera_.position = object_position + direction * target_distance;
     
-    // 更新相机朝向
+    // update the camera direction
     camera_.front = glm::normalize(object_position - camera_.position);
     camera_.right = glm::normalize(glm::cross(camera_.front, camera_.world_up));
     camera_.up = glm::normalize(glm::cross(camera_.right, camera_.front));
     
-    // 更新yaw和pitch
+    // update the yaw and pitch
     glm::vec3 front = camera_.front;
     camera_.pitch = glm::degrees(asin(front.y));
     camera_.yaw = glm::degrees(atan2(front.z, front.x));
