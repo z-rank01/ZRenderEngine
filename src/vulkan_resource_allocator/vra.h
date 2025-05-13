@@ -214,19 +214,6 @@ namespace vra
             std::function<bool(const VraDataDesc &)> predicate,
             std::function<void(ResourceId id, VraBatchHandle &batch, const VraDataDesc &data_desc, const VraRawData &data)> batch_method);
 
-        /// @brief get batch index
-        /// @param batch_id batch id
-        /// @return batch index
-        size_t GetBatchIndex(const BatchId& batch_id) const
-        {
-            auto it = batch_id_to_index_map_.find(batch_id);
-            if (it != batch_id_to_index_map_.end())
-            {
-                return it->second;
-            }
-            return std::numeric_limits<size_t>::max();
-        }
-
         /// @brief get batch data
         /// @param batch_id batch id
         /// @return batch data
@@ -254,10 +241,27 @@ namespace vra
             return ids;
         }
 
+        /// @brief a helper function to get resource offset(can also get from offset map in batch handle)
+        /// @param batch_id batch id
+        /// @param id resource id
+        /// @return resource offset
         size_t GetResourceOffset(BatchId batch_id, ResourceId id) const
         {
-            return GetBatch(batch_id)->offsets.at(id);
+            const auto *batch = GetBatch(batch_id);
+            if (batch)
+            {
+                auto it = batch->offsets.find(id);
+                if (it != batch->offsets.end())
+                {
+                    return it->second;
+                }
+            }
+            // Handle error: batch_id or resource_id not found
+            std::cerr << "Error: Resource offset not found for Batch ID '" << batch_id << "' and Resource ID '" << id << "'" << std::endl;
+            return std::numeric_limits<size_t>::max(); // Indicate invalid offset
         }
+
+        // --- Suggest Memory Flags ---
         
         /// @brief get suggest memory flags for vulkan
         /// @param batch_id batch id
