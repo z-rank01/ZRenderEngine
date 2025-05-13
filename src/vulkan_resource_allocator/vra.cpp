@@ -230,8 +230,6 @@ namespace vra
     {
         // check buffer conditions
         if (desc.GetBufferCreateInfo().usage == 0 ||
-            buffer_desc_map_.size() >= MAX_BUFFER_COUNT ||
-            buffer_desc_map_.count(id) ||
             data.pData_ == nullptr ||
             data.size_ == 0)
         {
@@ -239,8 +237,12 @@ namespace vra
         }
 
         // store buffer data
-        buffer_desc_map_[id] = desc;
-        buffer_data_map_[id] = data;
+        id = resource_id_generator_.GenerateID();
+        VraDataHandle data_handle;
+        data_handle.id = id;
+        data_handle.data_desc = desc;
+        data_handle.data = data;
+        data_handles_.push_back(data_handle);
 
         return true;
     }
@@ -337,8 +339,7 @@ namespace vra
 
     void VraDataBatcher::Clear()
     {
-        buffer_desc_map_.clear();
-        buffer_data_map_.clear();
+        data_handles_.clear();
         ClearBatch();
     }
 
@@ -348,13 +349,10 @@ namespace vra
 
         // Optional: Estimate sizes and reserve capacity
         std::vector<size_t> estimated_batch_sizes(registered_batchers_.size(), 0);
-        for (const auto &buffer_pair : buffer_data_map_)
+        for (const auto &data_handle : data_handles_)
         {
-            const VraRawData &raw_data = buffer_pair.second;
-            auto desc_it = buffer_desc_map_.find(buffer_pair.first);
-            if (desc_it == buffer_desc_map_.end())
-                continue;
-            const VraDataDesc &desc = desc_it->second;
+            const VraRawData &raw_data = data_handle.data;
+            const VraDataDesc &desc = data_handle.data_desc;
 
             for (size_t i = 0; i < registered_batchers_.size(); ++i)
             {
@@ -377,14 +375,11 @@ namespace vra
         }
 
         // Batch data
-        for (const auto &pair : buffer_data_map_)
+        for (const auto &data_handle : data_handles_)
         {
-            ResourceId id = pair.first;
-            const VraRawData &raw_data = pair.second;
-            auto desc_it = buffer_desc_map_.find(id);
-            if (desc_it == buffer_desc_map_.end())
-                continue;
-            const VraDataDesc &desc = desc_it->second;
+            ResourceId id = data_handle.id;
+            const VraRawData &raw_data = data_handle.data;
+            const VraDataDesc &desc = data_handle.data_desc;
 
             for (auto &strategy : registered_batchers_)
             {

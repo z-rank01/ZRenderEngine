@@ -52,7 +52,7 @@ bool VulkanCommandBufferHelper::AllocateCommandBuffer(const SVulkanCommandBuffer
     if (command_buffer_map_.find(id) != command_buffer_map_.end())
     {
         Logger::LogError("Command buffer with ID " + id + " already exists.");
-        return command_buffer_map_[id];
+        return false;
     }
 
     // allocate command buffer

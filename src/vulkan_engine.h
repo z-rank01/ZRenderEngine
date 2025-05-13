@@ -166,10 +166,10 @@ private:
     std::unique_ptr<vra::VraDataBatcher> vra_data_batcher_;
 
     // TODO: change to dynamic
-    vra::ResourceId vertex_data_id_ = 0;
-    vra::ResourceId index_data_id_ = 1;
-    vra::ResourceId staging_vertex_data_id_ = 2;
-    vra::ResourceId staging_index_data_id_ = 3;
+    vra::ResourceId vertex_data_id_;
+    vra::ResourceId index_data_id_;
+    vra::ResourceId staging_vertex_data_id_;
+    vra::ResourceId staging_index_data_id_;
     std::vector<vra::ResourceId> uniform_buffer_id_;
 
 

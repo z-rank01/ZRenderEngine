@@ -18,8 +18,8 @@ VulkanEngine::VulkanEngine(const SEngineConfig &config) : engine_config_(config)
 
     // initialize SDL, vulkan, and camera
     InitializeSDL();
-    InitializeVulkan();
     InitializeCamera();
+    InitializeVulkan();
 }
 
 VulkanEngine::~VulkanEngine()
@@ -776,7 +776,7 @@ bool VulkanEngine::CreateUniformBuffers()
         vra::VraRawData raw_data{
             &current_mvp_matrix,
             sizeof(SMvpMatrix)};
-        uniform_buffer_id_.push_back(FRAME_INDEX_TO_UNIFORM_BUFFER_ID(i));
+        uniform_buffer_id_.push_back(0);
         vra_data_batcher_->Collect(data_desc, std::move(raw_data), uniform_buffer_id_.back());
     }
 

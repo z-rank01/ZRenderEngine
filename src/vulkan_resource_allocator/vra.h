@@ -14,6 +14,8 @@
 #include <string>     // Required for std::string
 #include <map>        // Required for std::map
 #include <iostream>
+#include <atomic>
+#include <memory>
 
 namespace vra
 {
@@ -114,6 +116,29 @@ namespace vra
         VkBufferCreateInfo buffer_create_info_;
     };
 
+    class ResourceIDGenerator
+    {
+    public:
+        ResourceIDGenerator()
+        {
+            // Initialize the atomic counter via unique_ptr
+            resource_id_counter_ = std::make_unique<std::atomic<ResourceId>>(0);
+        }
+        ~ResourceIDGenerator() = default;
+
+        /// @brief generate resource id
+        /// @return resource id
+        ResourceId GenerateID()
+        {
+            // Access the atomic counter through the unique_ptr
+            return resource_id_counter_->fetch_add(1);
+        }
+
+    private:
+        // Use unique_ptr to store the atomic counter
+        std::unique_ptr<std::atomic<ResourceId>> resource_id_counter_;
+    };
+
     class VraDataBatcher
     {
         /// @brief VraBatchHandle is a struct that contains a vector of uint8_t, an unordered_map of ResourceId and size_t, and a VraDataDesc.
@@ -146,6 +171,13 @@ namespace vra
                                const VraRawData &data)>
                 batch_method;
             VraBatchHandle batch_handle; // Each strategy instance owns its data
+        };
+
+        struct VraDataHandle
+        {
+            ResourceId id;
+            VraDataDesc data_desc;
+            VraRawData data;
         };
 
     public:
@@ -245,11 +277,13 @@ namespace vra
 
         // --- Buffer specific storage ---
         
-        std::unordered_map<ResourceId, VraDataDesc> buffer_desc_map_;   // TODO: Optimize to use vector
-        std::unordered_map<ResourceId, VraRawData> buffer_data_map_;    // TODO: Optimize to use vector
+        // std::unordered_map<ResourceId, VraDataDesc> buffer_desc_map_;   // TODO: Optimize to use vector
+        // std::unordered_map<ResourceId, VraRawData> buffer_data_map_;    // TODO: Optimize to use vector
+        std::vector<VraDataHandle> data_handles_;
 
-        // --- Limits ---
+        // --- Resource Id and Limits ---
         
+        ResourceIDGenerator resource_id_generator_;
         static constexpr size_t MAX_BUFFER_COUNT = 4096;
 
         // --- Registered Group Strategies ---
