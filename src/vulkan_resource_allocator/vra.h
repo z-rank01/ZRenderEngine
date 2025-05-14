@@ -142,8 +142,9 @@ namespace vra
 
     class VraDataBatcher
     {
+    public:
         /// @brief VraBatchHandle is a struct that contains a vector of uint8_t, an unordered_map of ResourceId and size_t, and a VraDataDesc.
-        /// @brief VraBatchHandle is used to store batch information like consolidated data, offsets, and data description.
+        /// @brief VraBatchHandle is the screeshot result of batching current collected data, which means that the batching result will not be stored internally.
         struct VraBatchHandle
         {
             bool initialized = false;
@@ -160,28 +161,7 @@ namespace vra
             }
         };
 
-        /// @brief VraBatcher is a struct that contains a batch id, a predicate, and a batch method.
-        /// @brief VraBatcher is used to batch buffer data by memory pattern and update rate according to the predicate with the batch method
-        struct VraBatcher
-        {
-            const BatchId batch_id;
-            std::function<bool(const VraDataDesc &)> predicate;
-            std::function<void(ResourceId id,
-                               VraBatchHandle &batch,
-                               const VraDataDesc &data_desc,
-                               const VraRawData &data)>
-                batch_method;
-            VraBatchHandle batch_handle; // Each strategy instance owns its data
-        };
 
-        struct VraDataHandle
-        {
-            ResourceId id;
-            VraDataDesc data_desc;
-            VraRawData data;
-        };
-
-    public:
         VraDataBatcher() = delete;
         VraDataBatcher(VkPhysicalDevice physical_device) : physical_device_handle_(physical_device) 
         {
@@ -199,12 +179,16 @@ namespace vra
         bool Collect(VraDataDesc data_desc, VraRawData data, ResourceId& id);
 
         /// @brief processes all collected buffer data, grouping them by memory pattern
-        void Batch();
+        /// @return a map of batch id and batch handle
+        /// @note 1.this function is not thread safe.
+        /// @note 2.batch result as a screenshot will be flushed and cleared after batching.
+        /// @note 3.collected data still remains, no need to collect again.
+        std::map<BatchId, VraBatchHandle> Batch();
 
         /// @brief clear all collected data and grouped data
         void Clear();
 
-        // --- Data Access ---
+        // --- Batcher Registration ---
 
         /// @brief register buffer batch strategy
         /// @param batch_id register batch id
@@ -215,86 +199,59 @@ namespace vra
             std::function<bool(const VraDataDesc &)> predicate,
             std::function<void(ResourceId id, VraBatchHandle &batch, const VraDataDesc &data_desc, const VraRawData &data)> batch_method);
 
-        /// @brief get batch data
-        /// @param batch_id batch id
-        /// @return batch data
-        const VraBatchHandle* GetBatch(const BatchId& batch_id) const
-        {
-            auto it = batch_id_to_index_map_.find(batch_id);
-            if (it != batch_id_to_index_map_.end())
-            {
-                if (it->second < registered_batchers_.size())
-                { // Boundary check
-                    return &registered_batchers_[it->second].batch_handle;
-                }
-            }
-            return nullptr;
-        }
-        
-        /// @brief get all batch ids
-        /// @return all batch ids
-        std::vector<BatchId> GetAllBatchIDs() const 
-        { 
-            std::vector<BatchId> ids;
-            for (const auto& batch : registered_batchers_) {
-                ids.push_back(batch.batch_id);
-            }
-            return ids;
-        }
-
-        /// @brief a helper function to get resource offset(can also get from offset map in batch handle)
-        /// @param batch_id batch id
-        /// @param id resource id
-        /// @return resource offset
-        size_t GetResourceOffset(BatchId batch_id, ResourceId id) const
-        {
-            const auto *batch = GetBatch(batch_id);
-            if (batch)
-            {
-                auto it = batch->offsets.find(id);
-                if (it != batch->offsets.end())
-                {
-                    return it->second;
-                }
-            }
-            // Handle error: batch_id or resource_id not found
-            std::cerr << "Error: Resource offset not found for Batch ID '" << batch_id << "' and Resource ID '" << id << "'" << std::endl;
-            return std::numeric_limits<size_t>::max(); // Indicate invalid offset
-        }
-
-        // --- Suggest Memory Flags ---
+        // --- Memory Flags Suggestion ---
         
         /// @brief get suggest memory flags for vulkan
         /// @param batch_id batch id
         /// @return suggest memory flags
-        VkMemoryPropertyFlags GetSuggestMemoryFlags(BatchId batch_id);
+        VkMemoryPropertyFlags GetSuggestMemoryFlags(VraDataMemoryPattern data_pattern, VraDataUpdateRate data_update_rate);
 
         /// @brief get suggest vma memory flags for vulkan
         /// @param batch_id batch id
         /// @return suggest vma memory flags
-        VmaAllocationCreateFlags GetSuggestVmaMemoryFlags(BatchId batch_id);
+        VmaAllocationCreateFlags GetSuggestVmaMemoryFlags(VraDataMemoryPattern data_pattern, VraDataUpdateRate data_update_rate);
 
     private :
+        /// @brief VraBatcher is a struct that contains a batch id, a predicate, and a batch method.
+        /// @brief VraBatcher is used to batch buffer data by memory pattern and update rate according to the predicate with the batch method
+        struct VraBatcher
+        {
+            const BatchId batch_id;
+            std::function<bool(const VraDataDesc &)> predicate;
+            std::function<void(ResourceId id,
+                               VraBatchHandle &batch,
+                               const VraDataDesc &data_desc,
+                               const VraRawData &data)>
+                batch_method;
+            VraBatchHandle batch_handle; // Each strategy instance owns its data
+        };
+
+        /// @brief VraDataHandle is a struct that contains a resource id, a data description, and a raw data.
+        /// @brief VraDataHandle is used to store data description and raw data pointer, as data input.
+        struct VraDataHandle
+        {
+            ResourceId id;
+            VraDataDesc data_desc;
+            VraRawData data;
+        };
+
         // --- Vulkan Native Objects Cache ---
         
         VkPhysicalDevice physical_device_handle_;
         VkPhysicalDeviceProperties physical_device_properties_;
 
         // --- Buffer specific storage ---
-        
-        // std::unordered_map<ResourceId, VraDataDesc> buffer_desc_map_;   // TODO: Optimize to use vector
-        // std::unordered_map<ResourceId, VraRawData> buffer_data_map_;    // TODO: Optimize to use vector
+
+        static constexpr size_t MAX_BUFFER_COUNT = 4096;
         std::vector<VraDataHandle> data_handles_;
 
-        // --- Resource Id and Limits ---
+        // --- Resource Id ---
         
         ResourceIDGenerator resource_id_generator_;
-        static constexpr size_t MAX_BUFFER_COUNT = 4096;
 
         // --- Registered Group Strategies ---
 
-        std::vector<VraBatcher> registered_batchers_;
-        std::map<BatchId, size_t> batch_id_to_index_map_;
+        std::map<BatchId, VraBatcher> registered_batchers_;
 
         /// @brief clear grouped buffer data
         void ClearBatch();

@@ -25,16 +25,12 @@ namespace vra
         std::function<bool(const VraDataDesc &)> predicate,
         std::function<void(ResourceId, VraBatchHandle &, const VraDataDesc &, const VraRawData &)> batch_action)
     {
-        if (batch_id_to_index_map_.count(batch_id))
+        if (registered_batchers_.count(batch_id))
         {
-            // Optionally throw an error or log a warning
-            // For now, let's overwrite or ignore if names clash, but unique names are better.
-            // For simplicity, we'll assume names are unique for now or the first registration wins.
-            // A more robust system might throw or return a bool.
+            std::cerr << "Batch id " << batch_id << " already registered" << std::endl;
             return;
         }
-        registered_batchers_.push_back(VraBatcher{std::move(batch_id), std::move(predicate), std::move(batch_action)});
-        batch_id_to_index_map_[registered_batchers_.back().batch_id] = registered_batchers_.size() - 1;
+        registered_batchers_.emplace(batch_id, VraBatcher{batch_id, std::move(predicate), std::move(batch_action)});
     }
 
     void VraDataBatcher::RegisterDefaultBatcher()
@@ -247,34 +243,35 @@ namespace vra
         return true;
     }
 
-    void VraDataBatcher::Batch()
+    std::map<BatchId, VraDataBatcher::VraBatchHandle> VraDataBatcher::Batch()
     {
         ClearBatch();
 
         // Optional: Estimate sizes and reserve capacity
-        std::vector<size_t> estimated_batch_sizes(registered_batchers_.size(), 0);
         for (const auto &data_handle : data_handles_)
         {
             const VraRawData &raw_data = data_handle.data;
             const VraDataDesc &desc = data_handle.data_desc;
 
-            for (size_t i = 0; i < registered_batchers_.size(); ++i)
+            for (auto &p : registered_batchers_)
             {
-                if (registered_batchers_[i].predicate(desc))
+                auto &batcher = p.second;
+                if (batcher.predicate(desc))
                 {
                     // Basic estimation, doesn't account for padding in dynamic batches yet.
                     // For a more accurate estimation, the predicate or a dedicated estimation function
-                    // in the strategy would be needed if padding is significant.
-                    estimated_batch_sizes[i] += raw_data.size_;
+                    // in the batcher would be needed if padding is significant.
+                    batcher.batch_handle.consolidated_data.reserve(raw_data.size_);
                     break;
                 }
             }
         }
-        for (size_t i = 0; i < registered_batchers_.size(); ++i)
+        for (auto &p : registered_batchers_)
         {
-            if (estimated_batch_sizes[i] > 0)
+            auto &batcher = p.second;
+            if (batcher.batch_handle.consolidated_data.size() > 0)
             { // Only reserve if there's an estimate
-                registered_batchers_[i].batch_handle.consolidated_data.reserve(estimated_batch_sizes[i]);
+                batcher.batch_handle.consolidated_data.reserve(batcher.batch_handle.consolidated_data.size());
             }
         }
 
@@ -285,25 +282,35 @@ namespace vra
             const VraRawData &raw_data = data_handle.data;
             const VraDataDesc &desc = data_handle.data_desc;
 
-            for (auto &strategy : registered_batchers_)
+            for (auto &p : registered_batchers_)
             {
-                if (strategy.predicate(desc))
+                auto &batcher = p.second;
+                if (batcher.predicate(desc))
                 {
-                    strategy.batch_method(id, strategy.batch_handle, desc, raw_data);
+                    batcher.batch_method(id, batcher.batch_handle, desc, raw_data);
                     break; // Assume buffer belongs to only one batch based on predicate
                 }
             }
         }
 
         // Shrink to fit for non-dynamic batches (as per original logic)
-        for (auto &strategy : registered_batchers_)
+        for (auto &p : registered_batchers_)
         {
-            const auto& memory_pattern = strategy.batch_handle.data_desc.GetMemoryPattern();
+            auto &batcher = p.second;
+            const auto &memory_pattern = batcher.batch_handle.data_desc.GetMemoryPattern();
             if (memory_pattern == vra::VraDataMemoryPattern::GPU_Only)
             {
-                strategy.batch_handle.consolidated_data.shrink_to_fit();
+                batcher.batch_handle.consolidated_data.shrink_to_fit();
             }
         }
+
+        std::map<BatchId, VraDataBatcher::VraBatchHandle> batch_handles_;
+        for (const auto &p : registered_batchers_)
+        {
+            auto &batcher = p.second;
+            batch_handles_[batcher.batch_id] = batcher.batch_handle;
+        }
+        return batch_handles_;
     }
 
     void VraDataBatcher::Clear()
@@ -312,16 +319,8 @@ namespace vra
         ClearBatch();
     }
 
-    VkMemoryPropertyFlags VraDataBatcher::GetSuggestMemoryFlags(BatchId batch_id)
+    VkMemoryPropertyFlags VraDataBatcher::GetSuggestMemoryFlags(VraDataMemoryPattern data_pattern, VraDataUpdateRate data_update_rate)
     {
-        if (batch_id_to_index_map_.find(batch_id) == batch_id_to_index_map_.cend())
-        {
-            std::cerr << "Batch id " << batch_id << " not found" << std::endl;
-            return VkMemoryPropertyFlagBits();
-        }
-        const VraDataDesc &data_desc = registered_batchers_[batch_id_to_index_map_[batch_id]].batch_handle.data_desc;
-        const VraDataMemoryPattern &data_pattern = data_desc.GetMemoryPattern();
-        const VraDataUpdateRate &data_update_rate = data_desc.GetUpdateRate();
         switch (data_pattern)
         {
         case VraDataMemoryPattern::GPU_Only:
@@ -353,16 +352,8 @@ namespace vra
         }
     }
 
-    VmaAllocationCreateFlags VraDataBatcher::GetSuggestVmaMemoryFlags(BatchId batch_id)
+    VmaAllocationCreateFlags VraDataBatcher::GetSuggestVmaMemoryFlags(VraDataMemoryPattern data_pattern, VraDataUpdateRate data_update_rate)
     {
-        if (batch_id_to_index_map_.find(batch_id) == batch_id_to_index_map_.cend())
-        {
-            std::cerr << "Batch id " << batch_id << " not found" << std::endl;
-            return VmaAllocationCreateFlags();
-        }
-        const VraDataDesc &data_desc = registered_batchers_[batch_id_to_index_map_[batch_id]].batch_handle.data_desc;
-        const VraDataMemoryPattern &data_pattern = data_desc.GetMemoryPattern();
-        const VraDataUpdateRate &data_update_rate = data_desc.GetUpdateRate();
         switch (data_pattern)
         {
         case VraDataMemoryPattern::GPU_Only:
@@ -396,9 +387,10 @@ namespace vra
 
     void VraDataBatcher::ClearBatch()
     {
-        for (auto &strategy : registered_batchers_)
+        for (auto &p : registered_batchers_)
         {
-            strategy.batch_handle.Clear();
+            auto &batcher = p.second;
+            batcher.batch_handle.Clear();
         }
     }
 

@@ -163,9 +163,10 @@ private:
     VmaAllocationInfo local_buffer_allocation_info_;
     VmaAllocationInfo staging_buffer_allocation_info_;
     VmaAllocationInfo uniform_buffer_allocation_info_;
-    std::unique_ptr<vra::VraDataBatcher> vra_data_batcher_;
 
-    // TODO: change to dynamic
+    std::unique_ptr<vra::VraDataBatcher> vra_data_batcher_;
+    std::map<vra::BatchId, vra::VraDataBatcher::VraBatchHandle> vertex_index_staging_batch_handle_;
+    std::map<vra::BatchId, vra::VraDataBatcher::VraBatchHandle> uniform_batch_handle_;
     vra::ResourceId vertex_data_id_;
     vra::ResourceId index_data_id_;
     vra::ResourceId staging_vertex_data_id_;

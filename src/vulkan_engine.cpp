@@ -691,22 +691,25 @@ bool VulkanEngine::CreateVertexInputBuffers()
     vra_data_batcher_->Collect(index_data_desc, index_raw_data, index_data_id_);
     vra_data_batcher_->Collect(staging_data_desc, vertex_raw_data, staging_vertex_data_id_);
     vra_data_batcher_->Collect(staging_data_desc, index_raw_data, staging_index_data_id_);
-    vra_data_batcher_->Batch();
+    vertex_index_staging_batch_handle_ = std::move(vra_data_batcher_->Batch());
 
     // generate vertex and index buffers and allocate memory
-    auto local_batch = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::GPU_Only);
-    if (!local_batch || local_batch->offsets.size() == 0)
-    {
-        Logger::LogError("Failed to get local buffer data(From vra)");
-        return false;
-    }
+    // auto local_batch = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::GPU_Only);
+    // if (!local_batch || local_batch->offsets.size() == 0)
+    // {
+    //     Logger::LogError("Failed to get local buffer data(From vra)");
+    //     return false;
+    // }
+
+    // get buffer create info
+    const auto& local_buffer_create_info = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].data_desc.GetBufferCreateInfo();
 
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::GPU_Only);
+    alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraDataMemoryPattern::GPU_Only, vra::VraDataUpdateRate::RarelyOrNever);
     if (!Logger::LogWithVkResult(vmaCreateBuffer(
                                      vma_allocator_,
-                                     &local_batch->data_desc.GetBufferCreateInfo(),
+                                     &local_buffer_create_info,
                                      &alloc_info,
                                      &local_buffer_,
                                      &local_buffer_allocation_,
@@ -716,19 +719,23 @@ bool VulkanEngine::CreateVertexInputBuffers()
         return false;
 
     // generate staging buffer and copy data
-    auto host_batch = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::CPU_GPU_Rarely);
-    if (!host_batch || host_batch->offsets.size() == 0)
-    {
-        Logger::LogError("Failed to get host buffer data(From vra)");
-        return false;
-    }
+    // auto host_batch = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::CPU_GPU_Rarely);
+    // if (!host_batch || host_batch->offsets.size() == 0)
+    // {
+    //     Logger::LogError("Failed to get host buffer data(From vra)");
+    //     return false;
+    // }
+
+    // get buffer create info and consolidate data
+    const auto& host_buffer_create_info = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Rarely].data_desc.GetBufferCreateInfo();
+    const auto& consolidated_data = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Rarely].consolidated_data;
 
     VmaAllocationCreateInfo staging_alloc_info = {};
     staging_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    staging_alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::CPU_GPU_Rarely);
+    staging_alloc_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraDataMemoryPattern::CPU_GPU, vra::VraDataUpdateRate::RarelyOrNever);
     if (!Logger::LogWithVkResult(vmaCreateBuffer(
                                      vma_allocator_,
-                                     &host_batch->data_desc.GetBufferCreateInfo(),
+                                     &host_buffer_create_info,
                                      &staging_alloc_info,
                                      &staging_buffer_,
                                      &staging_buffer_allocation_,
@@ -740,9 +747,9 @@ bool VulkanEngine::CreateVertexInputBuffers()
     // copy data to staging buffer
     void *mapped_data = nullptr;
     
-    vmaInvalidateAllocation(vma_allocator_, staging_buffer_allocation_, 0, host_batch->consolidated_data.size());
+    vmaInvalidateAllocation(vma_allocator_, staging_buffer_allocation_, 0, consolidated_data.size());
     vmaMapMemory(vma_allocator_, staging_buffer_allocation_, &mapped_data);
-    memcpy(mapped_data, host_batch->consolidated_data.data(), host_batch->consolidated_data.size());
+    memcpy(mapped_data, consolidated_data.data(), consolidated_data.size());
     vmaUnmapMemory(vma_allocator_, staging_buffer_allocation_);
     vmaFlushAllocation(vma_allocator_, staging_buffer_allocation_, 0, staging_buffer_allocation_info_.size);
 
@@ -785,22 +792,25 @@ bool VulkanEngine::CreateUniformBuffers()
         vra_data_batcher_->Collect(data_desc, std::move(raw_data), uniform_buffer_id_.back());
     }
 
-    vra_data_batcher_->Batch();
+    uniform_batch_handle_ = std::move(vra_data_batcher_->Batch());
 
-    auto uniform_batch = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::CPU_GPU_Frequently);
-    if (!uniform_batch || uniform_batch->offsets.size() == 0)
-    {
-        Logger::LogError("Failed to get uniform buffer data(From vra)");
-        return false;
-    }
+    // auto uniform_batch = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::CPU_GPU_Frequently);
+    // if (!uniform_batch || uniform_batch->offsets.size() == 0)
+    // {
+    //     Logger::LogError("Failed to get uniform buffer data(From vra)");
+    //     return false;
+    // }
+
+    // get buffer create info
+    const auto& uniform_buffer_create_info = uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].data_desc.GetBufferCreateInfo();
 
     VmaAllocationCreateInfo allocation_create_info = {};
     allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-    allocation_create_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraBuiltInBatchIds::CPU_GPU_Frequently);
+    allocation_create_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraDataMemoryPattern::CPU_GPU, vra::VraDataUpdateRate::Frequent);
     allocation_create_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     if (!Logger::LogWithVkResult(vmaCreateBuffer(
                                      vma_allocator_,
-                                     &uniform_batch->data_desc.GetBufferCreateInfo(),
+                                     &uniform_buffer_create_info,
                                      &allocation_create_info,
                                      &uniform_buffer_,
                                      &uniform_buffer_allocation_,
@@ -1137,9 +1147,11 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdPipelineBarrier2(command_buffer, &dependency_info);
 
     // bind vertex and index buffers
-    auto vertex_offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::GPU_Only, vertex_data_id_);
+    // auto vertex_offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::GPU_Only, vertex_data_id_);
+    auto vertex_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[vertex_data_id_];
     vkCmdBindVertexBuffers(command_buffer, 0, 1, &local_buffer_, &vertex_offset);
-    auto index_offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::GPU_Only, index_data_id_);
+    // auto index_offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::GPU_Only, index_data_id_);
+    auto index_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[index_data_id_];
     vkCmdBindIndexBuffer(command_buffer, local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
 
     // begin renderpass
@@ -1164,7 +1176,8 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineHelper_->GetPipeline());
 
     // bind descriptor set
-    auto offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::CPU_GPU_Frequently, uniform_buffer_id_[frame_index_]);
+    // auto offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::CPU_GPU_Frequently, uniform_buffer_id_[frame_index_]);
+    auto offset = uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].offsets[uniform_buffer_id_[frame_index_]];
     uint32_t dynamic_offset = static_cast<uint32_t>(offset);
     vkCmdBindDescriptorSets(
         command_buffer, 
@@ -1229,7 +1242,7 @@ void VulkanEngine::UpdateUniformBuffer(uint32_t current_frame_index)
     mvp_matrices_[current_frame_index].projection[1][1] *= -1;
     
     // get the offset of the current frame in the uniform buffer
-    auto offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::CPU_GPU_Frequently, uniform_buffer_id_[current_frame_index]);
+    auto offset = uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].offsets[uniform_buffer_id_[current_frame_index]];
     
     // if the memory is not mapped, map it (only executed when called for the first time)
     if (uniform_buffer_mapped_data_ == nullptr) {
