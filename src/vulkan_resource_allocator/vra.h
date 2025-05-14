@@ -85,32 +85,27 @@ namespace vra
         size_t size_ = 0;
     };
 
-    class VraDataDesc
+    struct VraDataDesc
     {
-    public:
+        // --- Constructor ---
+        
         VraDataDesc() = default;
         VraDataDesc(VraDataMemoryPattern pattern,
                     VraDataUpdateRate update_rate,
                     VkBufferCreateInfo buffer_create_info = VkBufferCreateInfo{})
-            : data_pattern_(pattern), data_update_rate_(update_rate), buffer_create_info_(buffer_create_info)
-        {
-        }
-        ~VraDataDesc() = default;
-
-        // --- Copy and Move ---
-        VraDataDesc(const VraDataDesc &other) = default;
-        VraDataDesc &operator=(const VraDataDesc &other) = default;
-        VraDataDesc(VraDataDesc &&other) noexcept = default;
-        VraDataDesc &operator=(VraDataDesc &&other) noexcept = default;
-
-        // --- Getter Method ---
+            : data_pattern_(pattern), data_update_rate_(update_rate), buffer_create_info_(buffer_create_info) {}
+        
+        // --- Getter ---
+        
         VraDataMemoryPattern GetMemoryPattern() const { return data_pattern_; }
         VraDataUpdateRate GetUpdateRate() const { return data_update_rate_; }
         const VkBufferCreateInfo& GetBufferCreateInfo() const { return buffer_create_info_; }
         VkBufferCreateInfo& GetBufferCreateInfo() { return buffer_create_info_; }
 
     private:
+
         // --- main members ---
+        
         VraDataMemoryPattern data_pattern_;
         VraDataUpdateRate data_update_rate_;
         VkBufferCreateInfo buffer_create_info_;
@@ -126,12 +121,18 @@ namespace vra
         }
         ~ResourceIDGenerator() = default;
 
-        /// @brief generate resource id
-        /// @return resource id
+        /// @brief generate sequential resource id from a atomic counter
+        /// @return resource id type: uint64_t
         ResourceId GenerateID()
         {
             // Access the atomic counter through the unique_ptr
             return resource_id_counter_->fetch_add(1);
+        }
+
+        /// @brief reset resource id counter
+        void Reset()
+        {
+            resource_id_counter_->store(0);
         }
 
     private:

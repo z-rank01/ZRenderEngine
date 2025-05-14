@@ -247,6 +247,71 @@ namespace vra
         return true;
     }
 
+    void VraDataBatcher::Batch()
+    {
+        ClearBatch();
+
+        // Optional: Estimate sizes and reserve capacity
+        std::vector<size_t> estimated_batch_sizes(registered_batchers_.size(), 0);
+        for (const auto &data_handle : data_handles_)
+        {
+            const VraRawData &raw_data = data_handle.data;
+            const VraDataDesc &desc = data_handle.data_desc;
+
+            for (size_t i = 0; i < registered_batchers_.size(); ++i)
+            {
+                if (registered_batchers_[i].predicate(desc))
+                {
+                    // Basic estimation, doesn't account for padding in dynamic batches yet.
+                    // For a more accurate estimation, the predicate or a dedicated estimation function
+                    // in the strategy would be needed if padding is significant.
+                    estimated_batch_sizes[i] += raw_data.size_;
+                    break;
+                }
+            }
+        }
+        for (size_t i = 0; i < registered_batchers_.size(); ++i)
+        {
+            if (estimated_batch_sizes[i] > 0)
+            { // Only reserve if there's an estimate
+                registered_batchers_[i].batch_handle.consolidated_data.reserve(estimated_batch_sizes[i]);
+            }
+        }
+
+        // Batch data
+        for (const auto &data_handle : data_handles_)
+        {
+            ResourceId id = data_handle.id;
+            const VraRawData &raw_data = data_handle.data;
+            const VraDataDesc &desc = data_handle.data_desc;
+
+            for (auto &strategy : registered_batchers_)
+            {
+                if (strategy.predicate(desc))
+                {
+                    strategy.batch_method(id, strategy.batch_handle, desc, raw_data);
+                    break; // Assume buffer belongs to only one batch based on predicate
+                }
+            }
+        }
+
+        // Shrink to fit for non-dynamic batches (as per original logic)
+        for (auto &strategy : registered_batchers_)
+        {
+            const auto& memory_pattern = strategy.batch_handle.data_desc.GetMemoryPattern();
+            if (memory_pattern == vra::VraDataMemoryPattern::GPU_Only)
+            {
+                strategy.batch_handle.consolidated_data.shrink_to_fit();
+            }
+        }
+    }
+
+    void VraDataBatcher::Clear()
+    {
+        data_handles_.clear();
+        ClearBatch();
+    }
+
     VkMemoryPropertyFlags VraDataBatcher::GetSuggestMemoryFlags(BatchId batch_id)
     {
         if (batch_id_to_index_map_.find(batch_id) == batch_id_to_index_map_.cend())
@@ -337,71 +402,7 @@ namespace vra
         }
     }
 
-    void VraDataBatcher::Clear()
-    {
-        data_handles_.clear();
-        ClearBatch();
-    }
-
-    void VraDataBatcher::Batch()
-    {
-        ClearBatch();
-
-        // Optional: Estimate sizes and reserve capacity
-        std::vector<size_t> estimated_batch_sizes(registered_batchers_.size(), 0);
-        for (const auto &data_handle : data_handles_)
-        {
-            const VraRawData &raw_data = data_handle.data;
-            const VraDataDesc &desc = data_handle.data_desc;
-
-            for (size_t i = 0; i < registered_batchers_.size(); ++i)
-            {
-                if (registered_batchers_[i].predicate(desc))
-                {
-                    // Basic estimation, doesn't account for padding in dynamic batches yet.
-                    // For a more accurate estimation, the predicate or a dedicated estimation function
-                    // in the strategy would be needed if padding is significant.
-                    estimated_batch_sizes[i] += raw_data.size_;
-                    break;
-                }
-            }
-        }
-        for (size_t i = 0; i < registered_batchers_.size(); ++i)
-        {
-            if (estimated_batch_sizes[i] > 0)
-            { // Only reserve if there's an estimate
-                registered_batchers_[i].batch_handle.consolidated_data.reserve(estimated_batch_sizes[i]);
-            }
-        }
-
-        // Batch data
-        for (const auto &data_handle : data_handles_)
-        {
-            ResourceId id = data_handle.id;
-            const VraRawData &raw_data = data_handle.data;
-            const VraDataDesc &desc = data_handle.data_desc;
-
-            for (auto &strategy : registered_batchers_)
-            {
-                if (strategy.predicate(desc))
-                {
-                    strategy.batch_method(id, strategy.batch_handle, desc, raw_data);
-                    break; // Assume buffer belongs to only one batch based on predicate
-                }
-            }
-        }
-
-        // Shrink to fit for non-dynamic batches (as per original logic)
-        for (auto &strategy : registered_batchers_)
-        {
-            // The original dynamic_sequential_batch did not shrink_to_fit.
-            // You might want a flag in VraBatcher to control this behavior.
-            if (strategy.batch_id != "CPU_GPU")
-            {
-                strategy.batch_handle.consolidated_data.shrink_to_fit();
-            }
-        }
-    }
+    
 
     // -------------------------------------
     // --- VRA Implementation ---
