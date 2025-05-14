@@ -10,21 +10,28 @@ VulkanFrameBufferHelper::~VulkanFrameBufferHelper()
         }
         framebuffers_.clear();
     }
+
+    if (!config_.image_views.empty())
+    {
+        for (auto image_view : config_.image_views)
+        {
+            vkDestroyImageView(device_, image_view, nullptr);
+        }
+        config_.image_views.clear();
+    }
 }
 
-bool VulkanFrameBufferHelper::CreateFrameBuffer(VkDevice device, VkRenderPass renderpass)
+bool VulkanFrameBufferHelper::CreateFrameBuffer(VkRenderPass renderpass)
 {
-    device_ = device;
-
     // create framebuffers
-    framebuffers_.resize(config_.image_views->size());
-    for (size_t i = 0; i < config_.image_views->size(); i++)
+    framebuffers_.resize(config_.image_views.size());
+    for (size_t i = 0; i < config_.image_views.size(); i++)
     {
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = renderpass;
         framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = &(*config_.image_views)[i];
+        framebufferInfo.pAttachments = &config_.image_views[i];
         framebufferInfo.width = config_.extent.width;
         framebufferInfo.height = config_.extent.height;
         framebufferInfo.layers = 1;

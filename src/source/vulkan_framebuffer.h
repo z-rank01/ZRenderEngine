@@ -7,19 +7,27 @@
 struct SVulkanFrameBufferConfig
 {
     VkExtent2D extent;
-    const std::vector<VkImageView>* image_views;
+    std::vector<VkImageView> image_views;
+
+    SVulkanFrameBufferConfig() = default;
+    SVulkanFrameBufferConfig(VkExtent2D extent, std::vector<VkImageView> image_views) 
+    {
+        this->extent = extent;
+        this->image_views = image_views;
+    }
 };
 
 class VulkanFrameBufferHelper
 {
 private:
+    VkDevice device_;
     SVulkanFrameBufferConfig config_;
     std::vector<VkFramebuffer> framebuffers_;
-    VkDevice device_;
+
 public:
-    VulkanFrameBufferHelper(SVulkanFrameBufferConfig config) : config_(config) {};
+    VulkanFrameBufferHelper(VkDevice device, SVulkanFrameBufferConfig config) : device_(device), config_(config) {};
     ~VulkanFrameBufferHelper();
 
-    bool CreateFrameBuffer(VkDevice device, VkRenderPass renderpass);
+    bool CreateFrameBuffer(VkRenderPass renderpass);
     const std::vector<VkFramebuffer>* GetFramebuffers() const { return &framebuffers_; }
 };

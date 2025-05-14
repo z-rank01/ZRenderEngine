@@ -66,6 +66,9 @@ VulkanEngine::~VulkanEngine()
         vma_allocator_ = VK_NULL_HANDLE;
     }
 
+    // destroy vkBootstrap swapchain
+    vkb::destroy_swapchain(vkb_swapchain_);
+
     // release unique pointer
     vkShaderHelper_.reset();
     vkWindowHelper_.reset();
@@ -75,13 +78,9 @@ VulkanEngine::~VulkanEngine()
     vkCommandBufferHelper_.reset();
     vkSynchronizationHelper_.reset();
 
-    // 销毁vkBootstrap资源
-    vkb::destroy_swapchain(vkb_swapchain_);
+    // destroy vkBootstrap resources
     vkb::destroy_device(vkb_device_);
     vkb::destroy_instance(vkb_instance_);
-
-    // 清理SDL资源
-    SDL_Quit();
 
     // 重置单例指针
     instance = nullptr;
@@ -605,12 +604,10 @@ bool VulkanEngine::CreateFrameBuffer()
     auto swapchain_config = &swapchain_config_;
     auto swapchain_image_views = vkb_swapchain_.get_image_views().value();
 
-    SVulkanFrameBufferConfig framebuffer_config;
-    framebuffer_config.extent = swapchain_config->target_swap_extent_;
-    framebuffer_config.image_views = &swapchain_image_views;
-    vkFrameBufferHelper_ = std::make_unique<VulkanFrameBufferHelper>(framebuffer_config);
+    SVulkanFrameBufferConfig framebuffer_config(swapchain_config->target_swap_extent_, swapchain_image_views);
+    vkFrameBufferHelper_ = std::make_unique<VulkanFrameBufferHelper>(vkb_device_.device, framebuffer_config);
 
-    return vkFrameBufferHelper_->CreateFrameBuffer(vkb_device_.device, vkRenderpassHelper_->GetRenderpass());
+    return vkFrameBufferHelper_->CreateFrameBuffer(vkRenderpassHelper_->GetRenderpass());
 }
 
 bool VulkanEngine::CreateCommandPool()
@@ -1081,9 +1078,8 @@ void VulkanEngine::ResizeSwapChain()
     vkDeviceWaitIdle(vkb_device_.device);
 
     // destroy old vulkan objects
-    // vkDestroySwapchainKHR(vkb_device_.device, vkb_swapchain_.swapchain, nullptr);
-    vkb_swapchain_.destroy_image_views(vkb_swapchain_.get_image_views().value());
     vkb::destroy_swapchain(vkb_swapchain_);
+    vkFrameBufferHelper_.reset();
 
     // reset window size
     auto current_extent = vkWindowHelper_->GetCurrentWindowExtent();
@@ -1101,11 +1097,6 @@ void VulkanEngine::ResizeSwapChain()
     {
         throw std::runtime_error("Failed to create Vulkan frame buffer.");
     }
-
-    // // recreate command buffers
-    // if (!AllocateCommandBuffer()) {
-    //     throw std::runtime_error("Failed to allocate Vulkan command buffer.");
-    // }
 
     resize_request_ = false;
 }
