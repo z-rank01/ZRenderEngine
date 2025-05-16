@@ -1,12 +1,17 @@
 #include "vulkan_engine.h"
 #include "utility/config_reader.h"
 #include "utility/logger.h"
+#include "gltf/gltf_loader.h"
+
 #include <iostream>
 
 int main()
 {
     std::cout << "Hello, World!" << '\n';
     std::cout << "This is a Vulkan Engine" << '\n';
+
+    // read gltf file
+    gltf::GltfLoader loader("E:\\Assets\\Sponza\\SponzaBase\\NewSponza_Main_glTF_003.gltf");
 
     // window config
     SWindowConfig window_config;

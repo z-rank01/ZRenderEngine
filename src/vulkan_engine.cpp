@@ -27,12 +27,6 @@ VulkanEngine::~VulkanEngine()
     // 等待设备空闲，确保没有正在进行的操作
     vkDeviceWaitIdle(vkb_device_.device);
 
-    // 解除内存映射
-    if (uniform_buffer_mapped_data_) {
-        vmaUnmapMemory(vma_allocator_, uniform_buffer_allocation_);
-        uniform_buffer_mapped_data_ = nullptr;
-    }
-
     // 销毁描述符相关资源
     if (descriptor_pool_ != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(vkb_device_.device, descriptor_pool_, nullptr);
@@ -1147,10 +1141,8 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdPipelineBarrier2(command_buffer, &dependency_info);
 
     // bind vertex and index buffers
-    // auto vertex_offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::GPU_Only, vertex_data_id_);
     auto vertex_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[vertex_data_id_];
     vkCmdBindVertexBuffers(command_buffer, 0, 1, &local_buffer_, &vertex_offset);
-    // auto index_offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::GPU_Only, index_data_id_);
     auto index_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[index_data_id_];
     vkCmdBindIndexBuffer(command_buffer, local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
 
@@ -1176,7 +1168,6 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineHelper_->GetPipeline());
 
     // bind descriptor set
-    // auto offset = vra_data_batcher_->GetResourceOffset(vra::VraBuiltInBatchIds::CPU_GPU_Frequently, uniform_buffer_id_[frame_index_]);
     auto offset = uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].offsets[uniform_buffer_id_[frame_index_]];
     uint32_t dynamic_offset = static_cast<uint32_t>(offset);
     vkCmdBindDescriptorSets(
@@ -1241,20 +1232,20 @@ void VulkanEngine::UpdateUniformBuffer(uint32_t current_frame_index)
     // reverse the Y-axis in Vulkan's NDC coordinate system
     mvp_matrices_[current_frame_index].projection[1][1] *= -1;
     
+    // map vulkan host memory to update the uniform buffer
+    uniform_buffer_mapped_data_ = nullptr;
+    vmaMapMemory(vma_allocator_, uniform_buffer_allocation_, &uniform_buffer_mapped_data_);
+
     // get the offset of the current frame in the uniform buffer
     auto offset = uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].offsets[uniform_buffer_id_[current_frame_index]];
+    uint8_t *data_location = static_cast<uint8_t *>(uniform_buffer_mapped_data_) + offset;
     
-    // if the memory is not mapped, map it (only executed when called for the first time)
-    if (uniform_buffer_mapped_data_ == nullptr) {
-        vmaMapMemory(vma_allocator_, uniform_buffer_allocation_, &uniform_buffer_mapped_data_);
-    }
-    
-    // calculate the position of the current frame data in the mapped memory, and only update the data of the current frame
-    uint8_t* data_location = static_cast<uint8_t*>(uniform_buffer_mapped_data_) + offset;
+    // copy the data to the mapped memory
     memcpy(data_location, &mvp_matrices_[current_frame_index], sizeof(SMvpMatrix));
-    
-    // if the memory is not HOST_COHERENT, flush it explicitly
-    vmaFlushAllocation(vma_allocator_, uniform_buffer_allocation_, offset, sizeof(SMvpMatrix));
+
+    // unmap the memory
+    vmaUnmapMemory(vma_allocator_, uniform_buffer_allocation_);
+    uniform_buffer_mapped_data_ = nullptr;
 }
 
 // add a function to focus on an object

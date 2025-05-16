@@ -33,6 +33,8 @@ add_subdirectory(src/source)
 add_subdirectory(src/synchronization)
 add_subdirectory(src/builder)
 add_subdirectory(src/vulkan_resource_allocator)
+add_subdirectory(src/gltf)
+
 # 设置源文件
 set(SOURCES
     src/main.cpp
@@ -64,6 +66,7 @@ target_link_libraries(VulkanEngine
     vulkan_synchronization          # 添加 vulkan_synchronization 库
     builder                         # 添加 builder 库
     vulkan_resource_allocator       # 添加 vra 库
+    gltf_helper                     # 添加 gltf_helper 库
 )
 
 # 包含目录
