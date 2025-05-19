@@ -2,6 +2,7 @@
 #include "utility/config_reader.h"
 #include "utility/logger.h"
 #include "gltf/gltf_loader.h"
+#include "gltf/gltf_parser.h"
 
 #include <iostream>
 
@@ -12,6 +13,9 @@ int main()
 
     // read gltf file
     gltf::GltfLoader loader("E:\\Assets\\Sponza\\SponzaBase\\NewSponza_Main_glTF_003.gltf");
+    gltf::GltfParser parser(loader.GetAsset());
+    const auto &draw_call_data_list = parser.GetDrawCallDataList();
+    const auto &mesh_list = parser.GetMeshList();
 
     // window config
     SWindowConfig window_config;

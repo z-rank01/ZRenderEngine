@@ -1,5 +1,4 @@
 add_library(gltf_helper STATIC
-    gltf_loader.cpp
     gltf_loader.h
     gltf_data.h
     gltf_parser.h

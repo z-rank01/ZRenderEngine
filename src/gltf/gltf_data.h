@@ -7,14 +7,56 @@
 
 namespace gltf
 {
-    /// @brief mesh data.
-    /// @note indices are stored as uint32_t.
-    struct Mesh
+    /// @brief texture format.
+    /// @note 0: uint8, 1: uint16, 2: uint32, 3: float16, 4: float32.
+    enum TextureFormat
     {
-        std::vector<uint32_t> indices;
-        std::vector<VertexInput> vertex_inputs;
-        BasePbrMaterial material;
-        glm::mat4 transform;
+        UINT8,
+        UINT16,
+        UINT32,
+        FLOAT16,
+        FLOAT32
+    };
+
+    /// @brief texture filter.
+    enum TextureFilter
+    {
+        NEAREST,
+        LINEAR,
+        NEAREST_MIPMAP_NEAREST,
+        LINEAR_MIPMAP_NEAREST,
+        NEAREST_MIPMAP_LINEAR,
+        LINEAR_MIPMAP_LINEAR
+    };
+
+    /// @brief texture wrap.
+    enum TextureWrap
+    {
+        REPEAT,
+        MIRRORED_REPEAT,
+        CLAMP_TO_EDGE,
+        CLAMP_TO_BORDER
+    };
+
+    /// @brief texture sampler.
+    struct TextureSampler
+    {
+        TextureFilter min_filter;
+        TextureFilter mag_filter;
+        TextureWrap s_wrap;
+        TextureWrap t_wrap;
+    };
+
+    /// @brief texture.
+    /// @note data is stored as uint8_t.
+    struct Texture
+    {
+        void *data;
+        uint64_t width;
+        uint64_t height;
+        uint64_t channels;
+        TextureFormat format;
+        TextureSampler sampler;
     };
 
     /// @brief inputs of a primitive defined in gltf file.
@@ -22,12 +64,12 @@ namespace gltf
     struct VertexInput
     {
         glm::vec3 position;
-        glm::vec4 tangent;
+        glm::vec4 color;
         glm::vec3 normal;
+        glm::vec4 tangent;
         glm::vec2 uv0;
         glm::vec2 uv1;
     };
-
 
     /// @brief base pbr material.
     /// @note metallic roughness workflow.
@@ -63,56 +105,21 @@ namespace gltf
         Texture emissive_texture;
     };
 
-    /// @brief texture format.
-    /// @note 0: uint8, 1: uint16, 2: uint32, 3: float16, 4: float32.
-    enum TextureFormat
+    /// @brief single draw call data.
+    /// @note equals to a primitives element in gltf file.
+    struct SingleDrawCallData
     {
-        UINT8, 
-        UINT16,
-        UINT32,
-        FLOAT16,
-        FLOAT32
+        glm::mat4 transform;
+        std::vector<uint32_t> indices;
+        std::vector<VertexInput> vertex_inputs;
+        uint32_t material_index;
     };
 
-    /// @brief texture filter.
-    enum TextureFilter
+    /// @brief mesh data containing multiple primitives.
+    struct Mesh
     {
-        NEAREST,
-        LINEAR,
-        NEAREST_MIPMAP_NEAREST,
-        LINEAR_MIPMAP_NEAREST,
-        NEAREST_MIPMAP_LINEAR,
-        LINEAR_MIPMAP_LINEAR
-    };
-
-    /// @brief texture wrap.
-    enum TextureWrap
-    {
-        REPEAT,
-        MIRRORED_REPEAT,
-        CLAMP_TO_EDGE,
-        CLAMP_TO_BORDER
-    };
-
-    /// @brief texture.
-    /// @note data is stored as uint8_t.
-    struct Texture
-    {
-        void* data;
-        uint64_t width;
-        uint64_t height;
-        uint64_t channels;
-        TextureFormat format;
-        TextureSampler sampler;
-    };
-
-    /// @brief texture sampler.
-    struct TextureSampler
-    {
-        TextureFilter min_filter;
-        TextureFilter mag_filter;
-        TextureWrap s_wrap;
-        TextureWrap t_wrap;
+        std::string name;
+        std::vector<SingleDrawCallData> primitives;
     };
 }
 
