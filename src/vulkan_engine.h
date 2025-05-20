@@ -98,12 +98,17 @@ struct SCamera
     float min_focus_distance;
     float max_focus_distance;
 
+    // Add focus constraint enabled flag
+    bool focus_constraint_enabled_;
+
     SCamera(glm::vec3 pos = glm::vec3(0.0f, 0.0f, 0.0f),
             glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f),
             float initial_yaw = -90.0f,
             float initial_pitch = 0.0f)
         : position(pos), world_up(up), yaw(initial_yaw), pitch(initial_pitch),
-          movement_speed(2.5f), mouse_sensitivity(0.1f), zoom(45.0f)
+          movement_speed(2.5f), mouse_sensitivity(0.1f), zoom(45.0f),
+          // Initialize focus constraint enabled flag
+          focus_constraint_enabled_(true) // Default to enabled
     {
         UpdateCameraVectors();
     }
@@ -209,7 +214,8 @@ private:
     // Input handling members
     float last_x_ = 0.0f;
     float last_y_ = 0.0f;
-    bool camera_rotation_mode_ = false;  // 相机旋转模式标志（右键）
+    // Rename camera_rotation_mode_ to free_look_mode_
+    bool free_look_mode_ = false;       // 相机自由查看模式标志（右键按住）
     bool camera_pan_mode_ = false;       // 相机平移模式标志（中键）
     float orbit_distance_ = 0.0f;      // 轨道旋转时与中心的距离
 
@@ -228,6 +234,7 @@ private:
     bool CreateFrameBuffer();
     bool CreateCommandPool();
     bool CreateAndWriteDescriptorRelatives();
+    bool CreateVmaVraObjects();
     bool CreateVertexInputBuffers();
     bool CreateUniformBuffers();
     bool AllocatePerFrameCommandBuffer();
@@ -246,4 +253,34 @@ private:
     void ProcessKeyboardInput(float delta_time);
     void ProcessMouseScroll(float yoffset);
     void FocusOnObject(const glm::vec3& object_position, float target_distance);
+
+    // --- test function and data ---
+    VkBuffer test_local_buffer_;
+    VkBuffer test_staging_buffer_;
+    VkBuffer test_uniform_buffer_;
+    VkVertexInputBindingDescription test_vertex_input_binding_description_;
+    std::vector<VkVertexInputAttributeDescription> test_vertex_input_attributes_;
+    VkDescriptorPool test_descriptor_pool_;
+    VkDescriptorSetLayout test_descriptor_set_layout_;
+    VkDescriptorSet test_descriptor_set_;
+    VmaAllocation test_local_buffer_allocation_;
+    VmaAllocation test_staging_buffer_allocation_;
+    VmaAllocation test_uniform_buffer_allocation_;
+    VmaAllocationInfo test_local_buffer_allocation_info_;
+    VmaAllocationInfo test_staging_buffer_allocation_info_;
+    VmaAllocationInfo test_uniform_buffer_allocation_info_;
+
+    vra::ResourceId test_vertex_buffer_id_;
+    vra::ResourceId test_index_buffer_id_;
+    vra::ResourceId test_staging_vertex_buffer_id_;
+    vra::ResourceId test_staging_index_buffer_id_;
+    vra::ResourceId test_uniform_buffer_id_;
+
+    std::map<vra::BatchId, vra::VraDataBatcher::VraBatchHandle> test_local_host_batch_handle_;
+    std::map<vra::BatchId, vra::VraDataBatcher::VraBatchHandle> test_uniform_batch_handle_;
+
+    void CreateTestLocalStagingBuffer();
+    void CreateTestUniformBuffer();
+    void CreateTestDescriptorSet();
+    void ReleaseTestData();
 };

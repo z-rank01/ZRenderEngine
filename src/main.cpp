@@ -20,36 +20,77 @@ int main()
     // parse gltf file
     gltf::GltfParser parser;
     const auto &mesh_list = parser(asset, gltf::RequestMeshList{});
-    const auto &draw_call_data_list = parser(asset, gltf::RequestDrawCallList{});
+    // Get a mutable copy of draw_call_data_list to transform vertex positions
+    std::vector<gltf::PerDrawCallData> mutable_draw_call_data_list = parser(asset, gltf::RequestDrawCallList{});
 
-    // per material data
-    std::unordered_set<uint32_t> material_indices;
-    std::vector<std::vector<uint32_t>> indices_per_material;
-    std::vector<std::vector<gltf::VertexInput>> vertices_per_material;
-    
-    // collect all indices of materials
-    std::transform(draw_call_data_list.begin(), draw_call_data_list.end(),
-                  std::inserter(material_indices, material_indices.begin()),
-                  [](const auto &draw_call_data) { return draw_call_data.material_index; });
-
-    // generate per material data
-    indices_per_material.resize(material_indices.size());
-    vertices_per_material.resize(material_indices.size());
-    gltf::DrawCalls2Indices draw_calls2indices;
-    gltf::DrawCalls2Vertices draw_calls2vertices;
-    std::for_each(material_indices.begin(), material_indices.end(), [&](const auto &material_index)
-    {
-        // filter draw call data by material index
-        std::vector<gltf::PerDrawCallData> draw_call_data_per_material;
-        std::copy_if(draw_call_data_list.begin(), draw_call_data_list.end(), std::back_inserter(draw_call_data_per_material), [&](const auto &draw_call_data)
+    // Transform vertex positions using the draw call's transform matrix (functional expression)
+    std::for_each(
+        mutable_draw_call_data_list.begin(), 
+        mutable_draw_call_data_list.end(),
+        [](gltf::PerDrawCallData& draw_call_data) 
         {
-            return draw_call_data.material_index == material_index;
+            const glm::mat4& transform = draw_call_data.transform;
+            std::for_each(
+                draw_call_data.vertex_inputs.begin(), 
+                draw_call_data.vertex_inputs.end(),
+                [&](gltf::VertexInput& vertex_input) 
+                {
+                    glm::vec4 transformed_position = transform * glm::vec4(vertex_input.position, 1.0f);
+                    vertex_input.position = glm::vec3(transformed_position) / transformed_position.w;
+                });
         });
 
-        // generate indices and vertices of current material
-        indices_per_material[material_index] = draw_calls2indices(draw_call_data_per_material);
-        vertices_per_material[material_index] = draw_calls2vertices(draw_call_data_per_material);
-    });
+    // collect all indices
+    std::vector<uint32_t> indices;
+    std::vector<gltf::VertexInput> vertices;
+    // reserve memory
+    auto index_capacity = std::accumulate(mutable_draw_call_data_list.begin(), mutable_draw_call_data_list.end(), 0,
+                                    [&](const auto &sum, const auto &draw_call_data)
+                                    {
+                                        return sum + draw_call_data.indices.size();
+                                    });
+    auto vertex_capacity = std::accumulate(mutable_draw_call_data_list.begin(), mutable_draw_call_data_list.end(), 0,
+                                    [&](const auto &sum, const auto &draw_call_data)
+                                    {
+                                        return sum + draw_call_data.vertex_inputs.size();
+                                    });
+    indices.reserve(index_capacity);
+    vertices.reserve(vertex_capacity);
+
+    // collect all indices and vertices
+    for (const auto& draw_call_data : mutable_draw_call_data_list) {
+        indices.insert(indices.end(), draw_call_data.indices.begin(), draw_call_data.indices.end());
+        vertices.insert(vertices.end(), draw_call_data.vertex_inputs.begin(), draw_call_data.vertex_inputs.end());
+    }
+
+    // // per material data
+    // std::unordered_set<uint32_t> material_indices;
+    // std::vector<std::vector<uint32_t>> indices_per_material;
+    // std::vector<std::vector<gltf::VertexInput>> vertices_per_material;
+    
+    // // collect all indices of materials
+    // std::transform(draw_call_data_list.begin(), draw_call_data_list.end(),
+    //               std::inserter(material_indices, material_indices.begin()),
+    //               [](const auto &draw_call_data) { return draw_call_data.material_index; });
+
+    // // generate per material data
+    // indices_per_material.resize(material_indices.size());
+    // vertices_per_material.resize(material_indices.size());
+    // gltf::DrawCalls2Indices draw_calls2indices;
+    // gltf::DrawCalls2Vertices draw_calls2vertices;
+    // std::for_each(material_indices.begin(), material_indices.end(), [&](const auto &material_index)
+    // {
+    //     // filter draw call data by material index
+    //     std::vector<gltf::PerDrawCallData> draw_call_data_per_material;
+    //     std::copy_if(draw_call_data_list.begin(), draw_call_data_list.end(), std::back_inserter(draw_call_data_per_material), [&](const auto &draw_call_data)
+    //     {
+    //         return draw_call_data.material_index == material_index;
+    //     });
+
+    //     // generate indices and vertices of current material
+    //     indices_per_material[material_index] = draw_calls2indices(draw_call_data_per_material);
+    //     vertices_per_material[material_index] = draw_calls2vertices(draw_call_data_per_material);
+    // });
 
     // window config
     SWindowConfig window_config;
@@ -80,7 +121,7 @@ int main()
 
     // main loop
     VulkanEngine engine(config);
-    engine.GetVertexIndexData(indices_per_material[0], vertices_per_material[0]);
+    engine.GetVertexIndexData(indices, vertices);
     engine.Initialize();
     engine.Run();
 

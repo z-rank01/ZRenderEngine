@@ -34,6 +34,9 @@ void VulkanEngine::GetVertexIndexData(std::vector<uint32_t> indices, std::vector
 
 VulkanEngine::~VulkanEngine()
 {
+    // release test data
+    // ReleaseTestData();
+
     // 等待设备空闲，确保没有正在进行的操作
     vkDeviceWaitIdle(vkb_device_.device);
 
@@ -134,10 +137,18 @@ void VulkanEngine::InitializeVulkan()
         throw std::runtime_error("Failed to create Vulkan swap chain.");
     }
 
+    if (!CreateVmaVraObjects())
+    {
+        throw std::runtime_error("Failed to create Vulkan vra and vma objects.");
+    }
+
     if (!CreateVertexInputBuffers())
     {
         throw std::runtime_error("Failed to create Vulkan resource's buffers.");
     }
+
+    // test
+    // CreateTestLocalStagingBuffer();
 
     if (!CreateUniformBuffers())
     {
@@ -199,7 +210,7 @@ void VulkanEngine::InitializeCamera()
     camera_.has_focus_point = true;                   // default enable focus point
     camera_.focus_distance = 3.0f;                    // default focus distance
     camera_.min_focus_distance = 0.5f;                // minimum focus distance
-    camera_.max_focus_distance = 100.0f;              // maximum focus distance
+    camera_.max_focus_distance = 10000.0f;            // maximum focus distance
 }
 
 // Main loop
@@ -275,26 +286,33 @@ void VulkanEngine::Run()
 void VulkanEngine::ProcessInput(SDL_Event& event)
 {
     // key down event
-    if (event.type == SDL_EVENT_KEY_DOWN) 
+    if (event.type == SDL_EVENT_KEY_DOWN)
     {
         // ESC key to exit
-        if (event.key.key == SDLK_ESCAPE) 
+        if (event.key.key == SDLK_ESCAPE)
         {
             engine_state_ = EWindowState::Stopped;
+        }
+        // Toggle focus constraint with 'F' key
+        if (event.key.key == SDLK_F)
+        {
+            camera_.focus_constraint_enabled_ = !camera_.focus_constraint_enabled_;
+            Logger::LogInfo(camera_.focus_constraint_enabled_ ? "Focus constraint enabled" : "Focus constraint disabled");
         }
     }
     
     // mouse button down event
-    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) 
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
         float mouse_x, mouse_y;
         SDL_GetMouseState(&mouse_x, &mouse_y);
         last_x_ = mouse_x;
         last_y_ = mouse_y;
         
-        if (event.button.button == SDL_BUTTON_RIGHT) 
+        if (event.button.button == SDL_BUTTON_RIGHT)
         {
-            camera_rotation_mode_ = true;
+            // Use free_look_mode_ instead of camera_rotation_mode_
+            free_look_mode_ = true;
             // save the current mouse position
             last_x_ = mouse_x;
             last_y_ = mouse_y;
@@ -308,9 +326,10 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
     // mouse button up event
     if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) 
     {
-        if (event.button.button == SDL_BUTTON_RIGHT) 
+        if (event.button.button == SDL_BUTTON_RIGHT)
         {
-            camera_rotation_mode_ = false;
+            // Use free_look_mode_ instead of camera_rotation_mode_
+            free_look_mode_ = false;
         }
         else if (event.button.button == SDL_BUTTON_MIDDLE) 
         {
@@ -319,89 +338,77 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
     }
     
     // mouse motion event
-    if (event.type == SDL_EVENT_MOUSE_MOTION) 
+    if (event.type == SDL_EVENT_MOUSE_MOTION)
     {
+        // Only process mouse motion for camera control if a mode is active
+        if (!free_look_mode_ && !camera_pan_mode_)
+        {
+            return; // Do nothing if no camera control mode is active
+        }
+
         float x_pos = static_cast<float>(event.motion.x);
         float y_pos = static_cast<float>(event.motion.y);
         float x_offset = x_pos - last_x_;
-        float y_offset = last_y_ - y_pos;
+        float y_offset = last_y_ - y_pos; // Invert y-offset as screen y increases downwards
         last_x_ = x_pos;
         last_y_ = y_pos;
-        
-        if (camera_rotation_mode_)
+
+        if (free_look_mode_)
         {
-            // calculate the current distance to the focus point
-            float current_distance = camera_.has_focus_point ? 
-                glm::length(camera_.position - camera_.focus_point) : 
-                camera_.focus_distance;
-            
-            // calculate the distance scale based on the distance
-            float distance_scale = glm::clamp(
-                current_distance / camera_.focus_distance,
-                camera_.min_focus_distance / camera_.focus_distance,
-                camera_.max_focus_distance / camera_.focus_distance
-            );
-            
-            // apply the distance scale
-            float sensitivity_scale = 1.0f / distance_scale;
-            
-            // use the smooth interpolation based on time
-            float smooth_factor = 0.1f;
-            float target_x_offset = x_offset * camera_.mouse_sensitivity * sensitivity_scale;
-            float target_y_offset = y_offset * camera_.mouse_sensitivity * sensitivity_scale;
-            
-            // apply the smooth interpolation
-            x_offset = target_x_offset * smooth_factor;
-            y_offset = target_y_offset * smooth_factor;
+            // Calculate mouse sensitivity scale based on distance to focus point if constraint is enabled
+            float sensitivity_scale = 1.0f;
+            if (camera_.has_focus_point && camera_.focus_constraint_enabled_)
+            {
+                float current_distance = glm::length(camera_.position - camera_.focus_point);
+                float distance_factor = glm::clamp(
+                    current_distance / camera_.focus_distance,
+                    camera_.min_focus_distance / camera_.focus_distance,
+                    camera_.max_focus_distance / camera_.focus_distance
+                );
+                sensitivity_scale = distance_factor; // Slower when closer to focus point
+            }
+
+            // Apply sensitivity and scale
+            float actual_x_offset = x_offset * camera_.mouse_sensitivity * sensitivity_scale;
+            float actual_y_offset = y_offset * camera_.mouse_sensitivity * sensitivity_scale;
 
             // update the yaw and pitch
-            camera_.yaw += x_offset;
-            camera_.pitch += y_offset;
+            camera_.yaw += actual_x_offset;
+            camera_.pitch += actual_y_offset;
 
             // limit the pitch angle
             if (camera_.pitch > 89.0f) camera_.pitch = 89.0f;
             if (camera_.pitch < -89.0f) camera_.pitch = -89.0f;
 
-            // calculate the new camera direction
-            glm::vec3 direction;
-            direction.x = cos(glm::radians(camera_.yaw)) * cos(glm::radians(camera_.pitch));
-            direction.y = sin(glm::radians(camera_.pitch));
-            direction.z = sin(glm::radians(camera_.yaw)) * cos(glm::radians(camera_.pitch));
-            camera_.front = glm::normalize(direction);
-
-            // update the right and up vectors
-            camera_.right = glm::normalize(glm::cross(camera_.front, camera_.world_up));
-            camera_.up = glm::normalize(glm::cross(camera_.right, camera_.front));
+            // calculate the new camera direction and update vectors
+            camera_.UpdateCameraVectors();
         }
-        
+
         if (camera_pan_mode_)
         {
             // calculate the current distance to the focus point
-            float current_distance = camera_.has_focus_point ? 
-                glm::length(camera_.position - camera_.focus_point) : 
+            float current_distance = camera_.has_focus_point ?
+                glm::length(camera_.position - camera_.focus_point) :
                 camera_.focus_distance;
-            
+
             // calculate the distance scale based on the distance
             float distance_scale = glm::clamp(
                 current_distance / camera_.focus_distance,
                 camera_.min_focus_distance / camera_.focus_distance,
                 camera_.max_focus_distance / camera_.focus_distance
             );
-            
+
             float pan_speed_multiplier = 0.005f;
-            float smooth_factor = 0.1f;
-            
-            // calculate the target movement amount (considering the distance scale)
-            float target_x_offset = x_offset * camera_.movement_speed * pan_speed_multiplier / distance_scale;
-            float target_y_offset = y_offset * camera_.movement_speed * pan_speed_multiplier / distance_scale;
-            
-            // apply the smooth interpolation
-            float smooth_x_offset = target_x_offset * smooth_factor;
-            float smooth_y_offset = target_y_offset * smooth_factor;
-            
-            // apply the movement
-            camera_.position.x += smooth_x_offset;
-            camera_.position.y += smooth_y_offset;
+            // Apply distance scaling to pan speed if focus constraint is enabled
+            float actual_pan_speed_multiplier = camera_.focus_constraint_enabled_ ? pan_speed_multiplier / distance_scale : pan_speed_multiplier;
+
+            // calculate the target movement amount
+            float target_x_offset = x_offset * camera_.movement_speed * actual_pan_speed_multiplier;
+            float target_y_offset = y_offset * camera_.movement_speed * actual_pan_speed_multiplier;
+
+            // Apply movement using camera's right and up vectors
+            camera_.position -= camera_.right * target_x_offset; // Pan left/right
+            camera_.position += camera_.up * target_y_offset;   // Pan up/down
         }
     }
     
@@ -431,55 +438,140 @@ void VulkanEngine::ProcessKeyboardInput(float delta_time)
 {
     // get the keyboard state
     const bool* keyboard_state = SDL_GetKeyboardState(nullptr);
-    
+
     float velocity = camera_.movement_speed * delta_time;
-    
-    // move in the screen space
-    glm::vec3 movement(0.0f);
-    
-    // move up (Y-axis)
-    if (keyboard_state[SDL_SCANCODE_W] || keyboard_state[SDL_SCANCODE_UP]) 
+
+    // If free look mode is enabled, move in world space based on camera orientation
+    if (free_look_mode_)
     {
-        movement.y += velocity; // move up (Y-axis positive direction)
+        // Calculate movement speed scale based on distance to focus point if constraint is enabled
+        float distance_scale = 1.0f;
+        if (camera_.has_focus_point && camera_.focus_constraint_enabled_)
+        {
+            float current_distance = glm::length(camera_.position - camera_.focus_point);
+            distance_scale = glm::clamp(
+                current_distance / camera_.focus_distance,
+                camera_.min_focus_distance / camera_.focus_distance,
+                camera_.max_focus_distance / camera_.focus_distance
+            );
+        }
+        float current_velocity = velocity / distance_scale; // Slower when closer
+
+        // move in the screen space
+        glm::vec3 movement(0.0f);
+
+        // move front/back (Z-axis relative to camera)
+        if (keyboard_state[SDL_SCANCODE_W] || keyboard_state[SDL_SCANCODE_UP])
+        {
+            movement += camera_.front * current_velocity;
+        }
+        if (keyboard_state[SDL_SCANCODE_S] || keyboard_state[SDL_SCANCODE_DOWN])
+        {
+            movement -= camera_.front * current_velocity;
+        }
+
+        // move left/right (X-axis relative to camera)
+        if (keyboard_state[SDL_SCANCODE_A] || keyboard_state[SDL_SCANCODE_LEFT])
+        {
+            movement -= camera_.right * current_velocity;
+        }
+        if (keyboard_state[SDL_SCANCODE_D] || keyboard_state[SDL_SCANCODE_RIGHT])
+        {
+            movement += camera_.right * current_velocity;
+        }
+
+        // move up/down (Y-axis relative to world or camera up)
+        if (keyboard_state[SDL_SCANCODE_Q])
+        {
+            movement += camera_.up * current_velocity; // Using camera's up vector for local up/down
+        }
+        if (keyboard_state[SDL_SCANCODE_E])
+        {
+            movement -= camera_.up * current_velocity; // Using camera's up vector for local up/down
+        }
+
+        // apply the movement
+        camera_.position += movement;
     }
-    if (keyboard_state[SDL_SCANCODE_S] || keyboard_state[SDL_SCANCODE_DOWN]) 
+    else // Original screen space movement logic
     {
-        movement.y -= velocity; // move down (Y-axis negative direction)
+        // move in the screen space
+        glm::vec3 movement(0.0f);
+
+        // move up (Y-axis)
+        if (keyboard_state[SDL_SCANCODE_W] || keyboard_state[SDL_SCANCODE_UP])
+        {
+            movement.y += velocity; // move up (Y-axis positive direction)
+        }
+        if (keyboard_state[SDL_SCANCODE_S] || keyboard_state[SDL_SCANCODE_DOWN])
+        {
+            movement.y -= velocity; // move down (Y-axis negative direction)
+        }
+
+        // move left (l-axis)t (X-axis)
+        if (keyboard_state[SDL_SCANCODE_A] || keyboard_state[SDL_SCANCODE_LEFT])
+        {
+            movement.x -= velocity; // move left (l-axis negative direction)X-axis negative direction)
+        }
+        if (keyboard_state[SDL_SCANCODE_D] || keyboard_state[SDL_SCANCODE_RIGHT])
+        {
+            movement.x += velocity; // move right (X-axis positive direction)
+        }
+
+        // move front (Z-axis)
+        if (keyboard_state[SDL_SCANCODE_Q])
+        {
+            movement.z += velocity; // move back (Z-axis negative direction)
+        }
+        if (keyboard_state[SDL_SCANCODE_E])
+        {
+            movement.z -= velocity; // move front (Z-axis positive direction)
+        }
+
+        // apply the smooth movement (removed smooth factor for simplicity in free look, could add back if needed)
+        // float smooth_factor = 0.1f; // smooth factor
+        camera_.position += movement; // * smooth_factor;
     }
-    
-    // move left (l-axis)t (X-axis)
-    if (keyboard_state[SDL_SCANCODE_A] || keyboard_state[SDL_SCANCODE_LEFT]) 
-    {
-        movement.x -= velocity; // move left (l-axis negative direction)X-axis negative direction)
-    }
-    if (keyboard_state[SDL_SCANCODE_D] || keyboard_state[SDL_SCANCODE_RIGHT]) 
-    {
-        movement.x += velocity; // move right (X-axis positive direction)
-    }
-    
-    // move front (Z-axis)
-    if (keyboard_state[SDL_SCANCODE_Q]) 
-    {
-        movement.z += velocity; // move back (Z-axis negative direction)
-    }
-    if (keyboard_state[SDL_SCANCODE_E]) 
-    {
-        movement.z -= velocity; // move front (Z-axis positive direction)
-    }
-    
-    // apply the smooth movement
-    float smooth_factor = 0.1f; // smooth factor
-    camera_.position += movement * smooth_factor;
 }
 
 void VulkanEngine::ProcessMouseScroll(float yoffset)
 {
-    // adjust the field of view
-    camera_.zoom -= yoffset;
-    if (camera_.zoom < 1.0f)
-        camera_.zoom = 1.0f;
-    if (camera_.zoom > 45.0f)
-        camera_.zoom = 45.0f;
+    if (camera_.has_focus_point && camera_.focus_constraint_enabled_)
+    {
+        // Zoom by moving along the camera's front vector
+        float zoom_step = camera_.movement_speed * 0.5f; // Adjust zoom speed
+
+        // Calculate distance scale
+         float current_distance = glm::length(camera_.position - camera_.focus_point);
+         float distance_scale = glm::clamp(
+             current_distance / camera_.focus_distance,
+             camera_.min_focus_distance / camera_.focus_distance,
+             camera_.max_focus_distance / camera_.focus_distance
+         );
+         zoom_step /= distance_scale; // Smaller steps when closer
+
+        if (yoffset > 0)
+        {
+            // Zoom in (move towards focus point)
+            camera_.position += camera_.front * zoom_step;
+        }
+        else if (yoffset < 0)
+        {
+            // Zoom out (move away from focus point)
+             camera_.position -= camera_.front * zoom_step;
+        }
+        // Update camera vectors after changing position for orbit-like feel
+        camera_.UpdateCameraVectors();
+    }
+    else
+    {
+        // Original FOV zoom logic when focus constraint is disabled
+        camera_.zoom -= yoffset;
+        if (camera_.zoom < 1.0f)
+            camera_.zoom = 1.0f;
+        if (camera_.zoom > 45.0f)
+            camera_.zoom = 45.0f;
+    }
 }
 
 // Main render loop
@@ -628,18 +720,6 @@ bool VulkanEngine::CreateVertexInputBuffers()
         glm::vec3 color;
     };
 
-    // vra and vma members
-    vra_data_batcher_ = std::make_unique<vra::VraDataBatcher>(vkb_physical_device_.physical_device);
-
-    VmaAllocatorCreateInfo allocatorCreateInfo = {};
-    allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
-    allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
-    allocatorCreateInfo.physicalDevice = vkb_physical_device_.physical_device;
-    allocatorCreateInfo.device = vkb_device_.device;
-    allocatorCreateInfo.instance = vkb_instance_.instance;
-
-    vmaCreateAllocator(&allocatorCreateInfo, &vma_allocator_);
-
     // raw data
     const std::vector<Vertex> vertices =
         {
@@ -697,14 +777,6 @@ bool VulkanEngine::CreateVertexInputBuffers()
     vra_data_batcher_->Collect(staging_data_desc, index_raw_data, staging_index_data_id_);
     vertex_index_staging_batch_handle_ = std::move(vra_data_batcher_->Batch());
 
-    // generate vertex and index buffers and allocate memory
-    // auto local_batch = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::GPU_Only);
-    // if (!local_batch || local_batch->offsets.size() == 0)
-    // {
-    //     Logger::LogError("Failed to get local buffer data(From vra)");
-    //     return false;
-    // }
-
     // get buffer create info
     const auto& local_buffer_create_info = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].data_desc.GetBufferCreateInfo();
 
@@ -722,13 +794,6 @@ bool VulkanEngine::CreateVertexInputBuffers()
                                  "Succeeded in creating local buffer(From vma)"))
         return false;
 
-    // generate staging buffer and copy data
-    // auto host_batch = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::CPU_GPU_Rarely);
-    // if (!host_batch || host_batch->offsets.size() == 0)
-    // {
-    //     Logger::LogError("Failed to get host buffer data(From vra)");
-    //     return false;
-    // }
 
     // get buffer create info and consolidate data
     const auto& host_buffer_create_info = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Rarely].data_desc.GetBufferCreateInfo();
@@ -751,11 +816,11 @@ bool VulkanEngine::CreateVertexInputBuffers()
     // copy data to staging buffer
     void *mapped_data = nullptr;
     
-    vmaInvalidateAllocation(vma_allocator_, staging_buffer_allocation_, 0, consolidated_data.size());
+    vmaInvalidateAllocation(vma_allocator_, staging_buffer_allocation_, 0, VK_WHOLE_SIZE);
     vmaMapMemory(vma_allocator_, staging_buffer_allocation_, &mapped_data);
     memcpy(mapped_data, consolidated_data.data(), consolidated_data.size());
     vmaUnmapMemory(vma_allocator_, staging_buffer_allocation_);
-    vmaFlushAllocation(vma_allocator_, staging_buffer_allocation_, 0, staging_buffer_allocation_info_.size);
+    vmaFlushAllocation(vma_allocator_, staging_buffer_allocation_, 0, VK_WHOLE_SIZE);
 
     // vertex input binding description
     vertex_input_binding_description_.binding = 0;
@@ -797,13 +862,6 @@ bool VulkanEngine::CreateUniformBuffers()
     }
 
     uniform_batch_handle_ = std::move(vra_data_batcher_->Batch());
-
-    // auto uniform_batch = vra_data_batcher_->GetBatch(vra::VraBuiltInBatchIds::CPU_GPU_Frequently);
-    // if (!uniform_batch || uniform_batch->offsets.size() == 0)
-    // {
-    //     Logger::LogError("Failed to get uniform buffer data(From vra)");
-    //     return false;
-    // }
 
     // get buffer create info
     const auto& uniform_buffer_create_info = uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].data_desc.GetBufferCreateInfo();
@@ -897,6 +955,26 @@ bool VulkanEngine::CreateAndWriteDescriptorRelatives()
     return true;
 }
 
+bool VulkanEngine::CreateVmaVraObjects()
+{
+    // vra and vma members
+    vra_data_batcher_ = std::make_unique<vra::VraDataBatcher>(vkb_physical_device_.physical_device);
+
+    VmaAllocatorCreateInfo allocatorCreateInfo = {};
+    allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+    allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+    allocatorCreateInfo.physicalDevice = vkb_physical_device_.physical_device;
+    allocatorCreateInfo.device = vkb_device_.device;
+    allocatorCreateInfo.instance = vkb_instance_.instance;
+
+    if (!Logger::LogWithVkResult(vmaCreateAllocator(&allocatorCreateInfo, &vma_allocator_),
+                                "Failed to create Vulkan vra and vma objects",
+                                "Succeeded in creating Vulkan vra and vma objects"))
+        return false;
+
+    return true;
+}
+
 bool VulkanEngine::CreatePipeline()
 {
     // create shader
@@ -906,6 +984,8 @@ bool VulkanEngine::CreatePipeline()
     std::string shader_path = engine_config_.general_config.working_directory + "src\\shader\\";
     std::string vertex_shader_path = shader_path + "triangle.vert.spv";
     std::string fragment_shader_path = shader_path + "triangle.frag.spv";
+    // std::string vertex_shader_path = shader_path + "gltf.vert.spv";
+    // std::string fragment_shader_path = shader_path + "gltf.frag.spv";
     configs.push_back({EShaderType::kVertexShader, vertex_shader_path.c_str()});
     configs.push_back({EShaderType::kFragmentShader, fragment_shader_path.c_str()});
 
@@ -945,8 +1025,9 @@ bool VulkanEngine::CreatePipeline()
     pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
     pipeline_config.vertex_input_binding_description = vertex_input_binding_description_;
     pipeline_config.vertex_input_attribute_descriptions = {vertex_input_attribute_position_, vertex_input_attribute_color_};
+    // pipeline_config.vertex_input_binding_description = test_vertex_input_binding_description_;
+    // pipeline_config.vertex_input_attribute_descriptions = test_vertex_input_attributes_;
     pipeline_config.descriptor_set_layouts.push_back(descriptor_set_layout_);
-
     vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);
     return vkPipelineHelper_->CreatePipeline(vkb_device_.device);
 }
@@ -1134,6 +1215,11 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     buffer_copy_info.dstOffset = 0;
     buffer_copy_info.size = staging_buffer_allocation_info_.size;
     vkCmdCopyBuffer(command_buffer, staging_buffer_, local_buffer_, 1, &buffer_copy_info);
+    // VkBufferCopy buffer_copy_info{};
+    // buffer_copy_info.srcOffset = 0;
+    // buffer_copy_info.dstOffset = 0;
+    // buffer_copy_info.size = test_staging_buffer_allocation_info_.size;
+    // vkCmdCopyBuffer(command_buffer, test_staging_buffer_, test_local_buffer_, 1, &buffer_copy_info);
 
     VkBufferMemoryBarrier2 buffer_memory_barrier{};
     buffer_memory_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
@@ -1155,6 +1241,10 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdBindVertexBuffers(command_buffer, 0, 1, &local_buffer_, &vertex_offset);
     auto index_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[index_data_id_];
     vkCmdBindIndexBuffer(command_buffer, local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
+    // auto vertex_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_vertex_buffer_id_];
+    // vkCmdBindVertexBuffers(command_buffer, 0, 1, &test_local_buffer_, &vertex_offset);
+    // auto index_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_index_buffer_id_];
+    // vkCmdBindIndexBuffer(command_buffer, test_local_buffer_, index_offset, VK_INDEX_TYPE_UINT32);
 
     // begin renderpass
     VkClearValue clear_color = {};
@@ -1206,8 +1296,8 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
     // draw
-    // vkCmdDraw(command_buffer, 3, 1, 0, 0); // TODO: Handle vertex buffer and index buffer
     vkCmdDrawIndexed(command_buffer, 3, 1, 0, 0, 0);
+    // vkCmdDrawIndexed(command_buffer, indices_.size(), 1, 0, 0, 0);
 
     // end renderpass
     vkCmdEndRenderPass(command_buffer);
@@ -1277,4 +1367,266 @@ void VulkanEngine::FocusOnObject(const glm::vec3& object_position, float target_
     glm::vec3 front = camera_.front;
     camera_.pitch = glm::degrees(asin(front.y));
     camera_.yaw = glm::degrees(atan2(front.z, front.x));
+}
+
+void VulkanEngine::CreateTestLocalStagingBuffer()
+{
+    // create a vertex data
+    vra::VraRawData vertex_buffer_data{
+        .pData_ = vertices_.data(),
+        .size_ = sizeof(gltf::VertexInput) * vertices_.size()};
+    vra::VraRawData index_buffer_data{
+        .pData_ = indices_.data(),
+        .size_ = sizeof(uint32_t) * indices_.size()};
+
+    // info for vertex buffer
+    VkBufferCreateInfo vertex_buffer_create_info{};
+    vertex_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    vertex_buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    vertex_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc vertex_buffer_desc {
+        vra::VraDataMemoryPattern::GPU_Only,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        vertex_buffer_create_info
+    };
+    // info for index buffer
+    VkBufferCreateInfo index_buffer_create_info{};
+    index_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    index_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    
+    vra::VraDataDesc index_buffer_desc {
+        vra::VraDataMemoryPattern::GPU_Only,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        index_buffer_create_info
+    };
+    // info for staging buffer
+    VkBufferCreateInfo staging_buffer_create_info{};
+    staging_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    staging_buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    staging_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc staging_buffer_desc {
+        vra::VraDataMemoryPattern::CPU_GPU,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        staging_buffer_create_info
+    };
+
+    vra_data_batcher_->Collect(vertex_buffer_desc, vertex_buffer_data, test_vertex_buffer_id_);
+    vra_data_batcher_->Collect(index_buffer_desc, index_buffer_data, test_index_buffer_id_);
+    vra_data_batcher_->Collect(staging_buffer_desc, vertex_buffer_data, test_staging_vertex_buffer_id_);
+    vra_data_batcher_->Collect(staging_buffer_desc, index_buffer_data, test_staging_index_buffer_id_);
+    test_local_host_batch_handle_ = std::move(vra_data_batcher_->Batch());
+
+    // create local buffer
+    auto test_local_buffer_create_info = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].data_desc.GetBufferCreateInfo();
+    VmaAllocationCreateInfo allocation_create_info{};
+    allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+    vmaCreateBuffer(
+        vma_allocator_, 
+        &test_local_buffer_create_info, 
+        &allocation_create_info, 
+        &test_local_buffer_, 
+        &test_local_buffer_allocation_, 
+        &test_local_buffer_allocation_info_);
+
+    // create staging buffer
+    auto test_host_buffer_create_info = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Rarely].data_desc.GetBufferCreateInfo();
+    VmaAllocationCreateInfo staging_allocation_create_info{};
+    staging_allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+    staging_allocation_create_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraDataMemoryPattern::CPU_GPU, vra::VraDataUpdateRate::RarelyOrNever);
+    vmaCreateBuffer(
+        vma_allocator_, 
+        &test_host_buffer_create_info, 
+        &staging_allocation_create_info, 
+        &test_staging_buffer_, 
+        &test_staging_buffer_allocation_, 
+        &test_staging_buffer_allocation_info_);
+
+    // copy data to staging buffer
+    auto consolidate_data = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].consolidated_data;
+    void* data;
+    vmaInvalidateAllocation(vma_allocator_, test_staging_buffer_allocation_, 0, VK_WHOLE_SIZE);
+    vmaMapMemory(vma_allocator_, test_staging_buffer_allocation_, &data);
+    memcpy(data, consolidate_data.data(), consolidate_data.size());
+    vmaUnmapMemory(vma_allocator_, test_staging_buffer_allocation_);
+    vmaFlushAllocation(vma_allocator_, test_staging_buffer_allocation_, 0, VK_WHOLE_SIZE);
+
+    // bind vertex input
+    test_vertex_input_binding_description_.binding = 0;
+    test_vertex_input_binding_description_.stride = sizeof(gltf::VertexInput);
+    test_vertex_input_binding_description_.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    // position
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 0,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = 0
+    });
+    // color
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 1,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .offset = sizeof(gltf::VertexInput::position)
+    });
+    // normal
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 2,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color)
+    });
+    // tangent
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 3,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color) + sizeof(gltf::VertexInput::normal)
+    });
+    // uv0
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 5,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color) + sizeof(gltf::VertexInput::normal) + sizeof(gltf::VertexInput::tangent)
+    });
+    // uv1
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 6,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color) + sizeof(gltf::VertexInput::normal) + sizeof(gltf::VertexInput::tangent) + sizeof(gltf::VertexInput::uv0)
+    });
+}
+
+void VulkanEngine::CreateTestUniformBuffer()
+{
+    for (int i = 0; i < engine_config_.frame_count; ++i)
+    {
+        auto current_mvp_matrix = mvp_matrices_[i];
+        VkBufferCreateInfo buffer_create_info = {};
+        buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        buffer_create_info.size = sizeof(SMvpMatrix);
+        vra::VraDataDesc data_desc{
+            vra::VraDataMemoryPattern::CPU_GPU,
+            vra::VraDataUpdateRate::Frequent,
+            buffer_create_info};
+        vra::VraRawData raw_data{
+            &current_mvp_matrix,
+            sizeof(SMvpMatrix)};
+        uniform_buffer_id_.push_back(0);
+        vra_data_batcher_->Collect(data_desc, std::move(raw_data), uniform_buffer_id_.back());
+    }
+
+    test_uniform_batch_handle_ = std::move(vra_data_batcher_->Batch());
+
+    // get buffer create info
+    const auto &uniform_buffer_create_info = test_uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].data_desc.GetBufferCreateInfo();
+
+    VmaAllocationCreateInfo allocation_create_info = {};
+    allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+    allocation_create_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraDataMemoryPattern::CPU_GPU, vra::VraDataUpdateRate::Frequent);
+    allocation_create_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    Logger::LogWithVkResult(vmaCreateBuffer(
+                                     vma_allocator_,
+                                     &uniform_buffer_create_info,
+                                     &allocation_create_info,
+                                     &test_uniform_buffer_,
+                                     &test_uniform_buffer_allocation_,
+                                     &test_uniform_buffer_allocation_info_),
+                                 "Failed to create uniform buffer",
+                                 "Succeeded in creating uniform buffer");
+}
+
+
+void VulkanEngine::CreateTestDescriptorSet()
+{
+    // create descriptor set layout
+    VkDescriptorSetLayoutBinding descriptor_set_layout_binding{};
+    descriptor_set_layout_binding.binding = 0;
+    descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptor_set_layout_binding.descriptorCount = 1;
+    descriptor_set_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info{};
+    descriptor_set_layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptor_set_layout_create_info.bindingCount = 1;
+    descriptor_set_layout_create_info.pBindings = &descriptor_set_layout_binding;
+
+    Logger::LogWithVkResult(vkCreateDescriptorSetLayout(
+                                vkb_device_.device,
+                                &descriptor_set_layout_create_info,
+                                nullptr,
+                                &test_descriptor_set_layout_),
+                            "Failed to create descriptor set layout",
+                            "Succeeded in creating descriptor set layout");
+
+    // create descriptor pool
+    VkDescriptorPoolSize descriptor_pool_size{};
+    descriptor_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptor_pool_size.descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo descriptor_pool_create_info{};
+    descriptor_pool_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptor_pool_create_info.poolSizeCount = 1;
+    descriptor_pool_create_info.pPoolSizes = &descriptor_pool_size;
+    descriptor_pool_create_info.maxSets = 1;
+
+    Logger::LogWithVkResult(vkCreateDescriptorPool(
+        vkb_device_.device,
+        &descriptor_pool_create_info,
+        nullptr,
+        &test_descriptor_pool_),
+        "Failed to create descriptor pool",
+        "Succeeded in creating descriptor pool");
+
+    // create descriptor set
+    VkDescriptorSetAllocateInfo descriptor_set_allocate_info{};
+    descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptor_set_allocate_info.descriptorPool = test_descriptor_pool_;
+    descriptor_set_allocate_info.descriptorSetCount = 1;
+    descriptor_set_allocate_info.pSetLayouts = &test_descriptor_set_layout_;
+    Logger::LogWithVkResult(vkAllocateDescriptorSets(
+                                vkb_device_.device,
+                                &descriptor_set_allocate_info,
+                                &test_descriptor_set_),
+                            "Failed to allocate descriptor set",
+                            "Succeeded in allocating descriptor set");
+
+    // create descriptor set
+    VkDescriptorBufferInfo buffer_info{};
+    buffer_info.buffer = test_uniform_buffer_;
+    buffer_info.offset = 0;
+    buffer_info.range = sizeof(SMvpMatrix);
+
+    VkWriteDescriptorSet write_descriptor_set{};
+    write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write_descriptor_set.descriptorCount = 1;
+    write_descriptor_set.pBufferInfo = &buffer_info;
+    write_descriptor_set.dstSet = test_descriptor_set_;
+    write_descriptor_set.dstBinding = 0;
+    write_descriptor_set.dstArrayElement = 0;
+
+    vkUpdateDescriptorSets(
+        vkb_device_.device,
+        1,
+        &write_descriptor_set,
+        0,
+        nullptr);
+}
+
+void VulkanEngine::ReleaseTestData()
+{
+    // release vma
+    vmaDestroyBuffer(vma_allocator_, test_local_buffer_, test_local_buffer_allocation_);
+    vmaDestroyBuffer(vma_allocator_, test_staging_buffer_, test_staging_buffer_allocation_);
+    // vmaDestroyBuffer(vma_allocator_, test_uniform_buffer_, test_uniform_buffer_allocation_);
+
+    // // release descriptor set
+    // vkDestroyDescriptorPool(vkb_device_.device, test_descriptor_pool_, nullptr);
+    // vkDestroyDescriptorSetLayout(vkb_device_.device, test_descriptor_set_layout_, nullptr); 
 }
