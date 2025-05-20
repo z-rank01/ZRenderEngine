@@ -35,7 +35,7 @@ void VulkanEngine::GetVertexIndexData(std::vector<uint32_t> indices, std::vector
 VulkanEngine::~VulkanEngine()
 {
     // release test data
-    // ReleaseTestData();
+    ReleaseTestData();
 
     // 等待设备空闲，确保没有正在进行的操作
     vkDeviceWaitIdle(vkb_device_.device);
@@ -52,15 +52,15 @@ VulkanEngine::~VulkanEngine()
     }
 
     // 销毁VMA缓冲区
-    if (local_buffer_ != VK_NULL_HANDLE) {
-        vmaDestroyBuffer(vma_allocator_, local_buffer_, local_buffer_allocation_);
-        local_buffer_ = VK_NULL_HANDLE;
-    }
+    // if (local_buffer_ != VK_NULL_HANDLE) {
+    //     vmaDestroyBuffer(vma_allocator_, local_buffer_, local_buffer_allocation_);
+    //     local_buffer_ = VK_NULL_HANDLE;
+    // }
     
-    if (staging_buffer_ != VK_NULL_HANDLE) {
-        vmaDestroyBuffer(vma_allocator_, staging_buffer_, staging_buffer_allocation_);
-        staging_buffer_ = VK_NULL_HANDLE;
-    }
+    // if (staging_buffer_ != VK_NULL_HANDLE) {
+    //     vmaDestroyBuffer(vma_allocator_, staging_buffer_, staging_buffer_allocation_);
+    //     staging_buffer_ = VK_NULL_HANDLE;
+    // }
     
     if (uniform_buffer_ != VK_NULL_HANDLE) {
         vmaDestroyBuffer(vma_allocator_, uniform_buffer_, uniform_buffer_allocation_);
@@ -142,13 +142,13 @@ void VulkanEngine::InitializeVulkan()
         throw std::runtime_error("Failed to create Vulkan vra and vma objects.");
     }
 
-    if (!CreateVertexInputBuffers())
-    {
-        throw std::runtime_error("Failed to create Vulkan resource's buffers.");
-    }
+    // if (!CreateVertexInputBuffers())
+    // {
+    //     throw std::runtime_error("Failed to create Vulkan resource's buffers.");
+    // }
 
     // test
-    // CreateTestLocalStagingBuffer();
+    CreateTestLocalStagingBuffer();
 
     if (!CreateUniformBuffers())
     {
@@ -195,7 +195,7 @@ void VulkanEngine::InitializeCamera()
     camera_.position = glm::vec3(0.0f, 0.0f, 3.0f);   // 3 units away from origin
     camera_.yaw = -90.0f;                             // look at origin
     camera_.pitch = 0.0f;                             // horizontal view
-    camera_.movement_speed = 5.0f;
+    camera_.movement_speed = 10.0f;
     camera_.mouse_sensitivity = 0.5f;
     camera_.zoom = 45.0f;
     camera_.world_up = glm::vec3(0.0f, -1.0f, 0.0f);  // Y-axis is down in Vulkan
@@ -373,8 +373,8 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
             float actual_y_offset = y_offset * camera_.mouse_sensitivity * sensitivity_scale;
 
             // update the yaw and pitch
-            camera_.yaw += actual_x_offset;
-            camera_.pitch += actual_y_offset;
+            camera_.yaw -= actual_x_offset;
+            camera_.pitch -= actual_y_offset;
 
             // limit the pitch angle
             if (camera_.pitch > 89.0f) camera_.pitch = 89.0f;
@@ -982,10 +982,10 @@ bool VulkanEngine::CreatePipeline()
 
     std::vector<SVulkanShaderConfig> configs;
     std::string shader_path = engine_config_.general_config.working_directory + "src\\shader\\";
-    std::string vertex_shader_path = shader_path + "triangle.vert.spv";
-    std::string fragment_shader_path = shader_path + "triangle.frag.spv";
-    // std::string vertex_shader_path = shader_path + "gltf.vert.spv";
-    // std::string fragment_shader_path = shader_path + "gltf.frag.spv";
+    // std::string vertex_shader_path = shader_path + "triangle.vert.spv";
+    // std::string fragment_shader_path = shader_path + "triangle.frag.spv";
+    std::string vertex_shader_path = shader_path + "gltf.vert.spv";
+    std::string fragment_shader_path = shader_path + "gltf.frag.spv";
     configs.push_back({EShaderType::kVertexShader, vertex_shader_path.c_str()});
     configs.push_back({EShaderType::kFragmentShader, fragment_shader_path.c_str()});
 
@@ -1023,10 +1023,10 @@ bool VulkanEngine::CreatePipeline()
         {EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader)},
         {EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader)}};
     pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
-    pipeline_config.vertex_input_binding_description = vertex_input_binding_description_;
-    pipeline_config.vertex_input_attribute_descriptions = {vertex_input_attribute_position_, vertex_input_attribute_color_};
-    // pipeline_config.vertex_input_binding_description = test_vertex_input_binding_description_;
-    // pipeline_config.vertex_input_attribute_descriptions = test_vertex_input_attributes_;
+    // pipeline_config.vertex_input_binding_description = vertex_input_binding_description_;
+    // pipeline_config.vertex_input_attribute_descriptions = {vertex_input_attribute_position_, vertex_input_attribute_color_};
+    pipeline_config.vertex_input_binding_description = test_vertex_input_binding_description_;
+    pipeline_config.vertex_input_attribute_descriptions = test_vertex_input_attributes_;
     pipeline_config.descriptor_set_layouts.push_back(descriptor_set_layout_);
     vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);
     return vkPipelineHelper_->CreatePipeline(vkb_device_.device);
@@ -1210,16 +1210,16 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     auto swapchain_config = &swapchain_config_;
 
     // copy buffer from staging to local
-    VkBufferCopy buffer_copy_info{};
-    buffer_copy_info.srcOffset = 0;
-    buffer_copy_info.dstOffset = 0;
-    buffer_copy_info.size = staging_buffer_allocation_info_.size;
-    vkCmdCopyBuffer(command_buffer, staging_buffer_, local_buffer_, 1, &buffer_copy_info);
     // VkBufferCopy buffer_copy_info{};
     // buffer_copy_info.srcOffset = 0;
     // buffer_copy_info.dstOffset = 0;
-    // buffer_copy_info.size = test_staging_buffer_allocation_info_.size;
-    // vkCmdCopyBuffer(command_buffer, test_staging_buffer_, test_local_buffer_, 1, &buffer_copy_info);
+    // buffer_copy_info.size = staging_buffer_allocation_info_.size;
+    // vkCmdCopyBuffer(command_buffer, staging_buffer_, local_buffer_, 1, &buffer_copy_info);
+    VkBufferCopy buffer_copy_info{};
+    buffer_copy_info.srcOffset = 0;
+    buffer_copy_info.dstOffset = 0;
+    buffer_copy_info.size = test_staging_buffer_allocation_info_.size;
+    vkCmdCopyBuffer(command_buffer, test_staging_buffer_, test_local_buffer_, 1, &buffer_copy_info);
 
     VkBufferMemoryBarrier2 buffer_memory_barrier{};
     buffer_memory_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
@@ -1237,14 +1237,14 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdPipelineBarrier2(command_buffer, &dependency_info);
 
     // bind vertex and index buffers
-    auto vertex_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[vertex_data_id_];
-    vkCmdBindVertexBuffers(command_buffer, 0, 1, &local_buffer_, &vertex_offset);
-    auto index_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[index_data_id_];
-    vkCmdBindIndexBuffer(command_buffer, local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
-    // auto vertex_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_vertex_buffer_id_];
-    // vkCmdBindVertexBuffers(command_buffer, 0, 1, &test_local_buffer_, &vertex_offset);
-    // auto index_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_index_buffer_id_];
-    // vkCmdBindIndexBuffer(command_buffer, test_local_buffer_, index_offset, VK_INDEX_TYPE_UINT32);
+    // auto vertex_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[vertex_data_id_];
+    // vkCmdBindVertexBuffers(command_buffer, 0, 1, &local_buffer_, &vertex_offset);
+    // auto index_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[index_data_id_];
+    // vkCmdBindIndexBuffer(command_buffer, local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
+    auto vertex_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_vertex_buffer_id_];
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, &test_local_buffer_, &vertex_offset);
+    auto index_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_index_buffer_id_];
+    vkCmdBindIndexBuffer(command_buffer, test_local_buffer_, index_offset, VK_INDEX_TYPE_UINT32);
 
     // begin renderpass
     VkClearValue clear_color = {};
@@ -1296,8 +1296,8 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
     // draw
-    vkCmdDrawIndexed(command_buffer, 3, 1, 0, 0, 0);
-    // vkCmdDrawIndexed(command_buffer, indices_.size(), 1, 0, 0, 0);
+    // vkCmdDrawIndexed(command_buffer, 3, 1, 0, 0, 0);
+    vkCmdDrawIndexed(command_buffer, indices_.size(), 1, 0, 0, 0);
 
     // end renderpass
     vkCmdEndRenderPass(command_buffer);
