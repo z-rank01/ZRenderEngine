@@ -11,16 +11,16 @@ namespace gltf
     class GltfLoader
     {
     public:
-        GltfLoader(const std::string_view& path);
-        ~GltfLoader();
+        GltfLoader() = default;
+        ~GltfLoader() = default;
 
-        const fastgltf::Asset& GetAsset() const { return asset_; }
-
-    private:
-        fastgltf::Asset asset_;
+        /// @brief Load gltf file from path
+        /// @param path: path to the gltf file
+        /// @return: gltf asset
+        fastgltf::Asset operator()(const std::string_view& path);
     };
 
-    gltf::GltfLoader::GltfLoader(const std::string_view &path)
+    inline fastgltf::Asset GltfLoader::operator()(const std::string_view &path)
     {
         constexpr auto gltfOptions =
             fastgltf::Options::DontRequireValidAssetMember |
@@ -49,12 +49,7 @@ namespace gltf
             throw std::runtime_error("Failed to parse gltf file");
         }
 
-        // move the asset to the member variable
-        asset_ = std::move(result.get());
-    }
-
-    gltf::GltfLoader::~GltfLoader()
-    {
+        return std::move(result.get());
     }
 }
 

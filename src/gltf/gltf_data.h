@@ -107,7 +107,7 @@ namespace gltf
 
     /// @brief single draw call data.
     /// @note equals to a primitives element in gltf file.
-    struct SingleDrawCallData
+    struct PerDrawCallData
     {
         glm::mat4 transform;
         std::vector<uint32_t> indices;
@@ -116,10 +116,10 @@ namespace gltf
     };
 
     /// @brief mesh data containing multiple primitives.
-    struct Mesh
+    struct PerMeshData
     {
         std::string name;
-        std::vector<SingleDrawCallData> primitives;
+        std::vector<PerDrawCallData> primitives;
     };
 }
 

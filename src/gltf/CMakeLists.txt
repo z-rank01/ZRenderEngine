@@ -2,6 +2,7 @@ add_library(gltf_helper STATIC
     gltf_loader.h
     gltf_data.h
     gltf_parser.h
+    gltf_converter.h
 )
 
 # 设置编译器标准和选项

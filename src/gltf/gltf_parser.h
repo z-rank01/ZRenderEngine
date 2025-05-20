@@ -19,44 +19,40 @@
 
 namespace gltf
 {
+    // Define tag structs for overloading
+    struct RequestMeshList {};
+    struct RequestDrawCallList {};
+
     class GltfParser
     {
     public:
-        GltfParser(const fastgltf::Asset &asset);
+        GltfParser() = default;
 
-        const std::vector<SingleDrawCallData> &GetDrawCallDataList() const { return draw_call_data_list_; }
-        const std::vector<Mesh> &GetMeshList() const { return mesh_list_; }
+        /// @brief Parse gltf file and return mesh list
+        /// @param asset: gltf asset
+        /// @param request: request type
+        /// @return: mesh list
+        std::vector<PerMeshData> operator()(const fastgltf::Asset &asset, RequestMeshList) const { return BuildMeshList(asset);  }
+
+        /// @brief Parse gltf file and return draw call data list
+        /// @param asset: gltf asset
+        /// @param request: request type
+        /// @return: draw call data list
+        std::vector<PerDrawCallData> operator()(const fastgltf::Asset &asset, RequestDrawCallList) const { return BuildDrawCallDataList(asset); }
 
     private:
-        // private members
-        std::vector<SingleDrawCallData> draw_call_data_list_;
-        std::vector<Mesh> mesh_list_;
+        glm::mat4                       parseTransform(const fastgltf::Node &node) const;
+        std::vector<uint32_t>           parseIndices(const fastgltf::Primitive &primitive, const fastgltf::Asset &asset) const;
+        std::vector<VertexInput>        parseVertexInputs(const fastgltf::Primitive &primitive, const fastgltf::Asset &asset) const;
+        uint32_t                        parseMaterialIndex(const fastgltf::Primitive &primitive) const;
 
-        const fastgltf::Asset &asset_;
+        std::vector<PerMeshData>        BuildMeshList(const fastgltf::Asset &asset) const;
+        std::vector<PerDrawCallData>    BuildDrawCallDataList(const fastgltf::Asset &asset) const;
 
-        // parse methods
-        glm::mat4 parseTransform(const fastgltf::Node &node) const;
-        std::vector<uint32_t> parseIndices(const fastgltf::Primitive &primitive) const;
-        std::vector<VertexInput> parseVertexInputs(const fastgltf::Primitive &primitive) const;
-        uint32_t parseMaterialIndex(const fastgltf::Primitive &primitive) const;
-
-        // build methods
-        std::vector<Mesh> BuildMeshList() const;
-        std::vector<SingleDrawCallData> BuildDrawCallDataList() const;
-
-        // helper functions
         template<typename T, typename Setter>
-        void parseAttributeInternal(size_t accessorIndex, Setter setter) const;
+        void parseAttributeInternal(const fastgltf::Asset &asset, size_t accessorIndex, Setter setter) const;
     };
 
-    // implement constructor, call build methods
-    GltfParser::GltfParser(const fastgltf::Asset &asset) : asset_(asset)
-    {
-        mesh_list_ = BuildMeshList();
-        draw_call_data_list_ = BuildDrawCallDataList();
-    }
-
-    // implement private methods
     glm::mat4 GltfParser::parseTransform(const fastgltf::Node &node) const
     {
         if (std::holds_alternative<fastgltf::math::fmat4x4>(node.transform)) {
@@ -78,44 +74,44 @@ namespace gltf
         }
     }
 
-    std::vector<uint32_t> GltfParser::parseIndices(const fastgltf::Primitive &primitive) const
+    std::vector<uint32_t> GltfParser::parseIndices(const fastgltf::Primitive &primitive, const fastgltf::Asset &asset) const
     {
         if (!primitive.indicesAccessor) {
             throw std::runtime_error("Indices accessor not found");
         }
         std::vector<uint32_t> indices;
-        const auto &accessor = asset_.accessors[primitive.indicesAccessor.value()];
+        const auto &accessor = asset.accessors[primitive.indicesAccessor.value()];
         indices.reserve(accessor.count);
-        fastgltf::iterateAccessor<uint32_t>(asset_, accessor, [&](uint32_t index) { indices.push_back(index); });
+        fastgltf::iterateAccessor<uint32_t>(asset, accessor, [&](uint32_t index) { indices.push_back(index); });
         return indices;
     }
 
-    std::vector<VertexInput> GltfParser::parseVertexInputs(const fastgltf::Primitive &primitive) const
+    std::vector<VertexInput> GltfParser::parseVertexInputs(const fastgltf::Primitive &primitive, const fastgltf::Asset &asset) const
     {
         const auto &posAccessorIndex = primitive.findAttribute("POSITION")->accessorIndex;
-        if (posAccessorIndex >= asset_.accessors.size()) {
+        if (posAccessorIndex >= asset.accessors.size()) {
             throw std::runtime_error("Position accessor not found");
         }
-        const auto &posAccessor = asset_.accessors[posAccessorIndex];
+        const auto &posAccessor = asset.accessors[posAccessorIndex];
         std::vector<VertexInput> vertex_inputs(posAccessor.count);
 
         // 使用辅助函数解析属性
-        parseAttributeInternal<glm::vec3>(posAccessorIndex, [&](glm::vec3 value, size_t index) { vertex_inputs[index].position = value; });
+        parseAttributeInternal<glm::vec3>(asset, posAccessorIndex, [&](glm::vec3 value, size_t index) { vertex_inputs[index].position = value; });
         
         auto colorAttr = primitive.findAttribute("COLOR_0");
-        if (colorAttr) parseAttributeInternal<glm::vec4>(colorAttr->accessorIndex, [&](glm::vec4 value, size_t index) { vertex_inputs[index].color = value; });
+        if (colorAttr) parseAttributeInternal<glm::vec4>(asset, colorAttr->accessorIndex, [&](glm::vec4 value, size_t index) { vertex_inputs[index].color = value; });
         
         auto normalAttr = primitive.findAttribute("NORMAL");
-        if (normalAttr) parseAttributeInternal<glm::vec3>(normalAttr->accessorIndex, [&](glm::vec3 value, size_t index) { vertex_inputs[index].normal = value; });
+        if (normalAttr) parseAttributeInternal<glm::vec3>(asset, normalAttr->accessorIndex, [&](glm::vec3 value, size_t index) { vertex_inputs[index].normal = value; });
         
         auto tangentAttr = primitive.findAttribute("TANGENT");
-        if (tangentAttr) parseAttributeInternal<glm::vec4>(tangentAttr->accessorIndex, [&](glm::vec4 value, size_t index) { vertex_inputs[index].tangent = value; });
+        if (tangentAttr) parseAttributeInternal<glm::vec4>(asset, tangentAttr->accessorIndex, [&](glm::vec4 value, size_t index) { vertex_inputs[index].tangent = value; });
         
         auto uv0Attr = primitive.findAttribute("TEXCOORD_0");
-        if (uv0Attr) parseAttributeInternal<glm::vec2>(uv0Attr->accessorIndex, [&](glm::vec2 value, size_t index) { vertex_inputs[index].uv0 = value; });
+        if (uv0Attr) parseAttributeInternal<glm::vec2>(asset, uv0Attr->accessorIndex, [&](glm::vec2 value, size_t index) { vertex_inputs[index].uv0 = value; });
         
         auto uv1Attr = primitive.findAttribute("TEXCOORD_1");
-        if (uv1Attr) parseAttributeInternal<glm::vec2>(uv1Attr->accessorIndex, [&](glm::vec2 value, size_t index) { vertex_inputs[index].uv1 = value; });
+        if (uv1Attr) parseAttributeInternal<glm::vec2>(asset, uv1Attr->accessorIndex, [&](glm::vec2 value, size_t index) { vertex_inputs[index].uv1 = value; });
 
         return vertex_inputs;
     }
@@ -128,25 +124,23 @@ namespace gltf
         return primitive.materialIndex.value();
     }
 
-    // implement helper function template
     template<typename T, typename Setter>
-    void GltfParser::parseAttributeInternal(size_t accessorIndex, Setter setter) const
+    void GltfParser::parseAttributeInternal(const fastgltf::Asset &asset, size_t accessorIndex, Setter setter) const
     {
-        if (accessorIndex < asset_.accessors.size()) {
-            const auto &accessor = asset_.accessors[accessorIndex];
-            fastgltf::iterateAccessorWithIndex<T>(asset_, accessor, setter, fastgltf::DefaultBufferDataAdapter{});
+        if (accessorIndex < asset.accessors.size()) {
+            const auto &accessor = asset.accessors[accessorIndex];
+            fastgltf::iterateAccessorWithIndex<T>(asset, accessor, setter, fastgltf::DefaultBufferDataAdapter{});
         }
     }
 
-    // implement build mesh list method
-    std::vector<Mesh> GltfParser::BuildMeshList() const
+    std::vector<PerMeshData> GltfParser::BuildMeshList(const fastgltf::Asset &asset) const
     {
-        std::vector<Mesh> meshes;
-        meshes.reserve(asset_.meshes.size());
+        std::vector<PerMeshData> meshes;
+        meshes.reserve(asset.meshes.size());
 
         // collect all node transforms for each mesh
-        std::vector<std::vector<glm::mat4>> meshTransforms(asset_.meshes.size());
-        for (const auto& node : asset_.nodes) {
+        std::vector<std::vector<glm::mat4>> meshTransforms(asset.meshes.size());
+        for (const auto& node : asset.nodes) {
             if (node.meshIndex.has_value()) {
                 size_t meshIndex = node.meshIndex.value();
                 meshTransforms[meshIndex].push_back(parseTransform(node));
@@ -154,8 +148,8 @@ namespace gltf
         }
 
         // build mesh list
-        for (size_t meshIndex = 0; meshIndex < asset_.meshes.size(); ++meshIndex) {
-            const auto& srcMesh = asset_.meshes[meshIndex];
+        for (size_t meshIndex = 0; meshIndex < asset.meshes.size(); ++meshIndex) {
+            const auto& srcMesh = asset.meshes[meshIndex];
             const auto& transforms = meshTransforms[meshIndex];
 
             // skip meshes that are not referenced by any nodes
@@ -163,12 +157,12 @@ namespace gltf
                 continue;
             }
 
-            Mesh destMesh;
+            PerMeshData destMesh;
             destMesh.name = !srcMesh.name.empty() ? std::string(srcMesh.name) : "Mesh_" + std::to_string(meshIndex);
             destMesh.primitives.reserve(srcMesh.primitives.size() * transforms.size());
             for (const auto& primitive : srcMesh.primitives) {
-                auto indices = parseIndices(primitive);
-                auto vertexInputs = parseVertexInputs(primitive);
+                auto indices = parseIndices(primitive, asset);
+                auto vertexInputs = parseVertexInputs(primitive, asset);
                 auto materialIndex = parseMaterialIndex(primitive);
 
                 for (const auto& transform : transforms) {
@@ -185,24 +179,23 @@ namespace gltf
         return meshes;
     }
 
-    // implement build draw call list method
-    std::vector<SingleDrawCallData> GltfParser::BuildDrawCallDataList() const
+    std::vector<PerDrawCallData> GltfParser::BuildDrawCallDataList(const fastgltf::Asset &asset) const
     {
-        std::vector<SingleDrawCallData> drawCalls;
+        std::vector<PerDrawCallData> drawCalls;
 
         // use ranges to process nodes and primitives, directly generate draw calls
-        auto drawCallViews = asset_.nodes
+        auto drawCallViews = asset.nodes
             | std::views::filter([](const auto &node) { return node.meshIndex.has_value(); })
             | std::views::transform([&](const auto &node) {
                 auto transform = parseTransform(node);
-                const auto &mesh = asset_.meshes[node.meshIndex.value()];
+                const auto &mesh = asset.meshes[node.meshIndex.value()];
 
                 return mesh.primitives
-                    | std::views::transform([&](const auto &primitive) -> SingleDrawCallData {
+                    | std::views::transform([&](const auto &primitive) -> PerDrawCallData {
                         return {
                             .transform = transform,
-                            .indices = parseIndices(primitive),
-                            .vertex_inputs = parseVertexInputs(primitive),
+                            .indices = parseIndices(primitive, asset),
+                            .vertex_inputs = parseVertexInputs(primitive, asset),
                             .material_index = parseMaterialIndex(primitive)
                         };
                     });
@@ -214,7 +207,6 @@ namespace gltf
 
         return drawCalls;
     }
-
 }
 
 #endif // GLTF_PARSER_H

@@ -18,6 +18,10 @@
 
 #include "vulkan_resource_allocator/vra.h"
 
+#include "gltf/gltf_loader.h"
+#include "gltf/gltf_parser.h"
+#include "gltf/gltf_converter.h"
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <memory>
@@ -135,6 +139,7 @@ public:
     void Draw();
 
     static VulkanEngine& GetInstance();
+    void GetVertexIndexData(std::vector<uint32_t> indices, std::vector<gltf::VertexInput> vertices);
 
 private:
 #define FRAME_INDEX_TO_UNIFORM_BUFFER_ID(frame_index) (frame_index + 4)
@@ -193,6 +198,10 @@ private:
     std::unique_ptr<VulkanCommandBufferHelper> vkCommandBufferHelper_;
     std::unique_ptr<VulkanFrameBufferHelper> vkFrameBufferHelper_;
     std::unique_ptr<VulkanSynchronizationHelper> vkSynchronizationHelper_;
+
+    // test data
+    std::vector<uint32_t> indices_;
+    std::vector<gltf::VertexInput> vertices_;
     
     // uniform data
     std::vector<SMvpMatrix> mvp_matrices_;

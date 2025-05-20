@@ -3,6 +3,8 @@
 #include "utility/logger.h"
 #include "gltf/gltf_loader.h"
 #include "gltf/gltf_parser.h"
+#include "gltf/gltf_converter.h"
+#include <vma/vk_mem_alloc.h>
 
 #include <iostream>
 
@@ -12,10 +14,42 @@ int main()
     std::cout << "This is a Vulkan Engine" << '\n';
 
     // read gltf file
-    gltf::GltfLoader loader("E:\\Assets\\Sponza\\SponzaBase\\NewSponza_Main_glTF_003.gltf");
-    gltf::GltfParser parser(loader.GetAsset());
-    const auto &draw_call_data_list = parser.GetDrawCallDataList();
-    const auto &mesh_list = parser.GetMeshList();
+    auto loader = gltf::GltfLoader();
+    auto asset = loader("E:\\Assets\\Sponza\\SponzaBase\\NewSponza_Main_glTF_003.gltf");
+
+    // parse gltf file
+    gltf::GltfParser parser;
+    const auto &mesh_list = parser(asset, gltf::RequestMeshList{});
+    const auto &draw_call_data_list = parser(asset, gltf::RequestDrawCallList{});
+
+    // per material data
+    std::unordered_set<uint32_t> material_indices;
+    std::vector<std::vector<uint32_t>> indices_per_material;
+    std::vector<std::vector<gltf::VertexInput>> vertices_per_material;
+    
+    // collect all indices of materials
+    std::transform(draw_call_data_list.begin(), draw_call_data_list.end(),
+                  std::inserter(material_indices, material_indices.begin()),
+                  [](const auto &draw_call_data) { return draw_call_data.material_index; });
+
+    // generate per material data
+    indices_per_material.resize(material_indices.size());
+    vertices_per_material.resize(material_indices.size());
+    gltf::DrawCalls2Indices draw_calls2indices;
+    gltf::DrawCalls2Vertices draw_calls2vertices;
+    std::for_each(material_indices.begin(), material_indices.end(), [&](const auto &material_index)
+    {
+        // filter draw call data by material index
+        std::vector<gltf::PerDrawCallData> draw_call_data_per_material;
+        std::copy_if(draw_call_data_list.begin(), draw_call_data_list.end(), std::back_inserter(draw_call_data_per_material), [&](const auto &draw_call_data)
+        {
+            return draw_call_data.material_index == material_index;
+        });
+
+        // generate indices and vertices of current material
+        indices_per_material[material_index] = draw_calls2indices(draw_call_data_per_material);
+        vertices_per_material[material_index] = draw_calls2vertices(draw_call_data_per_material);
+    });
 
     // window config
     SWindowConfig window_config;
