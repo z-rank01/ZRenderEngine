@@ -80,6 +80,8 @@ int main()
 
     // main loop
     VulkanEngine engine(config);
+    engine.GetVertexIndexData(indices_per_material[0], vertices_per_material[0]);
+    engine.Initialize();
     engine.Run();
 
     std::cout << "Goodbye" << '\n';

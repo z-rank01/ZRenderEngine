@@ -18,9 +18,7 @@
 
 #include "vulkan_resource_allocator/vra.h"
 
-#include "gltf/gltf_loader.h"
-#include "gltf/gltf_parser.h"
-#include "gltf/gltf_converter.h"
+#include "gltf/gltf_data.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -139,6 +137,7 @@ public:
     void Draw();
 
     static VulkanEngine& GetInstance();
+    void Initialize();
     void GetVertexIndexData(std::vector<uint32_t> indices, std::vector<gltf::VertexInput> vertices);
 
 private:

@@ -10,23 +10,27 @@ VulkanEngine &VulkanEngine::GetInstance()
     return *instance;
 }
 
+VulkanEngine::VulkanEngine(const SEngineConfig &config) : engine_config_(config)
+{
+    // only one engine initialization is allowed with the application.
+    assert(instance == nullptr);
+    instance = this;
+}
+
+void VulkanEngine::Initialize()
+{
+    // initialize SDL, vulkan, and camera
+    InitializeSDL();
+    InitializeCamera();
+    InitializeVulkan();
+}
+
 void VulkanEngine::GetVertexIndexData(std::vector<uint32_t> indices, std::vector<gltf::VertexInput> vertices)
 {
     indices_ = std::move(indices);
     vertices_ = std::move(vertices);
 }
 
-VulkanEngine::VulkanEngine(const SEngineConfig &config) : engine_config_(config)
-{
-    // only one engine initialization is allowed with the application.
-    assert(instance == nullptr);
-    instance = this;
-
-    // initialize SDL, vulkan, and camera
-    InitializeSDL();
-    InitializeCamera();
-    InitializeVulkan();
-}
 
 VulkanEngine::~VulkanEngine()
 {
