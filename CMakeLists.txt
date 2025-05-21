@@ -21,7 +21,6 @@ find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
-find_package(fastgltf CONFIG REQUIRED)
 find_package(Stb REQUIRED)
 
 
@@ -58,7 +57,6 @@ target_link_libraries(VulkanEngine
     glm::glm
     vk-bootstrap::vk-bootstrap
     imgui::imgui
-    fastgltf::fastgltf
     utility                         # 添加 utility 库
     vulkan_initialization           # 添加 vulkan_initialization 库
     vulkan_pipeline                 # 添加 vulkan_pipeline 库

@@ -1,7 +1,7 @@
 #include "vulkan_engine.h"
 #include <chrono>
 #include <thread>
-#include <iostream> // For error logging
+#include <iostream>
 
 VulkanEngine *instance = nullptr;
 
@@ -25,12 +25,17 @@ void VulkanEngine::Initialize()
     InitializeVulkan();
 }
 
-void VulkanEngine::GetVertexIndexData(std::vector<uint32_t> indices, std::vector<gltf::VertexInput> vertices)
+void VulkanEngine::GetVertexIndexData(std::vector<gltf::PerDrawCallData> per_draw_call_data, std::vector<uint16_t> indices, std::vector<gltf::VertexInput> vertex_inputs)
 {
+    per_draw_call_data_list_ = std::move(per_draw_call_data);
     indices_ = std::move(indices);
-    vertices_ = std::move(vertices);
+    vertices_ = std::move(vertex_inputs);
 }
 
+void VulkanEngine::GetMeshList(const std::vector<gltf::PerMeshData>& mesh_list)
+{
+    mesh_list_ = mesh_list;
+}
 
 VulkanEngine::~VulkanEngine()
 {
@@ -195,6 +200,7 @@ void VulkanEngine::InitializeCamera()
     camera_.position = glm::vec3(0.0f, 0.0f, 3.0f);   // 3 units away from origin
     camera_.yaw = -90.0f;                             // look at origin
     camera_.pitch = 0.0f;                             // horizontal view
+    camera_.wheel_speed = 2.0f;
     camera_.movement_speed = 10.0f;
     camera_.mouse_sensitivity = 0.5f;
     camera_.zoom = 45.0f;
@@ -415,7 +421,7 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
     // mouse wheel event
     if (event.type == SDL_EVENT_MOUSE_WHEEL) 
     {
-        float zoom_factor = 0.1f * camera_.movement_speed;
+        float zoom_factor = camera_.wheel_speed;
         float distance = glm::length(camera_.position);
         
         if (event.wheel.y > 0)
@@ -1209,42 +1215,29 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     auto command_buffer = vkCommandBufferHelper_->GetCommandBuffer(command_buffer_id);
     auto swapchain_config = &swapchain_config_;
 
-    // copy buffer from staging to local
-    // VkBufferCopy buffer_copy_info{};
-    // buffer_copy_info.srcOffset = 0;
-    // buffer_copy_info.dstOffset = 0;
-    // buffer_copy_info.size = staging_buffer_allocation_info_.size;
-    // vkCmdCopyBuffer(command_buffer, staging_buffer_, local_buffer_, 1, &buffer_copy_info);
+    // 从暂存缓冲区复制到本地缓冲区
     VkBufferCopy buffer_copy_info{};
     buffer_copy_info.srcOffset = 0;
     buffer_copy_info.dstOffset = 0;
     buffer_copy_info.size = test_staging_buffer_allocation_info_.size;
     vkCmdCopyBuffer(command_buffer, test_staging_buffer_, test_local_buffer_, 1, &buffer_copy_info);
 
+    // 设置内存屏障以确保复制完成
     VkBufferMemoryBarrier2 buffer_memory_barrier{};
     buffer_memory_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
     buffer_memory_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     buffer_memory_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
     buffer_memory_barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
     buffer_memory_barrier.dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
-    buffer_memory_barrier.buffer = local_buffer_;
+    buffer_memory_barrier.buffer = test_local_buffer_;
     buffer_memory_barrier.offset = 0;
     buffer_memory_barrier.size = VK_WHOLE_SIZE;
+    
     VkDependencyInfo dependency_info{};
     dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dependency_info.bufferMemoryBarrierCount = 1;
     dependency_info.pBufferMemoryBarriers = &buffer_memory_barrier;
     vkCmdPipelineBarrier2(command_buffer, &dependency_info);
-
-    // bind vertex and index buffers
-    // auto vertex_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[vertex_data_id_];
-    // vkCmdBindVertexBuffers(command_buffer, 0, 1, &local_buffer_, &vertex_offset);
-    // auto index_offset = vertex_index_staging_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[index_data_id_];
-    // vkCmdBindIndexBuffer(command_buffer, local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
-    auto vertex_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_vertex_buffer_id_];
-    vkCmdBindVertexBuffers(command_buffer, 0, 1, &test_local_buffer_, &vertex_offset);
-    auto index_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_index_buffer_id_];
-    vkCmdBindIndexBuffer(command_buffer, test_local_buffer_, index_offset, VK_INDEX_TYPE_UINT32);
 
     // begin renderpass
     VkClearValue clear_color = {};
@@ -1295,9 +1288,33 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     scissor.extent = swapchain_config->target_swap_extent_;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
-    // draw
-    // vkCmdDrawIndexed(command_buffer, 3, 1, 0, 0, 0);
-    vkCmdDrawIndexed(command_buffer, indices_.size(), 1, 0, 0, 0);
+    // 遍历每个 mesh 进行绘制
+    for (const auto& mesh : mesh_list_) {
+        // 遍历该 mesh 的所有图元进行绘制
+        for (size_t i = 0; i < mesh.primitives.size(); ++i) {
+            const auto& primitive = mesh.primitives[i];
+            
+            // 获取该 primitive 的顶点和索引缓冲区偏移量
+            VkDeviceSize vertex_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only]
+                .offsets[mesh_vertex_resource_ids_[mesh.name][i]];
+            VkDeviceSize index_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only]
+                .offsets[mesh_index_resource_ids_[mesh.name][i]];
+
+            // 绑定顶点和索引缓冲区
+            vkCmdBindVertexBuffers(command_buffer, 0, 1, &test_local_buffer_, &vertex_offset);
+            vkCmdBindIndexBuffer(command_buffer, test_local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
+
+            // 绘制当前图元
+            vkCmdDrawIndexed(
+                command_buffer,
+                primitive.indices.size(),  // 使用实际的索引数量
+                1,
+                0,  // 从第一个索引开始
+                0,  // 顶点偏移
+                0   // 实例偏移
+            );
+        }
+    }
 
     // end renderpass
     vkCmdEndRenderPass(command_buffer);
@@ -1371,53 +1388,100 @@ void VulkanEngine::FocusOnObject(const glm::vec3& object_position, float target_
 
 void VulkanEngine::CreateTestLocalStagingBuffer()
 {
-    // create a vertex data
-    vra::VraRawData vertex_buffer_data{
-        .pData_ = vertices_.data(),
-        .size_ = sizeof(gltf::VertexInput) * vertices_.size()};
-    vra::VraRawData index_buffer_data{
-        .pData_ = indices_.data(),
-        .size_ = sizeof(uint32_t) * indices_.size()};
+    // 为每个 mesh 收集数据
+    for (const auto& mesh : mesh_list_) {
+        // 遍历每个 primitive
+        for (const auto& primitive : mesh.primitives) {
+            // 直接使用 primitive 中的数据
+            vra::VraRawData vertex_buffer_data{
+                .pData_ = primitive.vertex_inputs.data(),
+                .size_ = sizeof(gltf::VertexInput) * primitive.vertex_inputs.size()
+            };
+            vra::VraRawData index_buffer_data{
+                .pData_ = primitive.indices.data(),
+                .size_ = sizeof(uint16_t) * primitive.indices.size()
+            };
 
-    // info for vertex buffer
-    VkBufferCreateInfo vertex_buffer_create_info{};
-    vertex_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    vertex_buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    vertex_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vra::VraDataDesc vertex_buffer_desc {
-        vra::VraDataMemoryPattern::GPU_Only,
-        vra::VraDataUpdateRate::RarelyOrNever,
-        vertex_buffer_create_info
-    };
-    // info for index buffer
-    VkBufferCreateInfo index_buffer_create_info{};
-    index_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    index_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    
-    vra::VraDataDesc index_buffer_desc {
-        vra::VraDataMemoryPattern::GPU_Only,
-        vra::VraDataUpdateRate::RarelyOrNever,
-        index_buffer_create_info
-    };
-    // info for staging buffer
-    VkBufferCreateInfo staging_buffer_create_info{};
-    staging_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    staging_buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    staging_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    vra::VraDataDesc staging_buffer_desc {
-        vra::VraDataMemoryPattern::CPU_GPU,
-        vra::VraDataUpdateRate::RarelyOrNever,
-        staging_buffer_create_info
-    };
+            // 顶点缓冲区创建信息
+            VkBufferCreateInfo vertex_buffer_create_info{};
+            vertex_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            vertex_buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            vertex_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            vertex_buffer_create_info.size = vertex_buffer_data.size_;
+            vra::VraDataDesc vertex_buffer_desc {
+                vra::VraDataMemoryPattern::GPU_Only,
+                vra::VraDataUpdateRate::RarelyOrNever,
+                vertex_buffer_create_info
+            };
 
-    vra_data_batcher_->Collect(vertex_buffer_desc, vertex_buffer_data, test_vertex_buffer_id_);
-    vra_data_batcher_->Collect(index_buffer_desc, index_buffer_data, test_index_buffer_id_);
-    vra_data_batcher_->Collect(staging_buffer_desc, vertex_buffer_data, test_staging_vertex_buffer_id_);
-    vra_data_batcher_->Collect(staging_buffer_desc, index_buffer_data, test_staging_index_buffer_id_);
+            // 索引缓冲区创建信息
+            VkBufferCreateInfo index_buffer_create_info{};
+            index_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            index_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            index_buffer_create_info.size = index_buffer_data.size_;
+            vra::VraDataDesc index_buffer_desc {
+                vra::VraDataMemoryPattern::GPU_Only,
+                vra::VraDataUpdateRate::RarelyOrNever,
+                index_buffer_create_info
+            };
+
+            // 暂存缓冲区创建信息
+            VkBufferCreateInfo staging_buffer_create_info{};
+            staging_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            staging_buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            staging_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            staging_buffer_create_info.size = vertex_buffer_data.size_;  // 顶点数据的暂存缓冲区
+            vra::VraDataDesc staging_vertex_buffer_desc {
+                vra::VraDataMemoryPattern::CPU_GPU,
+                vra::VraDataUpdateRate::RarelyOrNever,
+                staging_buffer_create_info
+            };
+
+            staging_buffer_create_info.size = index_buffer_data.size_;  // 索引数据的暂存缓冲区
+            vra::VraDataDesc staging_index_buffer_desc {
+                vra::VraDataMemoryPattern::CPU_GPU,
+                vra::VraDataUpdateRate::RarelyOrNever,
+                staging_buffer_create_info
+            };
+
+            // 收集数据并获取资源 ID
+            vra::ResourceId vertex_id = 0;
+            vra::ResourceId index_id = 0;
+            vra::ResourceId staging_vertex_id = 0;
+            vra::ResourceId staging_index_id = 0;
+
+            if (!vra_data_batcher_->Collect(vertex_buffer_desc, vertex_buffer_data, vertex_id)) {
+                Logger::LogError("Failed to collect vertex buffer data for mesh: " + mesh.name);
+                continue;
+            }
+            if (!vra_data_batcher_->Collect(index_buffer_desc, index_buffer_data, index_id)) {
+                Logger::LogError("Failed to collect index buffer data for mesh: " + mesh.name);
+                continue;
+            }
+            if (!vra_data_batcher_->Collect(staging_vertex_buffer_desc, vertex_buffer_data, staging_vertex_id)) {
+                Logger::LogError("Failed to collect staging vertex buffer data for mesh: " + mesh.name);
+                continue;
+            }
+            if (!vra_data_batcher_->Collect(staging_index_buffer_desc, index_buffer_data, staging_index_id)) {
+                Logger::LogError("Failed to collect staging index buffer data for mesh: " + mesh.name);
+                continue;
+            }
+
+            // 存储资源 ID
+            if (mesh_vertex_resource_ids_[mesh.name].empty()) {
+                mesh_vertex_resource_ids_[mesh.name].reserve(mesh.primitives.size());
+                mesh_index_resource_ids_[mesh.name].reserve(mesh.primitives.size());
+            }
+            mesh_vertex_resource_ids_[mesh.name].push_back(vertex_id);
+            mesh_index_resource_ids_[mesh.name].push_back(index_id);
+        }
+    }
+
+    // 执行批处理
     test_local_host_batch_handle_ = std::move(vra_data_batcher_->Batch());
 
-    // create local buffer
+    // 创建本地缓冲区
     auto test_local_buffer_create_info = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].data_desc.GetBufferCreateInfo();
     VmaAllocationCreateInfo allocation_create_info{};
     allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
@@ -1429,7 +1493,7 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
         &test_local_buffer_allocation_, 
         &test_local_buffer_allocation_info_);
 
-    // create staging buffer
+    // 创建暂存缓冲区
     auto test_host_buffer_create_info = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Rarely].data_desc.GetBufferCreateInfo();
     VmaAllocationCreateInfo staging_allocation_create_info{};
     staging_allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
@@ -1442,8 +1506,8 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
         &test_staging_buffer_allocation_, 
         &test_staging_buffer_allocation_info_);
 
-    // copy data to staging buffer
-    auto consolidate_data = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].consolidated_data;
+    // 复制数据到暂存缓冲区
+    auto consolidate_data = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Rarely].consolidated_data;
     void* data;
     vmaInvalidateAllocation(vma_allocator_, test_staging_buffer_allocation_, 0, VK_WHOLE_SIZE);
     vmaMapMemory(vma_allocator_, test_staging_buffer_allocation_, &data);
@@ -1451,11 +1515,14 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
     vmaUnmapMemory(vma_allocator_, test_staging_buffer_allocation_);
     vmaFlushAllocation(vma_allocator_, test_staging_buffer_allocation_, 0, VK_WHOLE_SIZE);
 
-    // bind vertex input
+    // 设置顶点输入绑定描述
     test_vertex_input_binding_description_.binding = 0;
     test_vertex_input_binding_description_.stride = sizeof(gltf::VertexInput);
     test_vertex_input_binding_description_.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
+    // 设置顶点属性描述
+    test_vertex_input_attributes_.clear();
+    
     // position
     test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
         .location = 0,
@@ -1486,14 +1553,14 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
     });
     // uv0
     test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
-        .location = 5,
+        .location = 4,
         .binding = 0,
         .format = VK_FORMAT_R32G32_SFLOAT,
         .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color) + sizeof(gltf::VertexInput::normal) + sizeof(gltf::VertexInput::tangent)
     });
     // uv1
     test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
-        .location = 6,
+        .location = 5,
         .binding = 0,
         .format = VK_FORMAT_R32G32_SFLOAT,
         .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color) + sizeof(gltf::VertexInput::normal) + sizeof(gltf::VertexInput::tangent) + sizeof(gltf::VertexInput::uv0)

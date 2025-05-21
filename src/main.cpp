@@ -16,12 +16,13 @@ int main()
     // read gltf file
     auto loader = gltf::GltfLoader();
     auto asset = loader("E:\\Assets\\Sponza\\SponzaBase\\NewSponza_Main_glTF_003.gltf");
+    // auto asset = loader("E:\\Assets\\Sponza\\SponzaCurtains\\NewSponza_Curtains_glTF.gltf");
 
     // parse gltf file
     gltf::GltfParser parser;
     const auto &mesh_list = parser(asset, gltf::RequestMeshList{});
     // Get a mutable copy of draw_call_data_list to transform vertex positions
-    std::vector<gltf::PerDrawCallData> mutable_draw_call_data_list = parser(asset, gltf::RequestDrawCallList{});
+    auto mutable_draw_call_data_list = parser(asset, gltf::RequestDrawCallList{});
 
     // Transform vertex positions using the draw call's transform matrix (functional expression)
     std::for_each(
@@ -41,7 +42,7 @@ int main()
         });
 
     // collect all indices
-    std::vector<uint32_t> indices;
+    std::vector<uint16_t> indices;
     std::vector<gltf::VertexInput> vertices;
     // reserve memory
     auto index_capacity = std::accumulate(mutable_draw_call_data_list.begin(), mutable_draw_call_data_list.end(), 0,
@@ -121,7 +122,8 @@ int main()
 
     // main loop
     VulkanEngine engine(config);
-    engine.GetVertexIndexData(indices, vertices);
+    engine.GetVertexIndexData(mutable_draw_call_data_list, indices, vertices);
+    engine.GetMeshList(mesh_list);
     engine.Initialize();
     engine.Run();
 

@@ -34,8 +34,8 @@
       ]
     },
     {
-      "name": "fastgltf",
-      "version>=": "0.8.0"
+      "name": "tinygltf",
+      "version>=": "2.9.4"
     }
   ],
   "builtin-baseline": "efb1e7436979a30c4d3e5ab2375fd8e2e461d541"

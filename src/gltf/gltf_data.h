@@ -1,8 +1,7 @@
 #ifndef GLTF_DATA_H
 #define GLTF_DATA_H
 
-#include "gltf/gltf_loader.h"
-#include <fastgltf/core.hpp>
+#include <tiny_gltf.h>
 #include <glm/glm.hpp>
 
 namespace gltf
@@ -110,13 +109,13 @@ namespace gltf
     struct PerDrawCallData
     {
         glm::mat4 transform;
-        std::vector<uint32_t> indices;
+        std::vector<uint16_t> indices;
         std::vector<VertexInput> vertex_inputs;
-        uint32_t material_index;
-        uint32_t first_index;
-        uint32_t index_count;
-        uint32_t first_vertex;
-        uint32_t vertex_count;
+        uint16_t material_index;
+        uint16_t first_index;
+        uint16_t index_count;
+        uint16_t first_vertex;
+        uint16_t vertex_count;
     };
 
     /// @brief mesh data containing multiple primitives.

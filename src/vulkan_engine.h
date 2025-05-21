@@ -88,6 +88,7 @@ struct SCamera
     float yaw;
     float pitch;
     float movement_speed;
+    float wheel_speed;
     float mouse_sensitivity;
     float zoom;
     
@@ -106,7 +107,7 @@ struct SCamera
             float initial_yaw = -90.0f,
             float initial_pitch = 0.0f)
         : position(pos), world_up(up), yaw(initial_yaw), pitch(initial_pitch),
-          movement_speed(2.5f), mouse_sensitivity(0.1f), zoom(45.0f),
+          movement_speed(2.5f), wheel_speed(0.01f), mouse_sensitivity(0.1f), zoom(45.0f),
           // Initialize focus constraint enabled flag
           focus_constraint_enabled_(true) // Default to enabled
     {
@@ -143,7 +144,8 @@ public:
 
     static VulkanEngine& GetInstance();
     void Initialize();
-    void GetVertexIndexData(std::vector<uint32_t> indices, std::vector<gltf::VertexInput> vertices);
+    void GetVertexIndexData(std::vector<gltf::PerDrawCallData> per_draw_call_data, std::vector<uint16_t> indices, std::vector<gltf::VertexInput> vertex_inputs);
+    void GetMeshList(const std::vector<gltf::PerMeshData>& mesh_list);
 
 private:
 #define FRAME_INDEX_TO_UNIFORM_BUFFER_ID(frame_index) (frame_index + 4)
@@ -155,6 +157,13 @@ private:
     SEngineConfig engine_config_;
     SCamera camera_;
     std::vector<SOutputFrame> output_frames_;
+
+    // mesh data members
+    std::vector<gltf::PerMeshData> mesh_list_;
+    std::unordered_map<std::string, std::vector<vra::ResourceId>> mesh_vertex_resource_ids_;
+    std::unordered_map<std::string, std::vector<vra::ResourceId>> mesh_index_resource_ids_;
+    std::unordered_map<std::string, std::vector<VkDeviceSize>> mesh_vertex_offsets_;
+    std::unordered_map<std::string, std::vector<VkDeviceSize>> mesh_index_offsets_;
 
     // vulkan bootstrap members
     vkb::Instance vkb_instance_;
@@ -202,10 +211,6 @@ private:
     std::unique_ptr<VulkanCommandBufferHelper> vkCommandBufferHelper_;
     std::unique_ptr<VulkanFrameBufferHelper> vkFrameBufferHelper_;
     std::unique_ptr<VulkanSynchronizationHelper> vkSynchronizationHelper_;
-
-    // test data
-    std::vector<uint32_t> indices_;
-    std::vector<gltf::VertexInput> vertices_;
     
     // uniform data
     std::vector<SMvpMatrix> mvp_matrices_;
@@ -255,6 +260,10 @@ private:
     void FocusOnObject(const glm::vec3& object_position, float target_distance);
 
     // --- test function and data ---
+    std::vector<gltf::PerDrawCallData> per_draw_call_data_list_;
+    std::vector<uint16_t> indices_;
+    std::vector<gltf::VertexInput> vertices_;
+
     VkBuffer test_local_buffer_;
     VkBuffer test_staging_buffer_;
     VkBuffer test_uniform_buffer_;
