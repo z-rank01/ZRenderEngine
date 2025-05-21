@@ -42,7 +42,7 @@ namespace gltf
 
     private:
         glm::mat4                       parseTransform(const fastgltf::Node &node) const;
-        std::vector<uint32_t>           parseIndices(const fastgltf::Primitive &primitive, const fastgltf::Asset &asset) const;
+        std::vector<uint32_t>           parseIndices(const fastgltf::Primitive &primitive, const fastgltf::Asset &asset, const uint32_t &offset) const;
         std::vector<VertexInput>        parseVertexInputs(const fastgltf::Primitive &primitive, const fastgltf::Asset &asset) const;
         uint32_t                        parseMaterialIndex(const fastgltf::Primitive &primitive) const;
 
@@ -74,7 +74,7 @@ namespace gltf
         }
     }
 
-    std::vector<uint32_t> GltfParser::parseIndices(const fastgltf::Primitive &primitive, const fastgltf::Asset &asset) const
+    std::vector<uint32_t> GltfParser::parseIndices(const fastgltf::Primitive &primitive, const fastgltf::Asset &asset, const uint32_t& offset) const
     {
         if (!primitive.indicesAccessor) {
             throw std::runtime_error("Indices accessor not found");
@@ -82,7 +82,7 @@ namespace gltf
         std::vector<uint32_t> indices;
         const auto &accessor = asset.accessors[primitive.indicesAccessor.value()];
         indices.reserve(accessor.count);
-        fastgltf::iterateAccessor<uint32_t>(asset, accessor, [&](uint32_t index) { indices.push_back(index); });
+        fastgltf::iterateAccessor<uint32_t>(asset, accessor, [&](uint32_t index) { indices.push_back(index + offset); });
         return indices;
     }
 
@@ -157,22 +157,39 @@ namespace gltf
                 continue;
             }
 
+            uint32_t start_index = 0;
+            uint32_t start_vertex = 0;
             PerMeshData destMesh;
             destMesh.name = !srcMesh.name.empty() ? std::string(srcMesh.name) : "Mesh_" + std::to_string(meshIndex);
             destMesh.primitives.reserve(srcMesh.primitives.size() * transforms.size());
-            for (const auto& primitive : srcMesh.primitives) {
-                auto indices = parseIndices(primitive, asset);
-                auto vertexInputs = parseVertexInputs(primitive, asset);
-                auto materialIndex = parseMaterialIndex(primitive);
+            for (const auto& primitive : srcMesh.primitives) 
+            {
+                // parse indices, vertex inputs and material index
+                auto indices_result =               parseIndices(primitive, asset, start_vertex);
+                auto vertexInputs_result = parseVertexInputs(primitive, asset);
+                auto materialIndex =                             parseMaterialIndex(primitive);
 
+                // count current vertex and index count
+                uint32_t indexCount = indices_result.size();
+                uint32_t vertexCount = vertexInputs_result.size();
+
+                // build draw call data
                 for (const auto& transform : transforms) {
                     destMesh.primitives.push_back({
                         .transform = transform,
-                        .indices = indices,
-                        .vertex_inputs = vertexInputs,
-                        .material_index = materialIndex
+                        .indices = std::move(indices_result),
+                        .vertex_inputs = std::move(vertexInputs_result),
+                        .material_index = materialIndex,
+                        .first_index = start_index,
+                        .index_count = indexCount,
+                        .first_vertex = start_vertex,
+                        .vertex_count = vertexCount
                     });
                 }
+
+                // update first index and first vertex
+                start_index += indexCount;
+                start_vertex += vertexCount;
             }
             meshes.push_back(std::move(destMesh));
         }
@@ -182,22 +199,51 @@ namespace gltf
     std::vector<PerDrawCallData> GltfParser::BuildDrawCallDataList(const fastgltf::Asset &asset) const
     {
         std::vector<PerDrawCallData> drawCalls;
-
+        uint32_t start_index = 0;
+        uint32_t start_vertex = 0;
         // use ranges to process nodes and primitives, directly generate draw calls
         auto drawCallViews = asset.nodes
             | std::views::filter([](const auto &node) { return node.meshIndex.has_value(); })
-            | std::views::transform([&](const auto &node) {
-                auto transform = parseTransform(node);
+            | std::views::transform([&](const auto &node) 
+            {
                 const auto &mesh = asset.meshes[node.meshIndex.value()];
 
+                // parse transfrom
+                auto transform = parseTransform(node);
+                
+                // zero out start_index and start_vertex
+                start_index = 0;
+                start_vertex = 0;
+                
                 return mesh.primitives
-                    | std::views::transform([&](const auto &primitive) -> PerDrawCallData {
-                        return {
+                    | std::views::transform([&](const auto &primitive) -> PerDrawCallData 
+                    {
+                        // parse indices, vertex inputs and material index
+                        auto indices_result =               parseIndices(primitive, asset, start_vertex);
+                        auto vertexInputs_result = parseVertexInputs(primitive, asset);
+                        auto material_index =                            parseMaterialIndex(primitive);
+                        
+                        // count current vertex and index count
+                        uint32_t indexCount = indices_result.size();
+                        uint32_t vertexCount = vertexInputs_result.size();
+
+                        // construct draw call data
+                        PerDrawCallData drawCallData{
                             .transform = transform,
-                            .indices = parseIndices(primitive, asset),
-                            .vertex_inputs = parseVertexInputs(primitive, asset),
-                            .material_index = parseMaterialIndex(primitive)
+                            .indices = std::move(indices_result),
+                            .vertex_inputs = std::move(vertexInputs_result),
+                            .material_index = material_index,
+                            .first_index = start_index,
+                            .index_count = indexCount,
+                            .first_vertex = start_vertex,
+                            .vertex_count = vertexCount
                         };
+
+                        // update first index and first vertex
+                        start_index += indexCount;
+                        start_vertex += vertexCount;
+
+                        return drawCallData;
                     });
             })
             | std::views::join;

@@ -87,8 +87,8 @@ endif()
 
 # 使用生成器表达式为 Debug 构建添加调试信息选项
 target_compile_options(VulkanEngine PRIVATE
-    $<$<CONFIG:Debug>:$<$<CXX_COMPILER_ID:GNU,Clang>:-g>>
-    $<$<CONFIG:Debug>:$<$<CXX_COMPILER_ID:MSVC>:/Zi>>
+    $<$<CONFIG:Debug>:$<$<CXX_COMPILER_ID:GNU,Clang>:-g -O0>>
+    $<$<CONFIG:Debug>:$<$<CXX_COMPILER_ID:MSVC>:/Zi /Od>>
     $<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang>:-O3>>
     $<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:MSVC>:/O2>>
 )
