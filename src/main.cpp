@@ -20,24 +20,31 @@ int main()
 
     // parse gltf file
     gltf::GltfParser parser;
-    const auto &mesh_list = parser(asset, gltf::RequestMeshList{});
+    auto mesh_list = parser(asset, gltf::RequestMeshList{});
     // Get a mutable copy of draw_call_data_list to transform vertex positions
     auto mutable_draw_call_data_list = parser(asset, gltf::RequestDrawCallList{});
 
     // Transform vertex positions using the draw call's transform matrix (functional expression)
     std::for_each(
-        mutable_draw_call_data_list.begin(), 
-        mutable_draw_call_data_list.end(),
-        [](gltf::PerDrawCallData& draw_call_data) 
+        mesh_list.begin(), 
+        mesh_list.end(),
+        [](gltf::PerMeshData& mesh) 
         {
-            const glm::mat4& transform = draw_call_data.transform;
+            // 遍历每个 primitive
             std::for_each(
-                draw_call_data.vertex_inputs.begin(), 
-                draw_call_data.vertex_inputs.end(),
-                [&](gltf::VertexInput& vertex_input) 
+                mesh.primitives.begin(),
+                mesh.primitives.end(),
+                [&](gltf::PerDrawCallData& primitive)
                 {
-                    glm::vec4 transformed_position = transform * glm::vec4(vertex_input.position, 1.0f);
-                    vertex_input.position = glm::vec3(transformed_position) / transformed_position.w;
+                    const glm::mat4& transform = primitive.transform;
+                    std::for_each(
+                        primitive.vertex_inputs.begin(), 
+                        primitive.vertex_inputs.end(),
+                        [&](gltf::VertexInput& vertex_input) 
+                        {
+                            glm::vec4 transformed_position = transform * glm::vec4(vertex_input.position, 1.0f);
+                            vertex_input.position = glm::vec3(transformed_position);
+                        });
                 });
         });
 
