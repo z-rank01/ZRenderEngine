@@ -14,7 +14,7 @@ public:
     VulkanSynchronizationHelper(VkDevice device) : device_(device) {};
     ~VulkanSynchronizationHelper();
 
-    bool CreateSemaphore(std::string id);
+    bool CreateVkSemaphore(std::string id);
     bool CreateFence(std::string id);
 
     bool WaitForFence(std::string id);

@@ -66,8 +66,8 @@ struct SOutputFrame
     uint32_t image_index;
     std::string queue_id;
     std::string command_buffer_id;
-    std::string image_available_sempaphore_id;
-    std::string render_finished_sempaphore_id;
+    std::string image_available_semaphore_id;
+    std::string render_finished_semaphore_id;
     std::string fence_id;
 };
 

@@ -598,8 +598,8 @@ void VulkanEngine::GenerateFrameStructs()
         output_frames_[i].image_index = i;
         output_frames_[i].queue_id = "graphic_queue";
         output_frames_[i].command_buffer_id = "graphic_command_buffer_" + std::to_string(i);
-        output_frames_[i].image_available_sempaphore_id = "image_available_semaphore_" + std::to_string(i);
-        output_frames_[i].render_finished_sempaphore_id = "render_finished_semaphore_" + std::to_string(i);
+        output_frames_[i].image_available_semaphore_id = "image_available_semaphore_" + std::to_string(i);
+        output_frames_[i].render_finished_semaphore_id = "render_finished_semaphore_" + std::to_string(i);
         output_frames_[i].fence_id = "in_flight_fence_" + std::to_string(i);
     }
 }
@@ -1057,9 +1057,9 @@ bool VulkanEngine::CreateSynchronizationObjects()
     // create synchronization objects
     for (int i = 0; i < engine_config_.frame_count; ++i)
     {
-        if (!vkSynchronizationHelper_->CreateSemaphore(output_frames_[i].image_available_sempaphore_id))
+        if (!vkSynchronizationHelper_->CreateVkSemaphore(output_frames_[i].image_available_semaphore_id))
             return false;
-        if (!vkSynchronizationHelper_->CreateSemaphore(output_frames_[i].render_finished_sempaphore_id))
+        if (!vkSynchronizationHelper_->CreateVkSemaphore(output_frames_[i].render_finished_semaphore_id))
             return false;
         if (!vkSynchronizationHelper_->CreateFence(output_frames_[i].fence_id))
             return false;
@@ -1075,8 +1075,8 @@ void VulkanEngine::DrawFrame()
 {
     // get current resource
     auto current_fence_id = output_frames_[frame_index_].fence_id;
-    auto current_image_available_semaphore_id = output_frames_[frame_index_].image_available_sempaphore_id;
-    auto current_render_finished_semaphore_id = output_frames_[frame_index_].render_finished_sempaphore_id;
+    auto current_image_available_semaphore_id = output_frames_[frame_index_].image_available_semaphore_id;
+    auto current_render_finished_semaphore_id = output_frames_[frame_index_].render_finished_semaphore_id;
     auto current_command_buffer_id = output_frames_[frame_index_].command_buffer_id;
     auto current_queue_id = output_frames_[frame_index_].queue_id;
 

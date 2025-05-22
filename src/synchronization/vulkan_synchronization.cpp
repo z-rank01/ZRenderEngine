@@ -15,7 +15,7 @@ VulkanSynchronizationHelper::~VulkanSynchronizationHelper()
     fences_.clear();
 }
 
-bool VulkanSynchronizationHelper::CreateSemaphore(std::string id)
+bool VulkanSynchronizationHelper::CreateVkSemaphore(std::string id)
 {
     VkSemaphoreCreateInfo semaphore_info{};
     semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
