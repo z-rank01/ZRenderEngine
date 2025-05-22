@@ -2,20 +2,37 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "type": "cppvsdbg",
+      "request": "launch",
+      "name": "MSVC Debug",
+      "program": "${workspaceFolder}/build/${input:buildType}/${input:executableName}.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/build",
+      "environment": [],
+      "console": "integratedTerminal"
+    },
+    {
       "type": "cppdbg",
       "request": "launch",
-      "name": "Launch Program",
-      "program": "${workspaceFolder}/build/${input:buildType}/${input:executableName}.exe",
+      "name": "GDB/LLDB Debug",
+      "program": "${workspaceFolder}/build/${input:executableName}.exe",
       "args": [],
       "cwd": "${workspaceFolder}/build",
       "setupCommands": [
         {
           "description": "Enable pretty-printing for gdb",
           "text": "-enable-pretty-printing",
-          "ignoreFailures": true
+          "ignoreFailures": false
         }
       ],
-      "miDebuggerPath": "C:/Program Files/msys64/ucrt64/bin/gdb.exe"
+      "linux": {
+        "MIMode": "gdb",
+        "miDebuggerPath": "${input:dbgPath}"
+      },
+      "osx": {
+        "MIMode": "lldb", 
+        "miDebuggerPath": "${input:dbgPath}"
+      },
     }
   ],
   "inputs": [
@@ -28,9 +45,18 @@
     {
       "type": "pickString",
       "id": "buildType",
-      "description": "Select build type",
-      "options": ["Debug", "Release", ""],
-      "default": "None"
+      "description": "Select build type (for MSVC)",
+      "options": [
+        "Debug",
+        "Release"
+      ],
+      "default": "Debug"
+    },
+    {
+      "type": "promptString",
+      "id": "dbgPath",
+      "description": "Enter debugger path (for GDB and LLDB)",
+      "default": "C:/Program Files/msys64/ucrt64/bin/gdb.exe"
     }
   ]
 }
