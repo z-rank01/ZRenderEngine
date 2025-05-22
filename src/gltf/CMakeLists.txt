@@ -5,6 +5,8 @@ add_library(gltf_helper STATIC
     gltf_parser.cpp
     gltf_converter.h
     tiny_gltf_impl.cpp
+    test.h
+    test.cpp
 )
 
 # 设置编译器标准和选项

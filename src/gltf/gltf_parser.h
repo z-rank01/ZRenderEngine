@@ -39,16 +39,12 @@ namespace gltf
         std::vector<PerDrawCallData> operator()(const tinygltf::Model &asset, RequestDrawCallList) const;
 
     private:
-        glm::mat4                       parseTransform(const tinygltf::Node &node) const;
-        std::vector<uint16_t>           parseIndices(const tinygltf::Primitive &primitive, const tinygltf::Model &asset, const uint16_t &offset) const;
-        std::vector<VertexInput>        parseVertexInputs(const tinygltf::Primitive &primitive, const tinygltf::Model &asset) const;
-        uint16_t                        parseMaterialIndex(const tinygltf::Primitive &primitive) const;
-
-        std::vector<PerMeshData>        BuildMeshList(const tinygltf::Model &asset) const;
-        std::vector<PerDrawCallData>    BuildDrawCallDataList(const tinygltf::Model &asset) const;
-
-        template<typename T, typename Setter>
-        void parseAttributeInternal(const tinygltf::Model &asset, size_t accessorIndex, Setter setter) const;
+        glm::mat4 ParseTransform(const tinygltf::Node &node) const;
+        std::vector<uint32_t> ParseIndices(const tinygltf::Primitive &primitive, const tinygltf::Model &asset, const uint32_t &vertex_offset) const;
+        std::vector<Vertex> ParseVertexInputs(const tinygltf::Primitive &primitive, const tinygltf::Model &asset) const;
+        uint32_t ParseMaterialIndex(const tinygltf::Primitive &primitive) const;
+        std::vector<PerMeshData> BuildMeshList(const tinygltf::Model &asset) const;
+        std::vector<PerDrawCallData> BuildDrawCallDataList(const tinygltf::Model &asset) const;
     };
 }
 

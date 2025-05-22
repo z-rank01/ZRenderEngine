@@ -60,13 +60,13 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
     rasterizer.rasterizerDiscardEnable = VK_FALSE; // Disable if you want to draw
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL; // Fill the polygon
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_NONE; // 禁用背面剔除，使三角形在任何角度都可见
-    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; 
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    // 如果模型依然颠倒，可以尝试更改这个值
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; // 或者尝试 VK_FRONT_FACE_CLOCKWISE
     rasterizer.depthBiasEnable = VK_FALSE;
     rasterizer.depthBiasConstantFactor = 0.0f; // Optional
     rasterizer.depthBiasClamp = 0.0f; // Optional
     rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
-
 
     // multisampling
     VkPipelineMultisampleStateCreateInfo multisampling{};
@@ -79,7 +79,17 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
     multisampling.alphaToOneEnable = VK_FALSE; // Optional
 
     // depth and stencil testing
-    // TODO: Add depth and stencil testing if needed
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;           // 启用深度测试
+    depthStencil.depthWriteEnable = VK_TRUE;          // 启用深度写入
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS; // 使用小于比较操作（标准深度测试）
+    depthStencil.depthBoundsTestEnable = VK_FALSE;    // 禁用深度边界测试
+    depthStencil.minDepthBounds = 0.0f;               // 可选
+    depthStencil.maxDepthBounds = 1.0f;               // 可选
+    depthStencil.stencilTestEnable = VK_FALSE;        // 禁用模板测试
+    depthStencil.front = {};                          // 可选，前面的模板操作
+    depthStencil.back = {};                           // 可选，背面的模板操作
 
     // color blending
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
@@ -168,7 +178,7 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
     pipelineInfo.pViewportState = &viewportState;
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pDepthStencilState = nullptr; // Optional
+    pipelineInfo.pDepthStencilState = &depthStencil; // 将深度测试状态添加到管线中
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = pipeline_layout_;
@@ -178,6 +188,7 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
     pipelineInfo.basePipelineIndex = -1; // Optional
     pipelineInfo.pNext = nullptr; // Optional
     pipelineInfo.flags = 0; // Optional
+
 
     return Logger::LogWithVkResult(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_), 
         "Failed to create graphics pipeline", 

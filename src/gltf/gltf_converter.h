@@ -66,9 +66,9 @@ namespace gltf
         Mesh2Vertices() = default;
         ~Mesh2Vertices() = default;
 
-        std::vector<VertexInput> operator()(const std::vector<PerMeshData> &meshes)
+        std::vector<Vertex> operator()(const std::vector<PerMeshData> &meshes)
         {
-            std::vector<VertexInput> vertices;
+            std::vector<Vertex> vertices;
             
             // reserve space for vertices(per mesh and per primitive)
             const auto vertices_count = std::accumulate(
@@ -82,7 +82,7 @@ namespace gltf
                         mesh.primitives.end(),
                         sum,
                         [](int sum, const PerDrawCallData &primitive)
-                        { return sum + primitive.vertex_inputs.size(); });
+                        { return sum + primitive.vertices.size(); });
                 });
             vertices.reserve(vertices_count);
 
@@ -97,8 +97,8 @@ namespace gltf
                         mesh.primitives.end(),
                         [&vertices](const PerDrawCallData &primitive)
                         {
-                            std::copy(primitive.vertex_inputs.begin(),
-                                    primitive.vertex_inputs.end(),
+                            std::copy(primitive.vertices.begin(),
+                                    primitive.vertices.end(),
                                     std::back_inserter(vertices));
                         });
                 });
@@ -145,9 +145,9 @@ namespace gltf
         DrawCalls2Vertices() = default;
         ~DrawCalls2Vertices() = default;
 
-        std::vector<VertexInput> operator()(const std::vector<PerDrawCallData> &draw_calls)
+        std::vector<Vertex> operator()(const std::vector<PerDrawCallData> &draw_calls)
         {
-            std::vector<VertexInput> vertices;
+            std::vector<Vertex> vertices;
 
             // reserve space for vertices(per draw call)
             const auto vertices_count = std::accumulate(
@@ -155,7 +155,7 @@ namespace gltf
                 draw_calls.end(),
                 0,
                 [](int sum, const PerDrawCallData &draw_call)
-                { return sum + draw_call.vertex_inputs.size(); });
+                { return sum + draw_call.vertices.size(); });
             vertices.reserve(vertices_count);
 
             // convert draw calls to vertices
@@ -164,7 +164,7 @@ namespace gltf
                 draw_calls.end(),
                 [&vertices](const PerDrawCallData &draw_call)
                 {
-                    std::copy(draw_call.vertex_inputs.begin(), draw_call.vertex_inputs.end(), std::back_inserter(vertices));
+                    std::copy(draw_call.vertices.begin(), draw_call.vertices.end(), std::back_inserter(vertices));
                 });
             return vertices;
         }

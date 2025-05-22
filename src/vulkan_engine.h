@@ -19,6 +19,7 @@
 #include "vulkan_resource_allocator/vra.h"
 
 #include "gltf/gltf_data.h"
+#include "gltf/test.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -116,13 +117,13 @@ struct SCamera
 
     void UpdateCameraVectors()
     {
-        if (pitch > 89.0f) pitch = 89.0f;
-        if (pitch < -89.0f) pitch = -89.0f;
+        // if (pitch > 89.0f) pitch = 89.0f;
+        // if (pitch < -89.0f) pitch = -89.0f;
 
-        // 在Vulkan坐标系中计算相机方向：+X向右，+Y向下，+Z向屏幕外
+        // 在Vulkan坐标系中计算相机方向：+X向右，+Y向上，+Z向屏幕外
         glm::vec3 new_front;
         new_front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-        new_front.y = sin(glm::radians(pitch)); // Y轴向下
+        new_front.y = sin(glm::radians(pitch)); // Y轴向上
         new_front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
         front = glm::normalize(new_front);
         
@@ -144,7 +145,7 @@ public:
 
     static VulkanEngine& GetInstance();
     void Initialize();
-    void GetVertexIndexData(std::vector<gltf::PerDrawCallData> per_draw_call_data, std::vector<uint16_t> indices, std::vector<gltf::VertexInput> vertex_inputs);
+    void GetVertexIndexData(std::vector<gltf::PerDrawCallData> per_draw_call_data, std::vector<uint32_t> indices, std::vector<gltf::Vertex> vertices);
     void GetMeshList(const std::vector<gltf::PerMeshData>& mesh_list);
 
 private:
@@ -260,21 +261,34 @@ private:
     void FocusOnObject(const glm::vec3& object_position, float target_distance);
 
     // --- test function and data ---
+    std::unique_ptr<TestVulkanglTFModel> test_vulkan_gltf_model_;
     std::vector<gltf::PerDrawCallData> per_draw_call_data_list_;
-    std::vector<uint16_t> indices_;
-    std::vector<gltf::VertexInput> vertices_;
+    std::vector<uint32_t> indices_;
+    std::vector<gltf::Vertex> vertices_;
 
     VkBuffer test_local_buffer_;
     VkBuffer test_staging_buffer_;
     VkBuffer test_uniform_buffer_;
+    VkBuffer single_vertex_buffer_;
+    VkBuffer single_index_buffer_;
+    VkBuffer single_staging_vertex_buffer_;
+    VkBuffer single_staging_index_buffer_;
     VkVertexInputBindingDescription test_vertex_input_binding_description_;
     std::vector<VkVertexInputAttributeDescription> test_vertex_input_attributes_;
     VkDescriptorPool test_descriptor_pool_;
     VkDescriptorSetLayout test_descriptor_set_layout_;
     VkDescriptorSet test_descriptor_set_;
+    VmaAllocation single_vertex_buffer_allocation_;
+    VmaAllocation single_index_buffer_allocation_;
+    VmaAllocation single_staging_vertex_buffer_allocation_;
+    VmaAllocation single_staging_index_buffer_allocation_;
     VmaAllocation test_local_buffer_allocation_;
     VmaAllocation test_staging_buffer_allocation_;
     VmaAllocation test_uniform_buffer_allocation_;
+    VmaAllocationInfo single_vertex_buffer_allocation_info_;
+    VmaAllocationInfo single_index_buffer_allocation_info_;
+    VmaAllocationInfo single_staging_vertex_buffer_allocation_info_;
+    VmaAllocationInfo single_staging_index_buffer_allocation_info_;
     VmaAllocationInfo test_local_buffer_allocation_info_;
     VmaAllocationInfo test_staging_buffer_allocation_info_;
     VmaAllocationInfo test_uniform_buffer_allocation_info_;
@@ -288,8 +302,17 @@ private:
     std::map<vra::BatchId, vra::VraDataBatcher::VraBatchHandle> test_local_host_batch_handle_;
     std::map<vra::BatchId, vra::VraDataBatcher::VraBatchHandle> test_uniform_batch_handle_;
 
-    void CreateTestLocalStagingBuffer();
-    void CreateTestUniformBuffer();
-    void CreateTestDescriptorSet();
+    void CreateMeshListBuffer();
+    void CreateDrawCallListBuffer();
     void ReleaseTestData();
+
+    // 深度资源相关成员
+    VkImage depth_image_ = VK_NULL_HANDLE;
+    VkDeviceMemory depth_memory_ = VK_NULL_HANDLE;
+    VkImageView depth_image_view_ = VK_NULL_HANDLE;
+    VkFormat depth_format_ = VK_FORMAT_D32_SFLOAT;
+    
+    // 创建深度资源
+    bool CreateDepthResources();
+    VkFormat FindSupportedDepthFormat();
 };

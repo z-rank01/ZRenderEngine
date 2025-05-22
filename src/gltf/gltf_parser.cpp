@@ -14,7 +14,7 @@ namespace gltf
         return BuildDrawCallDataList(asset);
     }
 
-    glm::mat4 GltfParser::parseTransform(const tinygltf::Node &node) const
+    glm::mat4 GltfParser::ParseTransform(const tinygltf::Node &node) const
     {
         if (!node.matrix.empty())
         {
@@ -35,7 +35,7 @@ namespace gltf
         }
     }
 
-    std::vector<uint16_t> GltfParser::parseIndices(const tinygltf::Primitive &primitive, const tinygltf::Model &asset, const uint16_t &offset) const
+    std::vector<uint32_t> GltfParser::ParseIndices(const tinygltf::Primitive &primitive, const tinygltf::Model &asset, const uint32_t &vertex_offset) const
     {
         if (primitive.indices < 0)
         {
@@ -46,7 +46,7 @@ namespace gltf
         const tinygltf::BufferView &bufferView = asset.bufferViews[accessor.bufferView];
         const tinygltf::Buffer &buffer = asset.buffers[bufferView.buffer];
 
-        std::vector<uint16_t> indices;
+        std::vector<uint32_t> indices;
         indices.reserve(accessor.count);
 
         const uint8_t *data = buffer.data.data() + bufferView.byteOffset + accessor.byteOffset;
@@ -58,22 +58,22 @@ namespace gltf
         {
             for (size_t i = 0; i < accessor.count; i++)
             {
-                uint16_t index = 0;
+                uint32_t index = 0;
                 switch (accessor.componentType)
                 {
                 case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-                    index = *reinterpret_cast<const uint16_t *>(data + i * stride);
+                    index = static_cast<uint32_t>(*reinterpret_cast<const uint16_t *>(data + i * stride));
                     break;
                 case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
-                    index = *reinterpret_cast<const uint8_t *>(data + i * stride);
+                    index = static_cast<uint32_t>(*reinterpret_cast<const uint8_t *>(data + i * stride));
                     break;
                 case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
-                    index = static_cast<uint16_t>(*reinterpret_cast<const uint32_t *>(data + i * stride));
+                    index = *reinterpret_cast<const uint32_t *>(data + i * stride);
                     break;
                 default:
                     throw std::runtime_error("Unsupported index component type");
                 }
-                indices.push_back(index + offset);
+                indices.push_back(index + vertex_offset);
             }
         }
         catch (const std::exception &e)
@@ -85,7 +85,7 @@ namespace gltf
     }
 
     template <typename T>
-    void getAttributeData(const tinygltf::Model &asset, int accessorIndex, std::vector<T> &outData)
+    void GetAttributeData(const tinygltf::Model &asset, int accessorIndex, std::vector<T> &outData)
     {
         const tinygltf::Accessor &accessor = asset.accessors[accessorIndex];
         const tinygltf::BufferView &bufferView = asset.bufferViews[accessor.bufferView];
@@ -100,7 +100,7 @@ namespace gltf
         memcpy(outData.data(), data, accessor.count * stride);
     }
 
-    std::vector<VertexInput> GltfParser::parseVertexInputs(const tinygltf::Primitive &primitive, const tinygltf::Model &asset) const
+    std::vector<Vertex> GltfParser::ParseVertexInputs(const tinygltf::Primitive &primitive, const tinygltf::Model &asset) const
     {
         auto positionIt = primitive.attributes.find("POSITION");
         if (positionIt == primitive.attributes.end())
@@ -109,16 +109,16 @@ namespace gltf
         }
 
         const tinygltf::Accessor &posAccessor = asset.accessors[positionIt->second];
-        std::vector<VertexInput> vertex_inputs(posAccessor.count);
+        std::vector<Vertex> vertices(posAccessor.count);
 
         try
         {
             // Position (required)
             std::vector<glm::vec3> positions;
-            getAttributeData(asset, positionIt->second, positions);
+            GetAttributeData(asset, positionIt->second, positions);
             for (size_t i = 0; i < positions.size(); i++)
             {
-                vertex_inputs[i].position = positions[i];
+                vertices[i].position = positions[i];
             }
 
             // Color
@@ -126,10 +126,10 @@ namespace gltf
             if (colorIt != primitive.attributes.end())
             {
                 std::vector<glm::vec4> colors;
-                getAttributeData(asset, colorIt->second, colors);
+                GetAttributeData(asset, colorIt->second, colors);
                 for (size_t i = 0; i < colors.size(); i++)
                 {
-                    vertex_inputs[i].color = colors[i];
+                    vertices[i].color = colors[i];
                 }
             }
 
@@ -138,10 +138,10 @@ namespace gltf
             if (normalIt != primitive.attributes.end())
             {
                 std::vector<glm::vec3> normals;
-                getAttributeData(asset, normalIt->second, normals);
+                GetAttributeData(asset, normalIt->second, normals);
                 for (size_t i = 0; i < normals.size(); i++)
                 {
-                    vertex_inputs[i].normal = normals[i];
+                    vertices[i].normal = normals[i];
                 }
             }
 
@@ -150,10 +150,10 @@ namespace gltf
             if (tangentIt != primitive.attributes.end())
             {
                 std::vector<glm::vec4> tangents;
-                getAttributeData(asset, tangentIt->second, tangents);
+                GetAttributeData(asset, tangentIt->second, tangents);
                 for (size_t i = 0; i < tangents.size(); i++)
                 {
-                    vertex_inputs[i].tangent = tangents[i];
+                    vertices[i].tangent = tangents[i];
                 }
             }
 
@@ -162,10 +162,10 @@ namespace gltf
             if (uv0It != primitive.attributes.end())
             {
                 std::vector<glm::vec2> uvs;
-                getAttributeData(asset, uv0It->second, uvs);
+                GetAttributeData(asset, uv0It->second, uvs);
                 for (size_t i = 0; i < uvs.size(); i++)
                 {
-                    vertex_inputs[i].uv0 = uvs[i];
+                    vertices[i].uv0 = uvs[i];
                 }
             }
 
@@ -174,10 +174,10 @@ namespace gltf
             if (uv1It != primitive.attributes.end())
             {
                 std::vector<glm::vec2> uvs;
-                getAttributeData(asset, uv1It->second, uvs);
+                GetAttributeData(asset, uv1It->second, uvs);
                 for (size_t i = 0; i < uvs.size(); i++)
                 {
-                    vertex_inputs[i].uv1 = uvs[i];
+                    vertices[i].uv1 = uvs[i];
                 }
             }
         }
@@ -186,16 +186,16 @@ namespace gltf
             std::cerr << "Error parsing vertex attributes: " << e.what() << std::endl;
         }
 
-        return vertex_inputs;
+        return vertices;
     }
 
-    uint16_t GltfParser::parseMaterialIndex(const tinygltf::Primitive &primitive) const
+    uint32_t GltfParser::ParseMaterialIndex(const tinygltf::Primitive &primitive) const
     {
         if (primitive.material < 0)
         {
             throw std::runtime_error("Material index not found");
         }
-        return static_cast<uint16_t>(primitive.material);
+        return static_cast<uint32_t>(primitive.material);
     }
 
     std::vector<PerMeshData> GltfParser::BuildMeshList(const tinygltf::Model &asset) const
@@ -204,20 +204,24 @@ namespace gltf
         meshes.reserve(asset.meshes.size());
 
         // collect all node transforms for each mesh
-        std::vector<std::vector<glm::mat4>> meshTransforms(asset.meshes.size());
+        std::vector<std::vector<glm::mat4>> mesh_transforms(asset.meshes.size());
         for (const auto &node : asset.nodes)
         {
             if (node.mesh >= 0)
             {
-                meshTransforms[node.mesh].push_back(parseTransform(node));
+                mesh_transforms[node.mesh].push_back(ParseTransform(node));
             }
         }
 
+        // 添加全局顶点和索引偏移量计数器，在所有 mesh 之间累积
+        uint32_t global_vertex_offset = 0;
+        uint32_t global_index_offset = 0;
+
         // build mesh list
-        for (size_t meshIndex = 0; meshIndex < asset.meshes.size(); ++meshIndex)
+        for (size_t mesh_index = 0; mesh_index < asset.meshes.size(); ++mesh_index)
         {
-            const auto &srcMesh = asset.meshes[meshIndex];
-            const auto &transforms = meshTransforms[meshIndex];
+            const auto &src_mesh = asset.meshes[mesh_index];
+            const auto &transforms = mesh_transforms[mesh_index];
 
             // skip meshes that are not referenced by any nodes
             if (transforms.empty())
@@ -225,52 +229,70 @@ namespace gltf
                 continue;
             }
 
-            uint16_t start_index = 0;
-            uint16_t start_vertex = 0;
-            PerMeshData destMesh;
-            destMesh.name = srcMesh.name;
-            if (destMesh.name.empty())
+            uint32_t mesh_vertex_offset = 0;
+            PerMeshData dest_mesh;
+            dest_mesh.name = src_mesh.name;
+            if (dest_mesh.name.empty())
             {
-                destMesh.name = "Mesh_" + std::to_string(meshIndex);
+                dest_mesh.name = "Mesh_" + std::to_string(mesh_index);
             }
-            destMesh.primitives.reserve(srcMesh.primitives.size() * transforms.size());
+            dest_mesh.primitives.reserve(src_mesh.primitives.size() * transforms.size());
 
-            for (const auto &primitive : srcMesh.primitives)
+            for (const auto &primitive : src_mesh.primitives)
             {
-                // parse indices, vertex inputs and material index
-                auto indices_result = parseIndices(primitive, asset, start_vertex);
-                auto vertexInputs_result = parseVertexInputs(primitive, asset);
-                auto materialIndex = parseMaterialIndex(primitive);
+                // 为每个primitive计算全局顶点偏移量 = 全局偏移量 + 当前mesh内的偏移量
+                uint32_t total_vertex_offset = global_vertex_offset + mesh_vertex_offset;
+
+                // ParseIndices 已经处理了索引的顶点偏移量，它将每个原始索引值加上了 total_vertex_offset
+                auto indices_result = ParseIndices(primitive, asset, total_vertex_offset);
+                auto vertex_inputs_result = ParseVertexInputs(primitive, asset);
+                auto material_index = ParseMaterialIndex(primitive);
 
                 // count current vertex and index count
-                uint16_t indexCount = indices_result.size();
-                uint16_t vertexCount = vertexInputs_result.size();
+                uint32_t index_count = static_cast<uint32_t>(indices_result.size());
+                uint32_t vertex_count = static_cast<uint32_t>(vertex_inputs_result.size());
 
                 // build draw call data
                 for (const auto &transform : transforms)
                 {
-                    destMesh.primitives.push_back({.transform = transform,
-                                                   .indices = std::move(indices_result),
-                                                   .vertex_inputs = std::move(vertexInputs_result),
-                                                   .material_index = materialIndex,
-                                                   .first_index = start_index,
-                                                   .index_count = indexCount,
-                                                   .first_vertex = start_vertex,
-                                                   .vertex_count = vertexCount});
+                    dest_mesh.primitives.push_back({
+                        .transform = transform,
+                        .indices = std::move(indices_result),
+                        .vertices = std::move(vertex_inputs_result),
+                        .material_index = material_index,
+                        // 注意：first_index 是在索引缓冲区中的索引位置，而不是顶点偏移量
+                        // 这里使用 global_index_offset 是正确的，表示这个图元在全局索引数组中的起始位置
+                        .first_index = global_index_offset,
+                        .index_count = index_count,
+                        // first_vertex 表示此图元的顶点在全局顶点数组中的起始位置
+                        // 使用 total_vertex_offset 也是正确的
+                        .first_vertex = total_vertex_offset,
+                        .vertex_count = vertex_count
+                    });
                 }
 
-                // update first index and first vertex
-                start_index += indexCount;
-                start_vertex += vertexCount;
+                // update local vertex offset for next primitive in this mesh
+                mesh_vertex_offset += vertex_count;
+                
+                // 更新全局索引偏移量，为下一个primitive准备
+                global_index_offset += index_count;
             }
-            meshes.push_back(std::move(destMesh));
+            
+            // 更新全局顶点偏移量，为下一个mesh做准备
+            global_vertex_offset += mesh_vertex_offset;
+            
+            meshes.push_back(std::move(dest_mesh));
         }
         return meshes;
     }
 
     std::vector<PerDrawCallData> GltfParser::BuildDrawCallDataList(const tinygltf::Model &asset) const
     {
-        std::vector<PerDrawCallData> drawCalls;
+        std::vector<PerDrawCallData> draw_calls;
+
+        // 添加全局顶点偏移量和索引偏移量计数器
+        uint32_t global_vertex_offset = 0;
+        uint32_t global_index_offset = 0;
 
         // Process each node that has a mesh
         for (const auto &node : asset.nodes)
@@ -279,40 +301,49 @@ namespace gltf
                 continue;
 
             const auto &mesh = asset.meshes[node.mesh];
-            auto transform = parseTransform(node);
+            auto transform = ParseTransform(node);
 
-            uint16_t start_index = 0;
-            uint16_t start_vertex = 0;
+            uint32_t mesh_vertex_offset = 0;
 
             // Process each primitive in the mesh
             for (const auto &primitive : mesh.primitives)
             {
-                // parse indices, vertex inputs and material index
-                auto indices_result = parseIndices(primitive, asset, start_vertex);
-                auto vertexInputs_result = parseVertexInputs(primitive, asset);
-                auto material_index = parseMaterialIndex(primitive);
+                // 为每个primitive计算全局顶点偏移量 = 全局偏移量 + 当前mesh内的偏移量
+                uint32_t total_vertex_offset = global_vertex_offset + mesh_vertex_offset;
+
+                // parse indices with total offset, vertex_inputs and material index
+                auto indices_result = ParseIndices(primitive, asset, total_vertex_offset);
+                auto vertex_inputs_result = ParseVertexInputs(primitive, asset);
+                auto material_index = ParseMaterialIndex(primitive);
 
                 // count current vertex and index count
-                uint16_t indexCount = indices_result.size();
-                uint16_t vertexCount = vertexInputs_result.size();
+                uint32_t index_count = static_cast<uint32_t>(indices_result.size());
+                uint32_t vertex_count = static_cast<uint32_t>(vertex_inputs_result.size());
 
                 // construct draw call data
-                drawCalls.push_back({.transform = transform,
-                                     .indices = std::move(indices_result),
-                                     .vertex_inputs = std::move(vertexInputs_result),
-                                     .material_index = material_index,
-                                     .first_index = start_index,
-                                     .index_count = indexCount,
-                                     .first_vertex = start_vertex,
-                                     .vertex_count = vertexCount});
+                draw_calls.push_back({
+                    .transform = transform,
+                    .indices = std::move(indices_result),
+                    .vertices = std::move(vertex_inputs_result),
+                    .material_index = material_index,
+                    .first_index = global_index_offset,  // 使用全局索引偏移量
+                    .index_count = index_count,
+                    .first_vertex = total_vertex_offset,  // 使用全局顶点偏移量
+                    .vertex_count = vertex_count
+                });
 
-                // update first index and first vertex
-                start_index += indexCount;
-                start_vertex += vertexCount;
+                // update local vertex offset for the next primitive
+                mesh_vertex_offset += vertex_count;
+                
+                // 更新全局索引偏移量，为下一个primitive做准备
+                global_index_offset += index_count;
             }
+
+            // 更新全局顶点偏移量，为下一个mesh做准备
+            global_vertex_offset += mesh_vertex_offset;
         }
 
-        return drawCalls;
+        return draw_calls;
     }
 
 } // namespace gltf

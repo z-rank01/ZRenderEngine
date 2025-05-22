@@ -3,14 +3,14 @@
 #include <thread>
 #include <iostream>
 
-VulkanEngine *instance = nullptr;
+VulkanEngine* instance = nullptr;
 
-VulkanEngine &VulkanEngine::GetInstance()
+VulkanEngine& VulkanEngine::GetInstance()
 {
     return *instance;
 }
 
-VulkanEngine::VulkanEngine(const SEngineConfig &config) : engine_config_(config)
+VulkanEngine::VulkanEngine(const SEngineConfig& config) : engine_config_(config)
 {
     // only one engine initialization is allowed with the application.
     assert(instance == nullptr);
@@ -23,13 +23,17 @@ void VulkanEngine::Initialize()
     InitializeSDL();
     InitializeCamera();
     InitializeVulkan();
+
+    // test gltf model
+    // test_vulkan_gltf_model_ = std::make_unique<TestVulkanglTFModel>(vkb_device_.device, vkb_device_.get_queue(vkb::QueueType::graphics).value());
+    // test_vulkan_gltf_model_->LoadGLTF("E:\\Assets\\Sponza\\SponzaBase\\NewSponza_Main_glTF_003.gltf");
 }
 
-void VulkanEngine::GetVertexIndexData(std::vector<gltf::PerDrawCallData> per_draw_call_data, std::vector<uint16_t> indices, std::vector<gltf::VertexInput> vertex_inputs)
+void VulkanEngine::GetVertexIndexData(std::vector<gltf::PerDrawCallData> per_draw_call_data, std::vector<uint32_t> indices, std::vector<gltf::Vertex> vertices)
 {
     per_draw_call_data_list_ = std::move(per_draw_call_data);
     indices_ = std::move(indices);
-    vertices_ = std::move(vertex_inputs);
+    vertices_ = std::move(vertices);
 }
 
 void VulkanEngine::GetMeshList(const std::vector<gltf::PerMeshData>& mesh_list)
@@ -45,12 +49,28 @@ VulkanEngine::~VulkanEngine()
     // 等待设备空闲，确保没有正在进行的操作
     vkDeviceWaitIdle(vkb_device_.device);
 
+    // 销毁深度资源
+    if (depth_image_view_ != VK_NULL_HANDLE) {
+        vkDestroyImageView(vkb_device_.device, depth_image_view_, nullptr);
+        depth_image_view_ = VK_NULL_HANDLE;
+    }
+    
+    if (depth_image_ != VK_NULL_HANDLE) {
+        vkDestroyImage(vkb_device_.device, depth_image_, nullptr);
+        depth_image_ = VK_NULL_HANDLE;
+    }
+    
+    if (depth_memory_ != VK_NULL_HANDLE) {
+        vkFreeMemory(vkb_device_.device, depth_memory_, nullptr);
+        depth_memory_ = VK_NULL_HANDLE;
+    }
+    
     // 销毁描述符相关资源
     if (descriptor_pool_ != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(vkb_device_.device, descriptor_pool_, nullptr);
         descriptor_pool_ = VK_NULL_HANDLE;
     }
-    
+
     if (descriptor_set_layout_ != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(vkb_device_.device, descriptor_set_layout_, nullptr);
         descriptor_set_layout_ = VK_NULL_HANDLE;
@@ -61,12 +81,12 @@ VulkanEngine::~VulkanEngine()
     //     vmaDestroyBuffer(vma_allocator_, local_buffer_, local_buffer_allocation_);
     //     local_buffer_ = VK_NULL_HANDLE;
     // }
-    
+
     // if (staging_buffer_ != VK_NULL_HANDLE) {
     //     vmaDestroyBuffer(vma_allocator_, staging_buffer_, staging_buffer_allocation_);
     //     staging_buffer_ = VK_NULL_HANDLE;
     // }
-    
+
     if (uniform_buffer_ != VK_NULL_HANDLE) {
         vmaDestroyBuffer(vma_allocator_, uniform_buffer_, uniform_buffer_allocation_);
         uniform_buffer_ = VK_NULL_HANDLE;
@@ -103,11 +123,11 @@ void VulkanEngine::InitializeSDL()
 {
     vkWindowHelper_ = std::make_unique<VulkanSDLWindowHelper>();
     if (!vkWindowHelper_->GetWindowBuilder()
-             .SetWindowName(engine_config_.window_config.title.c_str())
-             .SetWindowSize(engine_config_.window_config.width, engine_config_.window_config.height)
-             .SetWindowFlags(SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN)
-             .SetInitFlags(SDL_INIT_VIDEO | SDL_INIT_EVENTS)
-             .Build())
+        .SetWindowName(engine_config_.window_config.title.c_str())
+        .SetWindowSize(engine_config_.window_config.width, engine_config_.window_config.height)
+        .SetWindowFlags(SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN)
+        .SetInitFlags(SDL_INIT_VIDEO | SDL_INIT_EVENTS)
+        .Build())
     {
         throw std::runtime_error("Failed to create SDL window.");
     }
@@ -153,7 +173,8 @@ void VulkanEngine::InitializeVulkan()
     // }
 
     // test
-    CreateTestLocalStagingBuffer();
+    // CreateMeshListBuffer();
+    CreateDrawCallListBuffer();
 
     if (!CreateUniformBuffers())
     {
@@ -194,27 +215,27 @@ void VulkanEngine::InitializeVulkan()
 void VulkanEngine::InitializeCamera()
 {
     // initialize mvp matrices
-    mvp_matrices_ = std::vector<SMvpMatrix>(engine_config_.frame_count, {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f)});
+    mvp_matrices_ = std::vector<SMvpMatrix>(engine_config_.frame_count, { glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f) });
 
     // initialize camera
-    camera_.position = glm::vec3(0.0f, 0.0f, 3.0f);   // 3 units away from origin
+    camera_.position = glm::vec3(0.0f, 0.0f, 10.0f);   // 更远的初始距离
     camera_.yaw = -90.0f;                             // look at origin
     camera_.pitch = 0.0f;                             // horizontal view
-    camera_.wheel_speed = 2.0f;
-    camera_.movement_speed = 10.0f;
-    camera_.mouse_sensitivity = 0.5f;
+    camera_.wheel_speed = 0.1f;                       // 降低滚轮速度，避免变化太剧烈
+    camera_.movement_speed = 5.0f;                    // 调整移动速度
+    camera_.mouse_sensitivity = 0.2f;                 // 降低鼠标灵敏度
     camera_.zoom = 45.0f;
     camera_.world_up = glm::vec3(0.0f, -1.0f, 0.0f);  // Y-axis is down in Vulkan
-    
+
     // initialize camera vectors
     camera_.front = glm::vec3(0.0f, 0.0f, -1.0f);     // look at -z direction
     camera_.right = glm::vec3(1.0f, 0.0f, 0.0f);      // right direction is +x
-    camera_.up = glm::vec3(0.0f, -1.0f, 0.0f);        // up direction is -y (because Y-axis is down in Vulkan)
-    
+    camera_.up = glm::vec3(0.0f, 1.0f, 0.0f);        // up direction is +y (because Y-axis is up in Vulkan)
+
     // initialize focus point related parameters
     camera_.focus_point = glm::vec3(0.0f);            // default focus on origin
     camera_.has_focus_point = true;                   // default enable focus point
-    camera_.focus_distance = 3.0f;                    // default focus distance
+    camera_.focus_distance = 10.0f;                   // 增加默认焦距
     camera_.min_focus_distance = 0.5f;                // minimum focus distance
     camera_.max_focus_distance = 10000.0f;            // maximum focus distance
 }
@@ -225,7 +246,7 @@ void VulkanEngine::Run()
     engine_state_ = EWindowState::Running;
 
     SDL_Event event;
-    
+
     Uint64 last_time = SDL_GetTicks();
     float delta_time = 0.0f;
 
@@ -241,7 +262,7 @@ void VulkanEngine::Run()
         while (SDL_PollEvent(&event))
         {
             ProcessInput(event);
-            
+
             // close the window when user alt-f4s or clicks the X button
             if (event.type == SDL_EVENT_QUIT)
             {
@@ -306,7 +327,7 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
             Logger::LogInfo(camera_.focus_constraint_enabled_ ? "Focus constraint enabled" : "Focus constraint disabled");
         }
     }
-    
+
     // mouse button down event
     if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
@@ -314,7 +335,7 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
         SDL_GetMouseState(&mouse_x, &mouse_y);
         last_x_ = mouse_x;
         last_y_ = mouse_y;
-        
+
         if (event.button.button == SDL_BUTTON_RIGHT)
         {
             // Use free_look_mode_ instead of camera_rotation_mode_
@@ -323,26 +344,26 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
             last_x_ = mouse_x;
             last_y_ = mouse_y;
         }
-        else if (event.button.button == SDL_BUTTON_MIDDLE) 
+        else if (event.button.button == SDL_BUTTON_MIDDLE)
         {
             camera_pan_mode_ = true;
         }
     }
-    
+
     // mouse button up event
-    if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) 
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
     {
         if (event.button.button == SDL_BUTTON_RIGHT)
         {
             // Use free_look_mode_ instead of camera_rotation_mode_
             free_look_mode_ = false;
         }
-        else if (event.button.button == SDL_BUTTON_MIDDLE) 
+        else if (event.button.button == SDL_BUTTON_MIDDLE)
         {
             camera_pan_mode_ = false;
         }
     }
-    
+
     // mouse motion event
     if (event.type == SDL_EVENT_MOUSE_MOTION)
     {
@@ -417,13 +438,13 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
             camera_.position += camera_.up * target_y_offset;   // Pan up/down
         }
     }
-    
+
     // mouse wheel event
-    if (event.type == SDL_EVENT_MOUSE_WHEEL) 
+    if (event.type == SDL_EVENT_MOUSE_WHEEL)
     {
         float zoom_factor = camera_.wheel_speed;
         float distance = glm::length(camera_.position);
-        
+
         if (event.wheel.y > 0)
         {
             if (distance > 0.5f)
@@ -435,7 +456,7 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
         {
             camera_.position *= (1.0f + zoom_factor);
         }
-        
+
         ProcessMouseScroll(static_cast<float>(event.wheel.y));
     }
 }
@@ -548,13 +569,13 @@ void VulkanEngine::ProcessMouseScroll(float yoffset)
         float zoom_step = camera_.movement_speed * 0.5f; // Adjust zoom speed
 
         // Calculate distance scale
-         float current_distance = glm::length(camera_.position - camera_.focus_point);
-         float distance_scale = glm::clamp(
-             current_distance / camera_.focus_distance,
-             camera_.min_focus_distance / camera_.focus_distance,
-             camera_.max_focus_distance / camera_.focus_distance
-         );
-         zoom_step /= distance_scale; // Smaller steps when closer
+        float current_distance = glm::length(camera_.position - camera_.focus_point);
+        float distance_scale = glm::clamp(
+            current_distance / camera_.focus_distance,
+            camera_.min_focus_distance / camera_.focus_distance,
+            camera_.max_focus_distance / camera_.focus_distance
+        );
+        zoom_step /= distance_scale; // Smaller steps when closer
 
         if (yoffset > 0)
         {
@@ -564,7 +585,7 @@ void VulkanEngine::ProcessMouseScroll(float yoffset)
         else if (yoffset < 0)
         {
             // Zoom out (move away from focus point)
-             camera_.position -= camera_.front * zoom_step;
+            camera_.position -= camera_.front * zoom_step;
         }
         // Update camera vectors after changing position for orbit-like feel
         camera_.UpdateCameraVectors();
@@ -609,12 +630,12 @@ bool VulkanEngine::CreateInstance()
     vkb::InstanceBuilder builder;
 
     auto inst_ret = builder
-                        .set_app_name(engine_config_.window_config.title.c_str())
-                        .set_engine_name("Vulkan Engine")
-                        .require_api_version(1, 3, 0)
-                        .use_default_debug_messenger()
-                        .enable_validation_layers(engine_config_.use_validation_layers)
-                        .build();
+        .set_app_name(engine_config_.window_config.title.c_str())
+        .set_engine_name("Vulkan Engine")
+        .require_api_version(1, 3, 0)
+        .use_default_debug_messenger()
+        .enable_validation_layers(engine_config_.use_validation_layers)
+        .build();
 
     if (!inst_ret)
     {
@@ -634,17 +655,17 @@ bool VulkanEngine::CreateSurface()
 bool VulkanEngine::CreatePhysicalDevice()
 {
     // vulkan 1.3 features
-    VkPhysicalDeviceVulkan13Features features_13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+    VkPhysicalDeviceVulkan13Features features_13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
     features_13.synchronization2 = true;
 
-    vkb::PhysicalDeviceSelector selector{vkb_instance_};
+    vkb::PhysicalDeviceSelector selector{ vkb_instance_ };
     auto phys_ret = selector
-                        .set_surface(vkWindowHelper_->GetSurface())
-                        .set_minimum_version(1, 3)
-                        .set_required_features_13(features_13)
-                        .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
-                        .require_present()
-                        .select();
+        .set_surface(vkWindowHelper_->GetSurface())
+        .set_minimum_version(1, 3)
+        .set_required_features_13(features_13)
+        .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
+        .require_present()
+        .select();
 
     if (!phys_ret)
     {
@@ -658,7 +679,7 @@ bool VulkanEngine::CreatePhysicalDevice()
 
 bool VulkanEngine::CreateLogicalDevice()
 {
-    vkb::DeviceBuilder device_builder{vkb_physical_device_};
+    vkb::DeviceBuilder device_builder{ vkb_physical_device_ };
     auto dev_ret = device_builder.build();
     if (!dev_ret)
     {
@@ -672,13 +693,13 @@ bool VulkanEngine::CreateLogicalDevice()
 
 bool VulkanEngine::CreateSwapChain()
 {
-    vkb::SwapchainBuilder swapchain_builder{vkb_device_};
+    vkb::SwapchainBuilder swapchain_builder{ vkb_device_ };
     auto swap_ret = swapchain_builder
-                        .set_desired_format({VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
-                        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-                        .set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height)
-                        .set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
-                        .build();
+        .set_desired_format({ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
+        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+        .set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height)
+        .set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+        .build();
 
     if (!swap_ret)
     {
@@ -698,18 +719,6 @@ bool VulkanEngine::CreateSwapChain()
     swapchain_config_.device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     return true;
-}
-
-bool VulkanEngine::CreateFrameBuffer()
-{
-    // create frame buffer
-    auto swapchain_config = &swapchain_config_;
-    auto swapchain_image_views = vkb_swapchain_.get_image_views().value();
-
-    SVulkanFrameBufferConfig framebuffer_config(swapchain_config->target_swap_extent_, swapchain_image_views);
-    vkFrameBufferHelper_ = std::make_unique<VulkanFrameBufferHelper>(vkb_device_.device, framebuffer_config);
-
-    return vkFrameBufferHelper_->CreateFrameBuffer(vkRenderpassHelper_->GetRenderpass());
 }
 
 bool VulkanEngine::CreateCommandPool()
@@ -981,6 +990,131 @@ bool VulkanEngine::CreateVmaVraObjects()
     return true;
 }
 
+// 查找支持的深度格式
+VkFormat VulkanEngine::FindSupportedDepthFormat()
+{
+    // 按优先级尝试不同的深度格式
+    std::vector<VkFormat> candidates = {
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT
+    };
+
+    for (VkFormat format : candidates) {
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(vkb_physical_device_.physical_device, format, &props);
+        
+        // 检查该格式是否支持作为深度附件的最佳平铺格式
+        if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+            return format;
+        }
+    }
+
+    throw std::runtime_error("Failed to find supported depth format");
+}
+
+// 创建深度资源
+bool VulkanEngine::CreateDepthResources()
+{
+    // 获取深度格式
+    depth_format_ = FindSupportedDepthFormat();
+    
+    // 创建深度图像
+    VkImageCreateInfo image_info{};
+    image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image_info.imageType = VK_IMAGE_TYPE_2D;
+    image_info.extent.width = swapchain_config_.target_swap_extent_.width;
+    image_info.extent.height = swapchain_config_.target_swap_extent_.height;
+    image_info.extent.depth = 1;
+    image_info.mipLevels = 1;
+    image_info.arrayLayers = 1;
+    image_info.format = depth_format_;
+    image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    // 创建图像
+    if (vkCreateImage(vkb_device_.device, &image_info, nullptr, &depth_image_) != VK_SUCCESS) {
+        Logger::LogError("Failed to create depth image");
+        return false;
+    }
+
+    // 获取内存需求
+    VkMemoryRequirements mem_requirements;
+    vkGetImageMemoryRequirements(vkb_device_.device, depth_image_, &mem_requirements);
+
+    // 分配内存
+    VkMemoryAllocateInfo alloc_info{};
+    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize = mem_requirements.size;
+    
+    // 查找适合的内存类型
+    uint32_t memory_type_index = 0;
+    VkPhysicalDeviceMemoryProperties mem_properties;
+    vkGetPhysicalDeviceMemoryProperties(vkb_physical_device_.physical_device, &mem_properties);
+    
+    for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++) {
+        if ((mem_requirements.memoryTypeBits & (1 << i)) && 
+            (mem_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+            memory_type_index = i;
+            break;
+        }
+    }
+    
+    alloc_info.memoryTypeIndex = memory_type_index;
+
+    // 分配内存
+    if (vkAllocateMemory(vkb_device_.device, &alloc_info, nullptr, &depth_memory_) != VK_SUCCESS) {
+        Logger::LogError("Failed to allocate depth image memory");
+        return false;
+    }
+
+    // 绑定内存到图像
+    if (vkBindImageMemory(vkb_device_.device, depth_image_, depth_memory_, 0) != VK_SUCCESS) {
+        Logger::LogError("Failed to bind depth image memory");
+        return false;
+    }
+
+    // 创建图像视图
+    VkImageViewCreateInfo view_info{};
+    view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_info.image = depth_image_;
+    view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_info.format = depth_format_;
+    view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    view_info.subresourceRange.baseMipLevel = 0;
+    view_info.subresourceRange.levelCount = 1;
+    view_info.subresourceRange.baseArrayLayer = 0;
+    view_info.subresourceRange.layerCount = 1;
+
+    if (vkCreateImageView(vkb_device_.device, &view_info, nullptr, &depth_image_view_) != VK_SUCCESS) {
+        Logger::LogError("Failed to create depth image view");
+        return false;
+    }
+
+    return true;
+}
+
+bool VulkanEngine::CreateFrameBuffer()
+{
+    // 创建深度资源
+    if (!CreateDepthResources()) {
+        throw std::runtime_error("Failed to create depth resources.");
+    }
+    
+    // 创建帧缓冲
+    auto swapchain_config = &swapchain_config_;
+    auto swapchain_image_views = vkb_swapchain_.get_image_views().value();
+
+    SVulkanFrameBufferConfig framebuffer_config(swapchain_config->target_swap_extent_, swapchain_image_views, depth_image_view_);
+
+    vkFrameBufferHelper_ = std::make_unique<VulkanFrameBufferHelper>(vkb_device_.device, framebuffer_config);
+
+    return vkFrameBufferHelper_->CreateFrameBuffer(vkRenderpassHelper_->GetRenderpass());
+}
+
 bool VulkanEngine::CreatePipeline()
 {
     // create shader
@@ -992,10 +1126,10 @@ bool VulkanEngine::CreatePipeline()
     // std::string fragment_shader_path = shader_path + "triangle.frag.spv";
     std::string vertex_shader_path = shader_path + "gltf.vert.spv";
     std::string fragment_shader_path = shader_path + "gltf.frag.spv";
-    configs.push_back({EShaderType::kVertexShader, vertex_shader_path.c_str()});
-    configs.push_back({EShaderType::kFragmentShader, fragment_shader_path.c_str()});
+    configs.push_back({ EShaderType::kVertexShader, vertex_shader_path.c_str() });
+    configs.push_back({ EShaderType::kFragmentShader, fragment_shader_path.c_str() });
 
-    for (const auto &config : configs)
+    for (const auto& config : configs)
     {
         std::vector<uint32_t> shader_code;
         if (!vkShaderHelper_->ReadShaderCode(config.shader_path, shader_code))
@@ -1027,7 +1161,7 @@ bool VulkanEngine::CreatePipeline()
     pipeline_config.swap_chain_config = &swapchain_config_;
     pipeline_config.shader_module_map = {
         {EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader)},
-        {EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader)}};
+        {EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader)} };
     pipeline_config.renderpass = vkRenderpassHelper_->GetRenderpass();
     // pipeline_config.vertex_input_binding_description = vertex_input_binding_description_;
     // pipeline_config.vertex_input_attribute_descriptions = {vertex_input_attribute_position_, vertex_input_attribute_color_};
@@ -1042,7 +1176,7 @@ bool VulkanEngine::AllocatePerFrameCommandBuffer()
 {
     for (int i = 0; i < engine_config_.frame_count; ++i)
     {
-        if (!vkCommandBufferHelper_->AllocateCommandBuffer({VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1}, output_frames_[i].command_buffer_id))
+        if (!vkCommandBufferHelper_->AllocateCommandBuffer({ VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1 }, output_frames_[i].command_buffer_id))
         {
             Logger::LogError("Failed to allocate command buffer for frame " + std::to_string(i));
             return false;
@@ -1137,8 +1271,8 @@ void VulkanEngine::DrawFrame()
     submit_info.signalSemaphoreInfoCount = 1;
     submit_info.pSignalSemaphoreInfos = &signal_semaphore_info;
     if (!Logger::LogWithVkResult(vkQueueSubmit2(vkb_device_.get_queue(vkb::QueueType::graphics).value(), 1, &submit_info, in_flight_fence),
-                                 "Failed to submit command buffer",
-                                 "Succeeded in submitting command buffer"))
+        "Failed to submit command buffer",
+        "Succeeded in submitting command buffer"))
     {
         return;
     }
@@ -1206,7 +1340,7 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
 {
     // 更新当前帧的 Uniform Buffer
     UpdateUniformBuffer(image_index);
-    
+
     // begin command recording
     if (!vkCommandBufferHelper_->BeginCommandBufferRecording(command_buffer_id, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT))
         return false;
@@ -1232,7 +1366,7 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     buffer_memory_barrier.buffer = test_local_buffer_;
     buffer_memory_barrier.offset = 0;
     buffer_memory_barrier.size = VK_WHOLE_SIZE;
-    
+
     VkDependencyInfo dependency_info{};
     dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dependency_info.bufferMemoryBarrierCount = 1;
@@ -1246,14 +1380,18 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     clear_color.color.float32[2] = 0.1f;
     clear_color.color.float32[3] = 1.0f;
 
+    VkClearValue clear_values[2];
+    clear_values[0].color = {{0.1f, 0.1f, 0.1f, 1.0f}};
+    clear_values[1].depthStencil = {1.0f, 0}; // 设置深度清除值为1.0（远面）
+
     VkRenderPassBeginInfo renderpass_info{};
     renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderpass_info.renderPass = vkRenderpassHelper_->GetRenderpass();
     renderpass_info.framebuffer = (*vkFrameBufferHelper_->GetFramebuffers())[image_index];
     renderpass_info.renderArea.offset = {0, 0};
     renderpass_info.renderArea.extent = swapchain_config->target_swap_extent_;
-    renderpass_info.clearValueCount = 1;
-    renderpass_info.pClearValues = &clear_color;
+    renderpass_info.clearValueCount = 2;
+    renderpass_info.pClearValues = clear_values;
 
     vkCmdBeginRenderPass(command_buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -1264,13 +1402,13 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     auto offset = uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].offsets[uniform_buffer_id_[frame_index_]];
     uint32_t dynamic_offset = static_cast<uint32_t>(offset);
     vkCmdBindDescriptorSets(
-        command_buffer, 
-        VK_PIPELINE_BIND_POINT_GRAPHICS, 
-        vkPipelineHelper_->GetPipelineLayout(), 
-        0, 
-        1, 
-        &descriptor_set_, 
-        1, 
+        command_buffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkPipelineHelper_->GetPipelineLayout(),
+        0,
+        1,
+        &descriptor_set_,
+        1,
         &dynamic_offset);
 
     // dynamic state update
@@ -1284,34 +1422,37 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdSetViewport(command_buffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
-    scissor.offset = {0, 0};
+    scissor.offset = { 0, 0 };
     scissor.extent = swapchain_config->target_swap_extent_;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+
+    // 绑定顶点和索引缓冲区
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, &test_local_buffer_, &test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_vertex_buffer_id_]);
+    vkCmdBindIndexBuffer(command_buffer, test_local_buffer_, test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].offsets[test_index_buffer_id_], VK_INDEX_TYPE_UINT32);
 
     // 遍历每个 mesh 进行绘制
     for (const auto& mesh : mesh_list_) {
         // 遍历该 mesh 的所有图元进行绘制
+        // if (std::strcmp(mesh.name.c_str(), "arch_stones_02") != 0) {
+        //     continue;
+        // }
         for (size_t i = 0; i < mesh.primitives.size(); ++i) {
             const auto& primitive = mesh.primitives[i];
-            
-            // 获取该 primitive 的顶点和索引缓冲区偏移量
-            VkDeviceSize vertex_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only]
-                .offsets[mesh_vertex_resource_ids_[mesh.name][i]];
-            VkDeviceSize index_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only]
-                .offsets[mesh_index_resource_ids_[mesh.name][i]];
 
-            // 绑定顶点和索引缓冲区
-            vkCmdBindVertexBuffers(command_buffer, 0, 1, &test_local_buffer_, &vertex_offset);
-            vkCmdBindIndexBuffer(command_buffer, test_local_buffer_, index_offset, VK_INDEX_TYPE_UINT16);
+            // // 获取该 primitive 的顶点和索引缓冲区偏移量
+            // VkDeviceSize vertex_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only]
+            //     .offsets[mesh_vertex_resource_ids_[mesh.name][i]];
+            // VkDeviceSize index_offset = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only]
+            //     .offsets[mesh_index_resource_ids_[mesh.name][i]];
 
             // 绘制当前图元
             vkCmdDrawIndexed(
                 command_buffer,
-                primitive.indices.size(),  // 使用实际的索引数量
+                primitive.index_count,  // 使用实际的索引数量
                 1,
-                0,  // 从第一个索引开始
-                0,  // 顶点偏移
-                0   // 实例偏移
+                primitive.first_index, // 使用实际的索引偏移量
+                0,
+                0
             );
         }
     }
@@ -1328,14 +1469,14 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
 
 void VulkanEngine::UpdateUniformBuffer(uint32_t current_frame_index)
 {
-    // update the model matrix
+    // update the model matrix (添加适当的缩放)
     mvp_matrices_[current_frame_index].model = glm::mat4(1.0f);
-    
+
     // update the view matrix
     mvp_matrices_[current_frame_index].view = glm::lookAt(
-        camera_.position,                 // camera position
-        camera_.position + camera_.front, // camera looking at point (current position + front direction vector)
-        camera_.up                        // camera up direction (calculated by UpdateCameraVectors)
+        camera_.position,                       // camera position
+        camera_.position + camera_.front,    // camera looking at point
+        camera_.up                                   // camera up direction
     );
 
     // update the projection matrix
@@ -1343,20 +1484,20 @@ void VulkanEngine::UpdateUniformBuffer(uint32_t current_frame_index)
         glm::radians(camera_.zoom),            // FOV
         swapchain_config_.target_swap_extent_.width / (float)swapchain_config_.target_swap_extent_.height, // aspect ratio
         0.1f,                                  // near plane
-        100.0f                                 // far plane
+        1000.0f                                // 增加远平面距离，确保能看到远处的物体
     );
-    
+
     // reverse the Y-axis in Vulkan's NDC coordinate system
     mvp_matrices_[current_frame_index].projection[1][1] *= -1;
-    
+
     // map vulkan host memory to update the uniform buffer
     uniform_buffer_mapped_data_ = nullptr;
     vmaMapMemory(vma_allocator_, uniform_buffer_allocation_, &uniform_buffer_mapped_data_);
 
     // get the offset of the current frame in the uniform buffer
     auto offset = uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].offsets[uniform_buffer_id_[current_frame_index]];
-    uint8_t *data_location = static_cast<uint8_t *>(uniform_buffer_mapped_data_) + offset;
-    
+    uint8_t* data_location = static_cast<uint8_t*>(uniform_buffer_mapped_data_) + offset;
+
     // copy the data to the mapped memory
     memcpy(data_location, &mvp_matrices_[current_frame_index], sizeof(SMvpMatrix));
 
@@ -1370,23 +1511,23 @@ void VulkanEngine::FocusOnObject(const glm::vec3& object_position, float target_
 {
     camera_.focus_point = object_position;
     camera_.has_focus_point = true;
-    
+
     // calculate the position the camera should move to
     glm::vec3 direction = glm::normalize(camera_.position - object_position);
     camera_.position = object_position + direction * target_distance;
-    
+
     // update the camera direction
     camera_.front = glm::normalize(object_position - camera_.position);
     camera_.right = glm::normalize(glm::cross(camera_.front, camera_.world_up));
     camera_.up = glm::normalize(glm::cross(camera_.right, camera_.front));
-    
+
     // update the yaw and pitch
     glm::vec3 front = camera_.front;
     camera_.pitch = glm::degrees(asin(front.y));
     camera_.yaw = glm::degrees(atan2(front.z, front.x));
 }
 
-void VulkanEngine::CreateTestLocalStagingBuffer()
+void VulkanEngine::CreateMeshListBuffer()
 {
     // 为每个 mesh 收集数据
     for (const auto& mesh : mesh_list_) {
@@ -1394,12 +1535,12 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
         for (const auto& primitive : mesh.primitives) {
             // 直接使用 primitive 中的数据
             vra::VraRawData vertex_buffer_data{
-                .pData_ = primitive.vertex_inputs.data(),
-                .size_ = sizeof(gltf::VertexInput) * primitive.vertex_inputs.size()
+                .pData_ = primitive.vertices.data(),
+                .size_ = sizeof(gltf::Vertex) * primitive.vertices.size()
             };
             vra::VraRawData index_buffer_data{
                 .pData_ = primitive.indices.data(),
-                .size_ = sizeof(uint16_t) * primitive.indices.size()
+                .size_ = sizeof(uint32_t) * primitive.indices.size()
             };
 
             // 顶点缓冲区创建信息
@@ -1408,7 +1549,7 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
             vertex_buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
             vertex_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             vertex_buffer_create_info.size = vertex_buffer_data.size_;
-            vra::VraDataDesc vertex_buffer_desc {
+            vra::VraDataDesc vertex_buffer_desc{
                 vra::VraDataMemoryPattern::GPU_Only,
                 vra::VraDataUpdateRate::RarelyOrNever,
                 vertex_buffer_create_info
@@ -1420,7 +1561,7 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
             index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
             index_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             index_buffer_create_info.size = index_buffer_data.size_;
-            vra::VraDataDesc index_buffer_desc {
+            vra::VraDataDesc index_buffer_desc{
                 vra::VraDataMemoryPattern::GPU_Only,
                 vra::VraDataUpdateRate::RarelyOrNever,
                 index_buffer_create_info
@@ -1431,15 +1572,14 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
             staging_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
             staging_buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
             staging_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            staging_buffer_create_info.size = vertex_buffer_data.size_;  // 顶点数据的暂存缓冲区
-            vra::VraDataDesc staging_vertex_buffer_desc {
+            vra::VraDataDesc staging_vertex_buffer_desc{
                 vra::VraDataMemoryPattern::CPU_GPU,
                 vra::VraDataUpdateRate::RarelyOrNever,
                 staging_buffer_create_info
             };
 
             staging_buffer_create_info.size = index_buffer_data.size_;  // 索引数据的暂存缓冲区
-            vra::VraDataDesc staging_index_buffer_desc {
+            vra::VraDataDesc staging_index_buffer_desc{
                 vra::VraDataMemoryPattern::CPU_GPU,
                 vra::VraDataUpdateRate::RarelyOrNever,
                 staging_buffer_create_info
@@ -1486,11 +1626,11 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
     VmaAllocationCreateInfo allocation_create_info{};
     allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
     vmaCreateBuffer(
-        vma_allocator_, 
-        &test_local_buffer_create_info, 
-        &allocation_create_info, 
-        &test_local_buffer_, 
-        &test_local_buffer_allocation_, 
+        vma_allocator_,
+        &test_local_buffer_create_info,
+        &allocation_create_info,
+        &test_local_buffer_,
+        &test_local_buffer_allocation_,
         &test_local_buffer_allocation_info_);
 
     // 创建暂存缓冲区
@@ -1499,11 +1639,11 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
     staging_allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
     staging_allocation_create_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraDataMemoryPattern::CPU_GPU, vra::VraDataUpdateRate::RarelyOrNever);
     vmaCreateBuffer(
-        vma_allocator_, 
-        &test_host_buffer_create_info, 
-        &staging_allocation_create_info, 
-        &test_staging_buffer_, 
-        &test_staging_buffer_allocation_, 
+        vma_allocator_,
+        &test_host_buffer_create_info,
+        &staging_allocation_create_info,
+        &test_staging_buffer_,
+        &test_staging_buffer_allocation_,
         &test_staging_buffer_allocation_info_);
 
     // 复制数据到暂存缓冲区
@@ -1517,173 +1657,211 @@ void VulkanEngine::CreateTestLocalStagingBuffer()
 
     // 设置顶点输入绑定描述
     test_vertex_input_binding_description_.binding = 0;
-    test_vertex_input_binding_description_.stride = sizeof(gltf::VertexInput);
+    test_vertex_input_binding_description_.stride = sizeof(gltf::Vertex);
     test_vertex_input_binding_description_.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     // 设置顶点属性描述
     test_vertex_input_attributes_.clear();
-    
+
+    // 使用更安全的偏移量计算，确保 offsetof 计算正确
     // position
     test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
         .location = 0,
         .binding = 0,
         .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = 0
-    });
+        .offset = offsetof(gltf::Vertex, position)
+        });
     // color
     test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
         .location = 1,
         .binding = 0,
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-        .offset = sizeof(gltf::VertexInput::position)
-    });
+        .offset = offsetof(gltf::Vertex, color)
+        });
     // normal
     test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
         .location = 2,
         .binding = 0,
         .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color)
-    });
+        .offset = offsetof(gltf::Vertex, normal)
+        });
     // tangent
     test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
         .location = 3,
         .binding = 0,
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-        .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color) + sizeof(gltf::VertexInput::normal)
-    });
+        .offset = offsetof(gltf::Vertex, tangent)
+        });
     // uv0
     test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
         .location = 4,
         .binding = 0,
         .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color) + sizeof(gltf::VertexInput::normal) + sizeof(gltf::VertexInput::tangent)
-    });
+        .offset = offsetof(gltf::Vertex, uv0)
+        });
     // uv1
     test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
         .location = 5,
         .binding = 0,
         .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = sizeof(gltf::VertexInput::position) + sizeof(gltf::VertexInput::color) + sizeof(gltf::VertexInput::normal) + sizeof(gltf::VertexInput::tangent) + sizeof(gltf::VertexInput::uv0)
-    });
+        .offset = offsetof(gltf::Vertex, uv1)
+        });
 }
 
-void VulkanEngine::CreateTestUniformBuffer()
+void VulkanEngine::CreateDrawCallListBuffer()
 {
-    for (int i = 0; i < engine_config_.frame_count; ++i)
-    {
-        auto current_mvp_matrix = mvp_matrices_[i];
-        VkBufferCreateInfo buffer_create_info = {};
-        buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        buffer_create_info.size = sizeof(SMvpMatrix);
-        vra::VraDataDesc data_desc{
-            vra::VraDataMemoryPattern::CPU_GPU,
-            vra::VraDataUpdateRate::Frequent,
-            buffer_create_info};
-        vra::VraRawData raw_data{
-            &current_mvp_matrix,
-            sizeof(SMvpMatrix)};
-        uniform_buffer_id_.push_back(0);
-        vra_data_batcher_->Collect(data_desc, std::move(raw_data), uniform_buffer_id_.back());
+    vra::VraRawData vertex_buffer_data{
+        .pData_ = vertices_.data(),
+        .size_ = sizeof(gltf::Vertex) * vertices_.size()
+    };
+    vra::VraRawData index_buffer_data{
+        .pData_ = indices_.data(),
+        .size_ = sizeof(uint32_t) * indices_.size()
+    };
+
+    // 顶点缓冲区创建信息
+    VkBufferCreateInfo vertex_buffer_create_info{};
+    vertex_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    vertex_buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    vertex_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc vertex_buffer_desc{
+        vra::VraDataMemoryPattern::GPU_Only,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        vertex_buffer_create_info
+    };
+
+    // 索引缓冲区创建信息
+    VkBufferCreateInfo index_buffer_create_info{};
+    index_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    index_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc index_buffer_desc{
+        vra::VraDataMemoryPattern::GPU_Only,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        index_buffer_create_info
+    };
+
+    // 暂存缓冲区创建信息
+    VkBufferCreateInfo staging_buffer_create_info{};
+    staging_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    staging_buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    staging_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vra::VraDataDesc staging_vertex_buffer_desc{
+        vra::VraDataMemoryPattern::CPU_GPU,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        staging_buffer_create_info
+    };
+    vra::VraDataDesc staging_index_buffer_desc{
+        vra::VraDataMemoryPattern::CPU_GPU,
+        vra::VraDataUpdateRate::RarelyOrNever,
+        staging_buffer_create_info
+    };
+
+    if (!vra_data_batcher_->Collect(vertex_buffer_desc, vertex_buffer_data, test_vertex_buffer_id_)) {
+        Logger::LogError("Failed to collect vertex buffer data");
+        return;
+    }
+    if (!vra_data_batcher_->Collect(index_buffer_desc, index_buffer_data, test_index_buffer_id_)) {
+        Logger::LogError("Failed to collect index buffer data");
+        return;
+    }
+    if (!vra_data_batcher_->Collect(staging_vertex_buffer_desc, vertex_buffer_data, test_staging_vertex_buffer_id_)) {
+        Logger::LogError("Failed to collect staging vertex buffer data");
+        return;
+    }
+    if (!vra_data_batcher_->Collect(staging_index_buffer_desc, index_buffer_data, test_staging_index_buffer_id_)) {
+        Logger::LogError("Failed to collect staging index buffer data");
+        return;
     }
 
-    test_uniform_batch_handle_ = std::move(vra_data_batcher_->Batch());
+    // 执行批处理
+    test_local_host_batch_handle_ = std::move(vra_data_batcher_->Batch());
 
-    // get buffer create info
-    const auto &uniform_buffer_create_info = test_uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].data_desc.GetBufferCreateInfo();
-
-    VmaAllocationCreateInfo allocation_create_info = {};
+    // 创建本地缓冲区
+    auto test_local_buffer_create_info = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::GPU_Only].data_desc.GetBufferCreateInfo();
+    VmaAllocationCreateInfo allocation_create_info{};
     allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-    allocation_create_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraDataMemoryPattern::CPU_GPU, vra::VraDataUpdateRate::Frequent);
-    allocation_create_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    Logger::LogWithVkResult(vmaCreateBuffer(
-                                     vma_allocator_,
-                                     &uniform_buffer_create_info,
-                                     &allocation_create_info,
-                                     &test_uniform_buffer_,
-                                     &test_uniform_buffer_allocation_,
-                                     &test_uniform_buffer_allocation_info_),
-                                 "Failed to create uniform buffer",
-                                 "Succeeded in creating uniform buffer");
-}
+    vmaCreateBuffer(
+        vma_allocator_,
+        &test_local_buffer_create_info,
+        &allocation_create_info,
+        &test_local_buffer_,
+        &test_local_buffer_allocation_,
+        &test_local_buffer_allocation_info_);
 
+    // 创建暂存缓冲区
+    auto test_host_buffer_create_info = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Rarely].data_desc.GetBufferCreateInfo();
+    VmaAllocationCreateInfo staging_allocation_create_info{};
+    staging_allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+    staging_allocation_create_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraDataMemoryPattern::CPU_GPU, vra::VraDataUpdateRate::RarelyOrNever);
+    vmaCreateBuffer(
+        vma_allocator_,
+        &test_host_buffer_create_info,
+        &staging_allocation_create_info,
+        &test_staging_buffer_,
+        &test_staging_buffer_allocation_,
+        &test_staging_buffer_allocation_info_);
 
-void VulkanEngine::CreateTestDescriptorSet()
-{
-    // create descriptor set layout
-    VkDescriptorSetLayoutBinding descriptor_set_layout_binding{};
-    descriptor_set_layout_binding.binding = 0;
-    descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptor_set_layout_binding.descriptorCount = 1;
-    descriptor_set_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    // 复制数据到暂存缓冲区
+    auto consolidate_data = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Rarely].consolidated_data;
+    void* data;
+    vmaInvalidateAllocation(vma_allocator_, test_staging_buffer_allocation_, 0, VK_WHOLE_SIZE);
+    vmaMapMemory(vma_allocator_, test_staging_buffer_allocation_, &data);
+    memcpy(data, consolidate_data.data(), consolidate_data.size());
+    vmaUnmapMemory(vma_allocator_, test_staging_buffer_allocation_);
+    vmaFlushAllocation(vma_allocator_, test_staging_buffer_allocation_, 0, VK_WHOLE_SIZE);
 
-    VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info{};
-    descriptor_set_layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptor_set_layout_create_info.bindingCount = 1;
-    descriptor_set_layout_create_info.pBindings = &descriptor_set_layout_binding;
+    // 设置顶点输入绑定描述
+    test_vertex_input_binding_description_.binding = 0;
+    test_vertex_input_binding_description_.stride = sizeof(gltf::Vertex);
+    test_vertex_input_binding_description_.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    Logger::LogWithVkResult(vkCreateDescriptorSetLayout(
-                                vkb_device_.device,
-                                &descriptor_set_layout_create_info,
-                                nullptr,
-                                &test_descriptor_set_layout_),
-                            "Failed to create descriptor set layout",
-                            "Succeeded in creating descriptor set layout");
+    // 设置顶点属性描述
+    test_vertex_input_attributes_.clear();
 
-    // create descriptor pool
-    VkDescriptorPoolSize descriptor_pool_size{};
-    descriptor_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptor_pool_size.descriptorCount = 1;
-
-    VkDescriptorPoolCreateInfo descriptor_pool_create_info{};
-    descriptor_pool_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptor_pool_create_info.poolSizeCount = 1;
-    descriptor_pool_create_info.pPoolSizes = &descriptor_pool_size;
-    descriptor_pool_create_info.maxSets = 1;
-
-    Logger::LogWithVkResult(vkCreateDescriptorPool(
-        vkb_device_.device,
-        &descriptor_pool_create_info,
-        nullptr,
-        &test_descriptor_pool_),
-        "Failed to create descriptor pool",
-        "Succeeded in creating descriptor pool");
-
-    // create descriptor set
-    VkDescriptorSetAllocateInfo descriptor_set_allocate_info{};
-    descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptor_set_allocate_info.descriptorPool = test_descriptor_pool_;
-    descriptor_set_allocate_info.descriptorSetCount = 1;
-    descriptor_set_allocate_info.pSetLayouts = &test_descriptor_set_layout_;
-    Logger::LogWithVkResult(vkAllocateDescriptorSets(
-                                vkb_device_.device,
-                                &descriptor_set_allocate_info,
-                                &test_descriptor_set_),
-                            "Failed to allocate descriptor set",
-                            "Succeeded in allocating descriptor set");
-
-    // create descriptor set
-    VkDescriptorBufferInfo buffer_info{};
-    buffer_info.buffer = test_uniform_buffer_;
-    buffer_info.offset = 0;
-    buffer_info.range = sizeof(SMvpMatrix);
-
-    VkWriteDescriptorSet write_descriptor_set{};
-    write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write_descriptor_set.descriptorCount = 1;
-    write_descriptor_set.pBufferInfo = &buffer_info;
-    write_descriptor_set.dstSet = test_descriptor_set_;
-    write_descriptor_set.dstBinding = 0;
-    write_descriptor_set.dstArrayElement = 0;
-
-    vkUpdateDescriptorSets(
-        vkb_device_.device,
-        1,
-        &write_descriptor_set,
-        0,
-        nullptr);
+    // 使用更安全的偏移量计算，确保 offsetof 计算正确
+    // position
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 0,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = offsetof(gltf::Vertex, position)
+        });
+    // color
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 1,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .offset = offsetof(gltf::Vertex, color)
+        });
+    // normal
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 2,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = offsetof(gltf::Vertex, normal)
+        });
+    // tangent
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 3,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .offset = offsetof(gltf::Vertex, tangent)
+        });
+    // uv0
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 4,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = offsetof(gltf::Vertex, uv0)
+        });
+    // uv1
+    test_vertex_input_attributes_.push_back(VkVertexInputAttributeDescription{
+        .location = 5,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = offsetof(gltf::Vertex, uv1)
+        });
 }
 
 void VulkanEngine::ReleaseTestData()

@@ -1,4 +1,5 @@
 #include "vulkan_framebuffer.h"
+#include <array>
 
 VulkanFrameBufferHelper::~VulkanFrameBufferHelper()
 {
@@ -11,32 +12,39 @@ VulkanFrameBufferHelper::~VulkanFrameBufferHelper()
         framebuffers_.clear();
     }
 
-    if (!config_.image_views.empty())
+    if (!config_.swapchain_image_views_.empty())
     {
-        for (auto image_view : config_.image_views)
+        for (auto image_view : config_.swapchain_image_views_)
         {
             vkDestroyImageView(device_, image_view, nullptr);
         }
-        config_.image_views.clear();
+        config_.swapchain_image_views_.clear();
     }
+
+    // 不再需要销毁深度图像和视图，这将由引擎类负责
 }
 
 bool VulkanFrameBufferHelper::CreateFrameBuffer(VkRenderPass renderpass)
 {
-    // create framebuffers
-    framebuffers_.resize(config_.image_views.size());
-    for (size_t i = 0; i < config_.image_views.size(); i++)
-    {
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderpass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = &config_.image_views[i];
-        framebufferInfo.width = config_.extent.width;
-        framebufferInfo.height = config_.extent.height;
-        framebufferInfo.layers = 1;
+    // 创建帧缓冲
+    framebuffers_.resize(config_.swapchain_image_views_.size());
+    
+    for (size_t i = 0; i < config_.swapchain_image_views_.size(); i++) {
+        std::array<VkImageView, 2> attachments = {
+            config_.swapchain_image_views_[i],
+            config_.depth_image_view_  // 使用从配置中传入的深度图像视图
+        };
 
-        if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &framebuffers_[i]) != VK_SUCCESS)
+        VkFramebufferCreateInfo framebuffer_info{};
+        framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebuffer_info.renderPass = renderpass;
+        framebuffer_info.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebuffer_info.pAttachments = attachments.data();
+        framebuffer_info.width = config_.extent_.width;
+        framebuffer_info.height = config_.extent_.height;
+        framebuffer_info.layers = 1;
+
+        if (vkCreateFramebuffer(device_, &framebuffer_info, nullptr, &framebuffers_[i]) != VK_SUCCESS)
         {
             Logger::LogError("Failed to create framebuffer");
             return false;

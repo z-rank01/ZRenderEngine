@@ -60,7 +60,7 @@ namespace gltf
 
     /// @brief inputs of a primitive defined in gltf file.
     /// @note tangent is stored as vec4 to avoid padding.
-    struct VertexInput
+    struct Vertex
     {
         glm::vec3 position;
         glm::vec4 color;
@@ -109,13 +109,13 @@ namespace gltf
     struct PerDrawCallData
     {
         glm::mat4 transform;
-        std::vector<uint16_t> indices;
-        std::vector<VertexInput> vertex_inputs;
-        uint16_t material_index;
-        uint16_t first_index;
-        uint16_t index_count;
-        uint16_t first_vertex;
-        uint16_t vertex_count;
+        std::vector<uint32_t> indices;
+        std::vector<Vertex> vertices;
+        uint32_t material_index;
+        uint32_t first_index;
+        uint32_t index_count;
+        uint32_t first_vertex;
+        uint32_t vertex_count;
     };
 
     /// @brief mesh data containing multiple primitives.

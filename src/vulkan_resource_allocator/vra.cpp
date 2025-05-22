@@ -43,7 +43,8 @@ namespace vra
             },
             [](ResourceId id, VraBatchHandle &batch, const VraDataDesc &desc, const VraRawData &raw_data)
             {
-                const auto &current_item_buffer_create_info = desc.GetBufferCreateInfo();
+                const auto &new_buffer_ci = desc.GetBufferCreateInfo();
+                auto &batch_ci_ref = batch.data_desc.GetBufferCreateInfo();
 
                 if (!batch.initialized)
                 {
@@ -52,20 +53,19 @@ namespace vra
                 }
                 else
                 {
-                    auto &batch_ci_ref = batch.data_desc.GetBufferCreateInfo();
-                    if (current_item_buffer_create_info.usage == 0 ||
-                        current_item_buffer_create_info.sharingMode != batch_ci_ref.sharingMode)
+                    if (new_buffer_ci.usage == 0 ||
+                        new_buffer_ci.sharingMode != batch_ci_ref.sharingMode)
                     {
                         return; // Incompatible
                     }
 
-                    batch_ci_ref.usage |= current_item_buffer_create_info.usage;
-                    batch_ci_ref.flags |= current_item_buffer_create_info.flags;
-                    if (current_item_buffer_create_info.queueFamilyIndexCount > batch_ci_ref.queueFamilyIndexCount &&
-                        current_item_buffer_create_info.sharingMode == VK_SHARING_MODE_CONCURRENT)
+                    batch_ci_ref.usage |= new_buffer_ci.usage;
+                    batch_ci_ref.flags |= new_buffer_ci.flags;
+                    if (new_buffer_ci.queueFamilyIndexCount > batch_ci_ref.queueFamilyIndexCount &&
+                        new_buffer_ci.sharingMode == VK_SHARING_MODE_CONCURRENT)
                     {
-                        batch_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
-                        batch_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
+                        batch_ci_ref.queueFamilyIndexCount = new_buffer_ci.queueFamilyIndexCount;
+                        batch_ci_ref.pQueueFamilyIndices = new_buffer_ci.pQueueFamilyIndices;
                     }
                 }
 
@@ -80,7 +80,7 @@ namespace vra
                     batch.offsets[id] = batch.consolidated_data.size();
                 }
 
-                batch.data_desc.GetBufferCreateInfo().size = batch.consolidated_data.size();
+                batch_ci_ref.size = batch.consolidated_data.size();
             });
 
         // Dynamic Sequential Batch
@@ -92,7 +92,7 @@ namespace vra
             },
             [&physical_device_properties = this->physical_device_properties_](ResourceId id, VraBatchHandle &batch, const VraDataDesc &desc, const VraRawData &raw_data)
             {
-                const auto &current_item_buffer_create_info = desc.GetBufferCreateInfo();
+                const auto &new_buffer_ci = desc.GetBufferCreateInfo();
                 // Get a modifiable reference to the batch's VkBufferCreateInfo
                 auto &batch_ci_ref = batch.data_desc.GetBufferCreateInfo();
 
@@ -102,21 +102,21 @@ namespace vra
                     batch.initialized = true;
                     // batch_ci_ref now refers to the CI within the newly set batch.data_desc
                 }
-                else if (current_item_buffer_create_info.usage == 0 || 
-                         current_item_buffer_create_info.sharingMode != batch_ci_ref.sharingMode)
+                else if (new_buffer_ci.usage == 0 || 
+                         new_buffer_ci.sharingMode != batch_ci_ref.sharingMode)
                 {
                     return; // Incompatible
                 }
                 else
                 {
                     // Merge into batch_ci_ref
-                    batch_ci_ref.usage |= current_item_buffer_create_info.usage;
-                    batch_ci_ref.flags |= current_item_buffer_create_info.flags;
-                    if (current_item_buffer_create_info.queueFamilyIndexCount > batch_ci_ref.queueFamilyIndexCount &&
-                        current_item_buffer_create_info.sharingMode == VK_SHARING_MODE_CONCURRENT)
+                    batch_ci_ref.usage |= new_buffer_ci.usage;
+                    batch_ci_ref.flags |= new_buffer_ci.flags;
+                    if (new_buffer_ci.queueFamilyIndexCount > batch_ci_ref.queueFamilyIndexCount &&
+                        new_buffer_ci.sharingMode == VK_SHARING_MODE_CONCURRENT)
                     {
-                        batch_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
-                        batch_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
+                        batch_ci_ref.queueFamilyIndexCount = new_buffer_ci.queueFamilyIndexCount;
+                        batch_ci_ref.pQueueFamilyIndices = new_buffer_ci.pQueueFamilyIndices;
                     }
                 }
 
@@ -161,7 +161,7 @@ namespace vra
             },
             [&physical_device_properties = this->physical_device_properties_](ResourceId id, VraBatchHandle &batch, const VraDataDesc &desc, const VraRawData &raw_data)
             {
-                const auto &current_item_buffer_create_info = desc.GetBufferCreateInfo();
+                const auto &new_buffer_ci = desc.GetBufferCreateInfo();
                 // Get a modifiable reference to the batch's VkBufferCreateInfo
                 auto &batch_ci_ref = batch.data_desc.GetBufferCreateInfo();
 
@@ -171,21 +171,21 @@ namespace vra
                     batch.initialized = true;
                     // batch_ci_ref now refers to the CI within the newly set batch.data_desc
                 }
-                else if (current_item_buffer_create_info.usage == 0 ||
-                         current_item_buffer_create_info.sharingMode != batch_ci_ref.sharingMode)
+                else if (new_buffer_ci.usage == 0 ||
+                         new_buffer_ci.sharingMode != batch_ci_ref.sharingMode)
                 {
                     return; // Incompatible
                 }
                 else
                 {
                     // Merge into batch_ci_ref
-                    batch_ci_ref.usage |= current_item_buffer_create_info.usage;
-                    batch_ci_ref.flags |= current_item_buffer_create_info.flags;
-                    if (current_item_buffer_create_info.queueFamilyIndexCount > batch_ci_ref.queueFamilyIndexCount &&
-                        current_item_buffer_create_info.sharingMode == VK_SHARING_MODE_CONCURRENT)
+                    batch_ci_ref.usage |= new_buffer_ci.usage;
+                    batch_ci_ref.flags |= new_buffer_ci.flags;
+                    if (new_buffer_ci.queueFamilyIndexCount > batch_ci_ref.queueFamilyIndexCount &&
+                        new_buffer_ci.sharingMode == VK_SHARING_MODE_CONCURRENT)
                     {
-                        batch_ci_ref.queueFamilyIndexCount = current_item_buffer_create_info.queueFamilyIndexCount;
-                        batch_ci_ref.pQueueFamilyIndices = current_item_buffer_create_info.pQueueFamilyIndices;
+                        batch_ci_ref.queueFamilyIndexCount = new_buffer_ci.queueFamilyIndexCount;
+                        batch_ci_ref.pQueueFamilyIndices = new_buffer_ci.pQueueFamilyIndices;
                     }
                 }
 
