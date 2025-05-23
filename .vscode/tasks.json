@@ -110,7 +110,7 @@
         "id": "cmakePreset",              // 输入 ID（与任务中的 ${input:cmakePreset} 对应）
         "type": "pickString",             // 输入类型：下拉选择
         "description": "Select CMake Preset:",
-        "options": ["windows-msvc", "windows-clang", "windows-gcc", "linux-clang", "macos-clang"], // 可选项
+        "options": ["windows-msvc", "windows-gcc", "windows-clang", "linux-clang", "macos-clang"], // 可选项
         "default": "windows-msvc"         // 默认值
       },
       {

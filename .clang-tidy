@@ -1,0 +1,164 @@
+---
+# 继承配置
+InheritParentConfig: false
+
+# 启用的检查规则 - Google C++ 风格
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  google-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  bugprone-*,
+  cppcoreguidelines-*,
+  misc-*,
+  -google-readability-todo,
+  -google-readability-braces-around-statements,
+  -google-readability-casting,
+  -google-build-using-namespace,
+  -readability-braces-around-statements,
+  -readability-magic-numbers,
+  -readability-named-parameter,
+  -readability-function-cognitive-complexity,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-owning-memory,
+  -misc-non-private-member-variables-in-classes,
+  -modernize-use-trailing-return-type,
+  -modernize-use-nodiscard
+
+# 检查选项配置
+CheckOptions:
+  # Google 风格命名约定
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.MethodCase
+    value: CamelCase
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.MemberCase
+    value: lower_case
+  - key: readability-identifier-naming.MemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ConstantMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantMemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: kCamelCase
+  - key: readability-identifier-naming.GlobalConstantPrefix
+    value: 'k'
+  - key: readability-identifier-naming.StaticConstantCase
+    value: kCamelCase
+  - key: readability-identifier-naming.StaticConstantPrefix
+    value: 'k'
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  
+  # 函数长度限制
+  - key: readability-function-size.LineThreshold
+    value: 80
+  - key: readability-function-size.StatementThreshold
+    value: 800
+  - key: readability-function-size.BranchThreshold
+    value: 50
+  - key: readability-function-size.ParameterThreshold
+    value: 8
+  - key: readability-function-size.NestingThreshold
+    value: 6
+  - key: readability-function-size.VariableThreshold
+    value: 200
+  
+  # 行长度
+  - key: readability-line-length.LineLength
+    value: 100
+  
+  # 性能相关
+  - key: performance-for-range-copy.WarnOnAllAutoCopies
+    value: true
+  - key: performance-unnecessary-value-param.AllowedTypes
+    value: 'std::shared_ptr;std::unique_ptr;std::function'
+  
+  # 现代化相关
+  - key: modernize-loop-convert.MaxCopySize
+    value: 16
+  - key: modernize-loop-convert.MinConfidence
+    value: reasonable
+  - key: modernize-use-nullptr.NullMacros
+    value: 'NULL'
+  
+  # Core Guidelines
+  - key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
+    value: true
+  - key: cppcoreguidelines-special-member-functions.AllowMissingMoveFunctions
+    value: true
+
+# 头文件过滤器
+HeaderFilterRegex: '^((?!.*/(build|external|third_party|thirdparty|3rdparty|vendor|deps|dependencies)/).)*$'
+
+# 分析临时对象析构函数
+AnalyzeTemporaryDtors: false
+
+# 格式化风格（可选，如果你使用 clang-format）
+FormatStyle: google
+
+# 系统头文件
+SystemHeaders: false
+
+# 用户指定的检查
+User: user
+
+# 警告作为错误处理
+WarningsAsErrors: ''
+
+# 排除的文件路径模式
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  google-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  bugprone-*,
+  cppcoreguidelines-*,
+  misc-*,
+  -google-readability-todo,
+  -google-readability-braces-around-statements,
+  -google-readability-casting,
+  -google-build-using-namespace,
+  -readability-braces-around-statements,
+  -readability-magic-numbers,
+  -readability-named-parameter,
+  -readability-function-cognitive-complexity,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-owning-memory,
+  -misc-non-private-member-variables-in-classes,
+  -modernize-use-trailing-return-type,
+  -modernize-use-nodiscard
+---
+
+# 文件排除模式（针对 build 文件夹）
+# 注意：这通过 HeaderFilterRegex 已经处理了，但你也可以在命令行中指定
+# clang-tidy --config-file=.clang-tidy --header-filter='^((?!.*/build/).)*$' src/**/*.cpp

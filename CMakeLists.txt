@@ -27,8 +27,9 @@ find_package(Stb REQUIRED)
 # 添加子目录
 add_subdirectory(src/utility)
 add_subdirectory(src/_old)
-add_subdirectory(src/vulkan_resource_allocator)
-add_subdirectory(src/gltf)
+add_subdirectory(src/_callable)
+add_subdirectory(src/_vra)
+add_subdirectory(src/_gltf)
 
 # 设置源文件
 set(SOURCES
@@ -57,6 +58,7 @@ target_link_libraries(VulkanEngine
     vulkan_resource_allocator       # 添加 vra 库
     gltf_helper                     # 添加 gltf_helper 库
     vulkan_old_class                # 添加旧的 Vulkan 类库
+    callable                        # 添加可调用库
 )
 
 # 包含目录
