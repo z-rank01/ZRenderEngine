@@ -1,5 +1,4 @@
 #include "vulkan_engine.h"
-#include <chrono>
 #include <thread>
 #include <iostream>
 
@@ -131,6 +130,9 @@ void VulkanEngine::InitializeSDL()
     {
         throw std::runtime_error("Failed to create SDL window.");
     }
+
+    // SDL Creation
+    
 }
 
 void VulkanEngine::InitializeVulkan()

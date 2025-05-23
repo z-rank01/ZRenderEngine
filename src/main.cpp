@@ -1,9 +1,8 @@
 #include "vulkan_engine.h"
 #include "utility/config_reader.h"
 #include "utility/logger.h"
-#include "gltf/gltf_loader.h"
-#include "gltf/gltf_parser.h"
-#include "gltf/gltf_converter.h"
+#include "_gltf/gltf_loader.h"
+#include "_gltf/gltf_parser.h"
 #include <vma/vk_mem_alloc.h>
 
 #include <iostream>

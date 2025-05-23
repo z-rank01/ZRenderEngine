@@ -305,7 +305,7 @@ bool VulkanSwapChainHelper::CheckSwapExtent()
     }
 
     // set the swap extent
-    VkExtent2D actualExtent = { current_width, current_height };
+    VkExtent2D actualExtent = { static_cast<uint32_t>(current_width), static_cast<uint32_t>(current_height) };
     actualExtent.width = std::clamp(actualExtent.width, surface_capabilities_.minImageExtent.width, surface_capabilities_.maxImageExtent.width);
     actualExtent.height = std::clamp(actualExtent.height, surface_capabilities_.minImageExtent.height, surface_capabilities_.maxImageExtent.height);
     swap_chain_config_.target_swap_extent_ = actualExtent;

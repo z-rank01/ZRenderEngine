@@ -14,14 +14,17 @@
 #include "utility/config_reader.h"
 #include "utility/logger.h"
 
-#include "vulkan_resource_allocator/vra.h"
+#include "_vra/vra.h"
 
-#include "gltf/gltf_data.h"
-#include "gltf/test.h"
+#include "_gltf/gltf_data.h"
+#include "_gltf/test.h"
+
+#include "_callable/callable.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <memory>
+#include <vulkan/vulkan.h>
 #include <VkBootstrap.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
