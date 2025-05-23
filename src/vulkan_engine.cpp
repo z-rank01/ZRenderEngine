@@ -219,18 +219,18 @@ void VulkanEngine::InitializeCamera()
 
     // initialize camera
     camera_.position = glm::vec3(0.0f, 0.0f, 10.0f);   // 更远的初始距离
-    camera_.yaw = -90.0f;                             // look at origin
-    camera_.pitch = 0.0f;                             // horizontal view
-    camera_.wheel_speed = 0.1f;                       // 降低滚轮速度，避免变化太剧烈
-    camera_.movement_speed = 5.0f;                    // 调整移动速度
-    camera_.mouse_sensitivity = 0.2f;                 // 降低鼠标灵敏度
+    camera_.yaw = -90.0f;                              // look at origin
+    camera_.pitch = 0.0f;                              // horizontal view
+    camera_.wheel_speed = 0.1f;                        // 降低滚轮速度，避免变化太剧烈
+    camera_.movement_speed = 5.0f;                     // 调整移动速度
+    camera_.mouse_sensitivity = 0.2f;                  // 降低鼠标灵敏度
     camera_.zoom = 45.0f;
-    camera_.world_up = glm::vec3(0.0f, -1.0f, 0.0f);  // Y-axis is down in Vulkan
+    camera_.world_up = glm::vec3(0.0f, 1.0f, 0.0f);    // Y-axis is up in Vulkan
 
     // initialize camera vectors
     camera_.front = glm::vec3(0.0f, 0.0f, -1.0f);     // look at -z direction
     camera_.right = glm::vec3(1.0f, 0.0f, 0.0f);      // right direction is +x
-    camera_.up = glm::vec3(0.0f, 1.0f, 0.0f);        // up direction is +y (because Y-axis is up in Vulkan)
+    camera_.up = glm::vec3(0.0f, 1.0f, 0.0f);         // up direction is +y (because Y-axis is up in Vulkan)
 
     // initialize focus point related parameters
     camera_.focus_point = glm::vec3(0.0f);            // default focus on origin
@@ -399,9 +399,9 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
             float actual_x_offset = x_offset * camera_.mouse_sensitivity * sensitivity_scale;
             float actual_y_offset = y_offset * camera_.mouse_sensitivity * sensitivity_scale;
 
-            // update the yaw and pitch
-            camera_.yaw -= actual_x_offset;
-            camera_.pitch -= actual_y_offset;
+            // Update the yaw and pitch (Unity-style tracking mode)
+            camera_.yaw += actual_x_offset;  // Changed from -= to +=
+            camera_.pitch += actual_y_offset; // Changed from -= to +=
 
             // limit the pitch angle
             if (camera_.pitch > 89.0f) camera_.pitch = 89.0f;
