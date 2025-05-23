@@ -9,7 +9,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include "utility/logger.h"
-#include "builder/builder.h"
+#include "builder.h"
 
 struct SVulkanSDLWindowConfig
 {

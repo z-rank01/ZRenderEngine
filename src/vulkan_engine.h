@@ -1,18 +1,16 @@
 #pragma once
 
-#include "initialization/vulkan_instance.h"
-#include "initialization/vulkan_device.h"
-#include "initialization/vulkan_queue.h"
-#include "initialization/vulkan_window.h"
+#include "_old/vulkan_instance.h"
+#include "_old/vulkan_device.h"
+#include "_old/vulkan_queue.h"
+#include "_old/vulkan_window.h"
+#include "_old/vulkan_shader.h"
+#include "_old/vulkan_pipeline.h"
+#include "_old/vulkan_renderpass.h"
+#include "_old/vulkan_commandbuffer.h"
+#include "_old/vulkan_framebuffer.h"
+#include "_old/vulkan_synchronization.h"
 
-#include "pipeline/vulkan_shader.h"
-#include "pipeline/vulkan_pipeline.h"
-#include "pipeline/vulkan_renderpass.h"
-
-#include "source/vulkan_commandbuffer.h"
-#include "source/vulkan_framebuffer.h"
-
-#include "synchronization/vulkan_synchronization.h"
 #include "utility/config_reader.h"
 #include "utility/logger.h"
 

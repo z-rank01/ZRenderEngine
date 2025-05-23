@@ -26,11 +26,7 @@ find_package(Stb REQUIRED)
 
 # 添加子目录
 add_subdirectory(src/utility)
-add_subdirectory(src/initialization)
-add_subdirectory(src/pipeline)
-add_subdirectory(src/source)
-add_subdirectory(src/synchronization)
-add_subdirectory(src/builder)
+add_subdirectory(src/_old)
 add_subdirectory(src/vulkan_resource_allocator)
 add_subdirectory(src/gltf)
 
@@ -58,13 +54,9 @@ target_link_libraries(VulkanEngine
     vk-bootstrap::vk-bootstrap
     imgui::imgui
     utility                         # 添加 utility 库
-    vulkan_initialization           # 添加 vulkan_initialization 库
-    vulkan_pipeline                 # 添加 vulkan_pipeline 库
-    vulkan_source                   # 添加 vulkan_source 库
-    vulkan_synchronization          # 添加 vulkan_synchronization 库
-    builder                         # 添加 builder 库
     vulkan_resource_allocator       # 添加 vra 库
     gltf_helper                     # 添加 gltf_helper 库
+    vulkan_old_class                # 添加旧的 Vulkan 类库
 )
 
 # 包含目录

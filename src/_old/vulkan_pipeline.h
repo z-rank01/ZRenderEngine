@@ -6,7 +6,7 @@
 #include <map>
 
 #include "vulkan_shader.h"
-#include "initialization/vulkan_window.h"
+#include "vulkan_window.h"
 #include "utility/logger.h"
 
 struct SVulkanPipelineConfig
