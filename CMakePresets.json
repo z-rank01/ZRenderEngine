@@ -47,7 +47,6 @@
       "inherits": "base-mingw-makefiles",
       "displayName": "Windows GCC (MinGW Makefiles)",
       "environment": {
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
         "VCPKG_CMAKE_SYSTEM_NAME": "MinGW"
       },
       "cacheVariables": {
@@ -62,14 +61,14 @@
       "displayName": "Windows Clang (Ninja)",
       "environment": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/third_party/my-vcpkg-triplets/", 
-        "VCPKG_TARGET_TRIPLET": "x64-win-llvm"
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/third_party/my-vcpkg-triplets/"
       },
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-win-llvm",
         "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang.exe",
         "CMAKE_CXX_COMPILER": "C:/Program Files/LLVM/bin/clang++.exe",
-        "CMAKE_RC_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe"
+        "CMAKE_RC_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe",
+        "CMAKE_MAKE_PROGRAM": "C:/Program Files/Ninja/ninja.exe"
       }
     },
     {
@@ -77,10 +76,10 @@
       "inherits": "base-ninja",
       "displayName": "macOS Clang (Ninja)",
       "environment": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "VCPKG_TARGET_TRIPLET": "x64-osx"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       },
       "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-osx", 
         "CMAKE_C_COMPILER": "/opt/homebrew/opt/llvm/bin/clang",
         "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++"
       }
@@ -90,10 +89,10 @@
       "inherits": "base-ninja",
       "displayName": "Linux Clang (Ninja)",
       "environment": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "VCPKG_TARGET_TRIPLET": "x64-linux"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       },
       "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux", 
         "CMAKE_C_COMPILER": "/usr/bin/clang",
         "CMAKE_CXX_COMPILER": "/usr/bin/clang++"
       }

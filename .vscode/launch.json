@@ -25,6 +25,10 @@
           "ignoreFailures": false
         }
       ],
+      "windows": {
+        "MIMode": "gdb",
+        "miDebuggerPath": "${input:dbgPath}"
+      },
       "linux": {
         "MIMode": "gdb",
         "miDebuggerPath": "${input:dbgPath}"
@@ -33,6 +37,15 @@
         "MIMode": "lldb", 
         "miDebuggerPath": "${input:dbgPath}"
       },
+    }, 
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "LLDB Debug",
+      "program": "${workspaceFolder}/build/${input:executableName}.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/build",
+      "stopOnEntry": false
     }
   ],
   "inputs": [
@@ -55,7 +68,7 @@
     {
       "type": "promptString",
       "id": "dbgPath",
-      "description": "Enter debugger path (for GDB and LLDB)",
+      "description": "Enter GDB debugger path",
       "default": "C:/Program Files/msys64/ucrt64/bin/gdb.exe"
     }
   ]
