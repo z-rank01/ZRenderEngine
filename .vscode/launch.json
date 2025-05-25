@@ -14,7 +14,7 @@
     {
       "type": "cppdbg",
       "request": "launch",
-      "name": "GDB/LLDB Debug",
+      "name": "GDB Debug",
       "program": "${workspaceFolder}/build/${input:executableName}.exe",
       "args": [],
       "cwd": "${workspaceFolder}/build",
@@ -34,10 +34,10 @@
         "miDebuggerPath": "${input:dbgPath}"
       },
       "osx": {
-        "MIMode": "lldb", 
+        "MIMode": "gdb",
         "miDebuggerPath": "${input:dbgPath}"
-      },
-    }, 
+      }
+    },
     {
       "type": "lldb",
       "request": "launch",
