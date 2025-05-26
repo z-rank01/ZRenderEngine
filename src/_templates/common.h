@@ -43,80 +43,80 @@ namespace instance {
 
 /// @brief Creates initial context
 inline auto create_context() {
-  return callable::make_chain(CommVkInstanceContext{});
+  return chainable::make_chain(CommVkInstanceContext{});
 }
 
 /// @brief Sets application name
 inline auto set_application_name(const std::string &name) {
-  return [name](CommVkInstanceContext ctx) -> callable::chain<CommVkInstanceContext> {
+  return [name](CommVkInstanceContext ctx) -> chainable::Chainable<CommVkInstanceContext> {
     ctx.app_info_.application_name_ = name;
     ctx.sync_app_info();
-    return callable::make_chain(std::move(ctx));
+    return chainable::make_chain(std::move(ctx));
   };
 }
 
 /// @brief Sets engine name
 inline auto set_engine_name(const std::string &name) {
-  return [name](CommVkInstanceContext ctx) -> callable::chain<CommVkInstanceContext> {
+  return [name](CommVkInstanceContext ctx) -> chainable::Chainable<CommVkInstanceContext> {
     ctx.app_info_.engine_name_ = name;
     ctx.sync_app_info();
-    return callable::make_chain(std::move(ctx));
+    return chainable::make_chain(std::move(ctx));
   };
 }
 
 /// @brief Sets application version
 inline auto set_application_version(uint32_t major, uint32_t minor,
                                     uint32_t patch) {
-  return [major, minor, patch](CommVkInstanceContext ctx) -> callable::chain<CommVkInstanceContext> {
+  return [major, minor, patch](CommVkInstanceContext ctx) -> chainable::Chainable<CommVkInstanceContext> {
     ctx.app_info_.application_version_ = VK_MAKE_VERSION(major, minor, patch);
     ctx.sync_app_info();
-    return callable::make_chain(std::move(ctx));
+    return chainable::make_chain(std::move(ctx));
   };
 }
 
 /// @brief Sets engine version
 inline auto set_engine_version(uint32_t major, uint32_t minor, uint32_t patch) {
-  return [major, minor, patch](CommVkInstanceContext ctx) -> callable::chain<CommVkInstanceContext> {
+  return [major, minor, patch](CommVkInstanceContext ctx) -> chainable::Chainable<CommVkInstanceContext> {
     ctx.app_info_.engine_version_ = VK_MAKE_VERSION(major, minor, patch);
     ctx.sync_app_info();
-    return callable::make_chain(std::move(ctx));
+    return chainable::make_chain(std::move(ctx));
   };
 }
 
 /// @brief Sets API version
 inline auto set_api_version(uint32_t api_version) {
-  return [api_version](CommVkInstanceContext ctx) -> callable::chain<CommVkInstanceContext> {
+  return [api_version](CommVkInstanceContext ctx) -> chainable::Chainable<CommVkInstanceContext> {
     ctx.app_info_.highest_api_version_ = api_version;
     ctx.sync_app_info();
-    return callable::make_chain(std::move(ctx));
+    return chainable::make_chain(std::move(ctx));
   };
 }
 
 /// @brief Adds validation layers
 inline auto add_validation_layers(const std::vector<const char *> &layers) {
-  return [layers](CommVkInstanceContext ctx) -> callable::chain<CommVkInstanceContext> {
+  return [layers](CommVkInstanceContext ctx) -> chainable::Chainable<CommVkInstanceContext> {
     ctx.instance_info_.required_layers_.insert(
         ctx.instance_info_.required_layers_.end(),
         layers.begin(),
         layers.end());
-    return callable::make_chain(std::move(ctx));
+    return chainable::make_chain(std::move(ctx));
   };
 }
 
 /// @brief Adds extensions
 inline auto add_extensions(const std::vector<const char *> &extensions) {
-  return [extensions](CommVkInstanceContext ctx) -> callable::chain<CommVkInstanceContext> {
+  return [extensions](CommVkInstanceContext ctx) -> chainable::Chainable<CommVkInstanceContext> {
     ctx.instance_info_.required_extensions_.insert(
         ctx.instance_info_.required_extensions_.end(),
         extensions.begin(),
         extensions.end());
-    return callable::make_chain(std::move(ctx));
+    return chainable::make_chain(std::move(ctx));
   };
 }
 
 /// @brief Creates the Vulkan instance (final step)
 inline auto create_vk_instance() {
-  return [](CommVkInstanceContext ctx) -> callable::chain<CommVkInstanceContext> {
+  return [](CommVkInstanceContext ctx) -> chainable::Chainable<CommVkInstanceContext> {
     VkApplicationInfo app_info{};
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pNext = ctx.app_info_.p_next_;
@@ -150,22 +150,22 @@ inline auto create_vk_instance() {
           std::to_string(result));
     }
 
-    return callable::make_chain(std::move(ctx));
+    return chainable::make_chain(std::move(ctx));
   };
 }
 
 /// @brief Validates context before creation
 inline auto validate_context() {
-  return [](CommVkInstanceContext ctx) -> callable::chain<CommVkInstanceContext> {
+  return [](CommVkInstanceContext ctx) -> chainable::Chainable<CommVkInstanceContext> {
     if (ctx.app_info_.application_name_.empty()) {
-      return callable::chain<CommVkInstanceContext>(
-          callable::error<CommVkInstanceContext>("Application name cannot be empty"));
+      return chainable::Chainable<CommVkInstanceContext>(
+          chainable::error<CommVkInstanceContext>("Application name cannot be empty"));
     }
     if (ctx.app_info_.engine_name_.empty()) {
-      return callable::chain<CommVkInstanceContext>(
-          callable::error<CommVkInstanceContext>("Engine name cannot be empty"));
+      return chainable::Chainable<CommVkInstanceContext>(
+          chainable::error<CommVkInstanceContext>("Engine name cannot be empty"));
     }
-    return callable::make_chain(std::move(ctx));
+    return chainable::make_chain(std::move(ctx));
   };
 }
 

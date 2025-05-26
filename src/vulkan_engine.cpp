@@ -614,7 +614,7 @@ bool VulkanEngine::CreateInstance() {
   // 只有在调用 evaluate() 时才真正执行
   auto result = instance_chain.evaluate();
 
-  if (!callable::is_ok(result)) {
+  if (!chainable::is_ok(result)) {
     // 处理错误
     std::string error_msg = std::get<std::string>(result);
     std::cerr << "Failed to create Vulkan instance: " << error_msg << '\n';
