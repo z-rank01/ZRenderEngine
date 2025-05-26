@@ -61,7 +61,8 @@
       "description": "Select build type (for MSVC)",
       "options": [
         "Debug",
-        "Release"
+        "Release", 
+        ""
       ],
       "default": "Debug"
     },

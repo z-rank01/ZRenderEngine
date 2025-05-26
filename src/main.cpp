@@ -5,6 +5,7 @@
 #include "_gltf/gltf_parser.h"
 #include <vma/vk_mem_alloc.h>
 
+#include <algorithm>
 #include <iostream>
 
 int main()
@@ -48,15 +49,13 @@ int main()
     //     });
 
     // Transform vertex positions using the draw call's transform matrix (functional expression)
-    std::for_each(
-        draw_call_data_list.begin(),
-        draw_call_data_list.end(),
+    std::ranges::for_each(
+        draw_call_data_list,
         [](gltf::PerDrawCallData& primitive)
         {
             const glm::mat4& transform = primitive.transform;
-            std::for_each(
-                primitive.vertices.begin(),
-                primitive.vertices.end(),
+            std::ranges::for_each(
+                primitive.vertices,
                 [&](gltf::Vertex& vertex)
                 {
                     glm::vec4 transformed_position = transform * glm::vec4(vertex.position, 1.0f);

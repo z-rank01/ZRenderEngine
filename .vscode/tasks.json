@@ -4,16 +4,17 @@
       {
         "label": "[custom] cmake: configure",       // 任务名称（用户可见）
         "type": "shell",                            // 任务类型（shell 表示在终端中运行）
-        "command": "cmake",                         // 主命令（调用 CMake）
+        "command": "cmd.exe",                          // 使用 cmd.exe 作为命令行解释器
         "args": [
-          "--preset",                               // 参数 1：指定 CMake 预设
-          "${input:cmakePreset}",                   // 动态输入变量（用户选择预设）
-          "-B",                                     // 参数 2：指定构建目录
-          "${workspaceFolder}/build",               // 构建目录路径（固定为项目根目录下的 build）
-          "-DCMAKE_BUILD_TYPE=${input:buildType}"   // 显式设置 CMAKE_BUILD_TYPE
+          "/c",                                     // 在命令后添加 /c 以执行命令
+          "call \"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat\" && cmake --preset ${input:cmakePreset} -B ${workspaceFolder}/build -DCMAKE_BUILD_TYPE=${input:buildType}" // 调用 vcvars64.bat 并执行 CMake 命令
         ],
         "options": {
-          "cwd": "${workspaceFolder}"               // 工作目录设置为项目根目录
+          "cwd": "${workspaceFolder}",               // 工作目录设置为项目根目录
+          "shell": {
+            "executable": "cmd.exe",
+            "args": ["/c"]
+          }
         },
         "group": {                                  // 任务分组
           "kind": "build",                          // 属于 "build" 组
@@ -23,15 +24,17 @@
       {
         "label": "[custom] cmake: build",           // 任务名称（用户可见）
         "type": "shell",                            // 任务类型
-        "command": "cmake",                         // 主命令（调用 CMake）
+        "command": "cmd.exe",                          // 使用 cmd.exe 作为命令行解释器
         "args": [
-          "--build",                                // 参数 1：执行构建操作
-          "${workspaceFolder}/build",               // 参数 2：构建目录路径
-          "--config",                               // 参数 3：指定构建类型
-          "${input:buildType}"                      // 动态输入变量（用户选择 Debug/Release）
+          "/c",                                     // 在命令后添加 /c 以执行命令
+          "call \"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat\" && cmake --build ${workspaceFolder}/build --config ${input:buildType}" // 调用 vcvars64.bat 并执行构建命令
         ],
         "options": {
-          "cwd": "${workspaceFolder}"               // 工作目录
+          "cwd": "${workspaceFolder}",               // 工作目录
+          "shell": {
+            "executable": "cmd.exe",
+            "args": ["/c"]
+          }
         },
         "group": "build"                            // 属于 "build" 组（非默认）
       },
@@ -110,7 +113,7 @@
         "id": "cmakePreset",              // 输入 ID（与任务中的 ${input:cmakePreset} 对应）
         "type": "pickString",             // 输入类型：下拉选择
         "description": "Select CMake Preset:",
-        "options": ["windows-msvc", "windows-gcc", "windows-clang", "linux-clang", "macos-clang"], // 可选项
+        "options": ["windows-msvc", "windows-gcc", "windows-clang", "linux-clang", "macos-clang", "windows-msvc-ninja"], // 可选项
         "default": "windows-msvc"         // 默认值
       },
       {
