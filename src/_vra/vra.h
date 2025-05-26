@@ -37,7 +37,7 @@ namespace vra
     };
 
     // --- Forward Declarations ---
-    class VraDataDesc;
+    struct VraDataDesc;
     struct VraRawData;
 
     // --- Data Memory Pattern ---

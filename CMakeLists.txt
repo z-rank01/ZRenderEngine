@@ -30,6 +30,7 @@ add_subdirectory(src/_old)
 add_subdirectory(src/_callable)
 add_subdirectory(src/_vra)
 add_subdirectory(src/_gltf)
+add_subdirectory(src/_templates)
 
 # 设置源文件
 set(SOURCES
@@ -59,6 +60,7 @@ target_link_libraries(VulkanEngine
     gltf_helper                     # 添加 gltf_helper 库
     vulkan_old_class                # 添加旧的 Vulkan 类库
     callable                        # 添加可调用库
+    template                        # 添加模板库
 )
 
 # 包含目录

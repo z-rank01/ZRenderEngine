@@ -1,68 +1,131 @@
 #ifndef CALLABLE_H
 #define CALLABLE_H
 
-#include <variant>
+#include <functional>
 #include <string>
+#include <type_traits>
+#include <variant>
 
-namespace Callable
-{
-    /// @brief Represents the result of a callable operation.
-    /// @tparam T The type of the successful result (std::string for the error message).
-    template<typename T>
-    using Result = std::variant<T, std::string>;
 
-    /// @brief Represents a callable object.
-    /// @tparam F The type of the callable function.
-    template<typename F>
-    struct Callable
-    {
-        F func;
+namespace callable {
 
-        /// @brief Applies the function to the input Result.
-        /// @tparam T parameter type
-        /// @param input The input Result to process.
-        /// @return A Result containing either the function's output or an error message.
-        template<typename T>
-        auto operator()(Result<T>&& input) const {
-            try {
-                auto param = std::get_if<T>(&input);
-                if (!param) {
-                    return Result<decltype(func(std::get<T>(input)))>{std::string("Invalid type")};
-                }
-                return Result<decltype(func(*param))>{func(*param)};
-            }
-            catch (const std::exception& e) {
-                return Result<decltype(func(std::get<T>(input)))>{e.what()};
-            }
-        }
-    };
+/// @brief Represents the result of a computation that can either succeed or
+/// fail
+template <typename T> using result = std::variant<T, std::string>;
 
-    /// @brief Pipes the input Result through the given Callable.
-    /// @tparam T The type of the input Result.
-    /// @tparam F The type of the Callable function.
-    /// @param input The input Result to process.
-    /// @param callable The Callable to apply.
-    /// @return A Result containing either the Callable's output or an error message.
-    /// @note - The input result must be of the same type as the Callable's input type.
-    /// @note - The Callable's output type must be convertible to the input type of the next Callable.
-    template<typename T, typename F>
-    auto operator|(Result<T>&& input, const Callable<F>& callable) {
-        return callable(std::move(input));
-    }
-
-    /// @brief Combines two Callables into a single Callable.
-    /// @tparam F1 The type of the first Callable function.
-    /// @tparam F2 The type of the second Callable function.
-    /// @param left The first Callable to apply.
-    /// @param right The second Callable to apply.
-    /// @return A new Callable that applies the first Callable followed by the second.
-    /// @note - The output type of the first Callable must match the input type of the second Callable.
-    template<typename F1, typename F2>
-    auto operator|(const Callable<F1>& left, const Callable<F2>& right) {
-        return Callable{ [left, right](auto&& input) {
-            return right(left(std::forward<decltype(input)>(input)));
-        } };
-    }
+/// @brief Creates a successful result
+template <typename T> constexpr result<std::decay_t<T>> ok(T &&value) {
+  return result<std::decay_t<T>>{std::forward<T>(value)};
 }
+
+/// @brief Creates an error result
+template <typename T> constexpr result<T> error(const std::string &message) {
+  return result<T>{message};
+}
+
+/// @brief Checks if result contains a value
+template <typename T> constexpr bool is_ok(const result<T> &r) {
+  return std::holds_alternative<T>(r);
+}
+
+/// @brief Monad-like chain for lazy evaluation and composition
+/// @tparam T The type being transformed through the chain
+template <typename T> class chain {
+private:
+  std::function<result<T>()> computation_;
+
+public:
+  /// @brief Constructor from a computation function
+  explicit chain(std::function<result<T>()> comp)
+      : computation_(std::move(comp)) {}
+
+  /// @brief Constructor from a value (pure/return in monadic terms)
+  explicit chain(T value)
+      : computation_([v = std::move(value)]() -> result<T> {
+          return ok(std::move(v));
+        }) {}
+
+  /// @brief Constructor from a result
+  explicit chain(result<T> res) : computation_([r = std::move(res)]() -> result<T> { return r; }) {
+    
+  }
+
+  /// @brief Monadic bind operation (flatMap/andThen)
+  /// @tparam F Function type: T -> chain<U>
+  template <typename F>
+  auto and_then(
+      F &&func) && -> chain<typename std::invoke_result_t<F, T>::value_type> {
+    using U = typename std::invoke_result_t<F, T>::value_type;
+    return chain<U>([comp = std::move(computation_),
+                     f = std::forward<F>(func)]() -> result<U> {
+      auto current_result = comp();
+      if (auto *value = std::get_if<T>(&current_result)) {
+        return f(*value).evaluate();
+      } else {
+        return error<U>(std::get<std::string>(current_result));
+      }
+    });
+  }
+
+  /// @brief Map operation (transform the value if present)
+  /// @tparam F Function type: T -> U
+  template <typename F>
+  auto map(F &&func) && -> chain<std::invoke_result_t<F, T>> {
+    using U = std::invoke_result_t<F, T>;
+    return chain<U>([comp = std::move(computation_),
+                     f = std::forward<F>(func)]() -> result<U> {
+      auto current_result = comp();
+      if (auto *value = std::get_if<T>(&current_result)) {
+        try {
+          return ok(f(*value));
+        } catch (const std::exception &e) {
+          return error<U>(std::string("Error in map: ") + e.what());
+        }
+      } else {
+        return error<U>(std::get<std::string>(current_result));
+      }
+    });
+  }
+
+  /// @brief Error handling operation
+  template <typename F> auto or_else(F &&error_handler) && -> chain<T> {
+    return chain<T>([comp = std::move(computation_),
+                     handler = std::forward<F>(error_handler)]() -> result<T> {
+      auto current_result = comp();
+      if (is_ok(current_result)) {
+        return current_result;
+      } else {
+        return handler(std::get<std::string>(current_result));
+      }
+    });
+  }
+
+  /// @brief Lazy evaluation - executes the entire chain
+  result<T> evaluate() const { return computation_(); }
+
+  /// @brief Convenience operator for evaluation
+  result<T> operator()() const { return evaluate(); }
+
+  // Type alias for easier template deduction
+  using value_type = T;
+};
+
+/// @brief Helper function to create a chain from a value
+template <typename T> auto make_chain(T &&value) {
+  return chain<std::decay_t<T>>(std::forward<T>(value));
+}
+
+/// @brief Helper function to create a chain from a computation
+template <typename F> auto make_chain_from_computation(F &&computation) {
+  using T = typename std::invoke_result_t<F>::value_type;
+  return chain<T>(std::forward<F>(computation));
+}
+
+/// @brief Pipe operator for chaining operations
+template <typename T, typename F> auto operator|(chain<T> &&c, F &&func) {
+  return std::move(c).and_then(std::forward<F>(func));
+}
+
+} // namespace callable
 
 #endif // CALLABLE_H
