@@ -1,309 +1,137 @@
 ---
-# Google C++ 代码风格配置
-# 基于 Google 风格指南：https://google.github.io/styleguide/cppguide.html
+# 微软 C++ 代码风格配置
+# 基于 Microsoft C++ 编码规范
 
 # 基础风格
-BasedOnStyle: Google
+BasedOnStyle: Microsoft
 
-# 访问修饰符的缩进
-AccessModifierOffset: -1
+# 缩进宽度（微软标准为4个空格）
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
 
-# 对齐相关
+# 大括号风格（Allman风格，左大括号换行）
+BreakBeforeBraces: Allman
+
+# 列限制
+ColumnLimit: 120
+
+# 访问修饰符缩进
+AccessModifierOffset: -4
+
+# 对齐参数
 AlignAfterOpenBracket: Align
-AlignArrayOfStructures: None
-AlignConsecutiveAssignments: None
-AlignConsecutiveBitFields: None
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveBitFields: Consecutive
 AlignConsecutiveDeclarations: None
-AlignConsecutiveMacros: None
-AlignEscapedNewlines: Left
+AlignConsecutiveMacros: Consecutive
+AlignEscapedNewlines: Right
 AlignOperands: Align
 AlignTrailingComments: true
 
-# 允许相关
+# 允许短代码放在单行
 AllowAllArgumentsOnNextLine: true
-AllowAllConstructorInitializersOnNextLine: true
 AllowAllParametersOfDeclarationOnNextLine: true
-AllowShortBlocksOnASingleLine: Never
+AllowShortBlocksOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: false
-AllowShortEnumsOnASingleLine: true
-AllowShortFunctionsOnASingleLine: All
-AllowShortIfStatementsOnASingleLine: WithoutElse
-AllowShortLambdasOnASingleLine: All
-AllowShortLoopsOnASingleLine: true
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Inline
+AllowShortLoopsOnASingleLine: false
 
-# 总是在 template 声明后换行
+# 函数声明与定义的格式
 AlwaysBreakAfterReturnType: None
-AlwaysBreakAfterDefinitionReturnType: None
-AlwaysBreakBeforeMultilineStrings: true
+AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: Yes
 
-# 二进制操作符
-BinPackArguments: true
-BinPackParameters: true
+# 参数打包
+BinPackArguments: false
+BinPackParameters: false
 
-# 位域冒号间距
+# 位域冒号对齐
 BitFieldColonSpacing: Both
 
-# 大括号换行
-BraceWrapping:
-  AfterCaseLabel: false
-  AfterClass: false
-  AfterControlStatement: Never
-  AfterEnum: false
-  AfterFunction: false
-  AfterNamespace: false
-  AfterObjCDeclaration: false
-  AfterStruct: false
-  AfterUnion: false
-  AfterExternBlock: false
-  BeforeCatch: false
-  BeforeElse: false
-  BeforeLambdaBody: false
-  BeforeWhile: false
-  IndentBraces: false
-  SplitEmptyFunction: true
-  SplitEmptyRecord: true
-  SplitEmptyNamespace: true
-
-# 在二进制/三元操作符前换行
-BreakBeforeBinaryOperators: None
-BreakBeforeBraces: Attach
+# 构造函数初始化列表格式
 BreakBeforeConceptDeclarations: true
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeColon
 BreakInheritanceList: BeforeColon
 BreakStringLiterals: true
 
-# 列限制
-ColumnLimit: 80
-
-# 注释相关
-CommentPragmas: '^ IWYU pragma:'
-CompactNamespaces: false
-
-# 构造函数初始化列表相关
-ConstructorInitializerAllOnOneLineOrOnePerLine: true
-ConstructorInitializerIndentWidth: 4
-
-# 延续缩进宽度
-ContinuationIndentWidth: 4
-
-# Cpp11 相关
+# C++风格
 Cpp11BracedListStyle: true
 
-# 自动检测行尾
-DeriveLineEnding: true
-DerivePointerAlignment: true
+# 派生指针对齐
+DerivePointerAlignment: false
 
-# 禁用格式化
-DisableFormat: false
-
-# 空行保持
-EmptyLineAfterAccessModifier: Never
-EmptyLineBeforeAccessModifier: LogicalBlock
-
-# 实验性功能
-ExperimentalAutoDetectBinPacking: false
-
-# 修复命名空间注释
+# 命名空间处理
+CompactNamespaces: false
 FixNamespaceComments: true
-
-# For 循环宏
-ForEachMacros:
-  - foreach
-  - Q_FOREACH
-  - BOOST_FOREACH
-
-# 函数宏
-FunctionMacros:
-  - 'Q_DECLARE_TYPEINFO'
-
-# If 宏
-IfMacros:
-  - 'KJ_IF_MAYBE'
-
-# Include 相关
-IncludeBlocks: Regroup
-IncludeCategories:
-  # C 系统头文件
-  - Regex: '^<.*\.h>'
-    Priority: 1
-    SortPriority: 0
-    CaseSensitive: false
-  # C++ 系统头文件
-  - Regex: '^<.*>'
-    Priority: 2
-    SortPriority: 0
-    CaseSensitive: false
-  # 其他库的头文件
-  - Regex: '^".*/'
-    Priority: 4
-    SortPriority: 0
-    CaseSensitive: false
-  # 本项目头文件
-  - Regex: '^".*"'
-    Priority: 3
-    SortPriority: 0
-    CaseSensitive: false
-IncludeIsMainRegex: '([-_](test|unittest))?$'
-IncludeIsMainSourceRegex: ''
-
-# 缩进相关
-IndentAccessModifiers: false
-IndentCaseBlocks: false
-IndentCaseLabels: true
-IndentExternBlock: AfterExternBlock
-IndentGotoLabels: true
-IndentPPDirectives: None
-IndentRequires: false
-IndentWidth: 4
-IndentWrappedFunctionNames: false
-
-# 插入 braces
-InsertBraces: false
-
-# 插入 trailing commas
-InsertTrailingCommas: None
-
-# Java 相关（虽然我们不用）
-JavaScriptQuotes: Leave
-JavaScriptWrapImports: true
-
-# 保持空行
-KeepEmptyLinesAtTheStartOfBlocks: false
-
-# Lambda 缩进
-LambdaBodyIndentation: Signature
-
-# 语言
-Language: Cpp
-
-# 宏
-MacroBlockBegin: ''
-MacroBlockEnd: ''
-
-# 最大空行
-MaxEmptyLinesToKeep: 1
-
-# 命名空间缩进
 NamespaceIndentation: None
 
-# Objective-C 相关
-ObjCBinPackProtocolList: Never
-ObjCBlockIndentWidth: 2
-ObjCBreakBeforeNestedBlockParam: true
-ObjCSpaceAfterProperty: false
-ObjCSpaceBeforeProtocolList: true
+# Include 分类
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^<Windows\.h>'
+    Priority: 1
+    SortPriority: 0
+  - Regex: '^<(wrl|wil)/.*>'
+    Priority: 2
+    SortPriority: 0
+  - Regex: '^<.*\.h>'
+    Priority: 3
+    SortPriority: 0
+  - Regex: '^<.*>'
+    Priority: 4
+    SortPriority: 0
+  - Regex: '^".*"'
+    Priority: 5
+    SortPriority: 0
+IncludeIsMainRegex: '$'
 
-# PenaltyBreak 相关
-PenaltyBreakAssignment: 2
-PenaltyBreakBeforeFirstCallParameter: 1
-PenaltyBreakComment: 300
-PenaltyBreakFirstLessLess: 120
-PenaltyBreakOpenParenthesis: 0
-PenaltyBreakString: 1000
-PenaltyBreakTemplateDeclaration: 10
-PenaltyExcessCharacter: 1000000
-PenaltyIndentedWhitespace: 0
-PenaltyReturnTypeOnItsOwnLine: 200
+# 缩进相关
+IndentCaseBlocks: false
+IndentCaseLabels: false
+IndentExternBlock: AfterExternBlock
+IndentGotoLabels: true
+IndentPPDirectives: BeforeHash
+IndentWrappedFunctionNames: false
+
+# 保持空行
+KeepEmptyLinesAtTheStartOfBlocks: true
+MaxEmptyLinesToKeep: 1
 
 # 指针对齐
 PointerAlignment: Left
 
-# PPDirectives
-PPIndentWidth: -1
-
-# Qualifiers
-QualifierAlignment: Leave
-
-# Raw string
-RawStringFormats:
-  - Language: Cpp
-    Delimiters:
-      - cc
-      - CC
-      - cpp
-      - Cpp
-      - CPP
-      - 'c++'
-      - 'C++'
-    CanonicalDelimiter: ''
-    BasedOnStyle: google
-
-# Reference 对齐
-ReferenceAlignment: Pointer
-
-# 重排 includes
-ReflowComments: true
-
-# 移除多余的分号
-RemoveSemicolon: false
-
-# 短命名空间
-ShortNamespaceLines: 1
-
-# 排序 includes
-SortIncludes: CaseSensitive
-SortJavaStaticImport: Before
-SortUsingDeclarations: true
-
-# 空格相关
+# 空格的使用
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false
-SpaceAfterTemplateKeyword: true
-SpaceAroundPointerQualifiers: Default
 SpaceBeforeAssignmentOperators: true
 SpaceBeforeCaseColon: false
 SpaceBeforeCpp11BracedList: false
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
 SpaceBeforeParens: ControlStatements
-SpaceBeforeParensOptions:
-  AfterControlStatements: true
-  AfterForeachMacros: true
-  AfterFunctionDefinitionName: false
-  AfterFunctionDeclarationName: false
-  AfterIfMacros: true
-  AfterOverloadedOperator: false
-  BeforeNonEmptyParentheses: false
 SpaceBeforeRangeBasedForLoopColon: true
 SpaceBeforeSquareBrackets: false
-SpaceInEmptyBlock: false
+SpaceInEmptyBlock: true
 SpaceInEmptyParentheses: false
-SpacesBeforeTrailingComments: 2
+SpacesBeforeTrailingComments: 1
 SpacesInAngles: Never
 SpacesInConditionalStatement: false
-SpacesInContainerLiterals: true
+SpacesInContainerLiterals: false
 SpacesInCStyleCastParentheses: false
-SpacesInLineCommentPrefix:
-  Minimum: 1
-  Maximum: -1
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
 
-# 标准
-Standard: Auto
+# C++标准
+Standard: c++20
 
-# Statement 宏
-StatementAttributeLikeMacros:
-  - Q_EMIT
-StatementMacros:
-  - Q_UNUSED
-  - QT_REQUIRE_VERSION
+# 命名空间紧凑行数
+ShortNamespaceLines: 1
 
-# Tab 相关
-TabWidth: 8
-TypenameMacros:
-  - STACK_OF
-  - LIST
-UseCRLF: false
-UseTab: Never
-
-# Whitespace
-WhitespaceSensitiveMacros:
-  - STRINGIZE
-  - PP_STRINGIZE
-  - BOOST_PP_STRINGIZE
-  - NS_SWIFT_NAME
-  - CF_SWIFT_NAME
-...
+# 排序 includes 和 using 声明
+SortIncludes: CaseSensitive
+SortUsingDeclarations: true

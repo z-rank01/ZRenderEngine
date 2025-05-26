@@ -131,7 +131,7 @@ struct SCamera {
 class VulkanEngine {
 public:
   VulkanEngine() = delete;
-  VulkanEngine(const SEngineConfig &config);
+  VulkanEngine(SEngineConfig config);
   ~VulkanEngine();
 
   void Run();

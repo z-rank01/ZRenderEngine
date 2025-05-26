@@ -7,7 +7,7 @@
 #include <variant>
 
 
-namespace chainable {
+namespace callable {
 
 /// @brief Represents the result of a computation that can either succeed or
 /// fail

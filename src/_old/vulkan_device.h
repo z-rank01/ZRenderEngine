@@ -1,8 +1,11 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+
 #include <vector>
+
 #include "builder.h"
+
 
 typedef enum EPhysicalDeviceFeatures
 {
@@ -47,7 +50,7 @@ typedef enum EPhysicalDeviceFeatures
     ShaderCullDistance,
     ShaderFloat64,
     ShaderInt64,
-    ShaderInt16, 
+    ShaderInt16,
     ShaderResourceResidency,
     ShaderResourceMinLod,
     SparseBinding,
@@ -71,7 +74,7 @@ struct SVulkanPhysicalDeviceConfig
     uint8_t physical_device_api_version[4];
     // features
     std::vector<EPhysicalDeviceFeatures> physical_device_features;
-    
+
     // Queue and Queue Family config
     std::vector<VkQueueFlagBits> queue_flags;
 };
@@ -82,7 +85,7 @@ struct SVulkanDeviceConfig
     std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
     // device extensions
     int device_extension_count;
-    std::vector<const char*> device_extensions;
+    std::vector<const char *> device_extensions;
 };
 
 class VulkanDeviceHelper
@@ -92,7 +95,7 @@ public:
     ~VulkanDeviceHelper();
 
     bool CreateLogicalDevice(SVulkanDeviceConfig config);
-    bool CreatePhysicalDevice(SVulkanPhysicalDeviceConfig config, const VkInstance& instance);
+    bool CreatePhysicalDevice(SVulkanPhysicalDeviceConfig config, const VkInstance &instance);
 
     VkPhysicalDevice GetPhysicalDevice() const { return vkPhysicalDevice_; }
     VkDevice GetLogicalDevice() const { return vkLogicalDevice_; }
@@ -104,10 +107,10 @@ private:
     VkPhysicalDeviceFeatures vkSupportedFeatures_;
     VkPhysicalDeviceProperties vkSupportedProperties_;
 
-    VkPhysicalDevice PickPhysicalDevice(const SVulkanPhysicalDeviceConfig& config, const std::vector<VkPhysicalDevice>& instance);
+    VkPhysicalDevice PickPhysicalDevice(const SVulkanPhysicalDeviceConfig &config,
+                                        const std::vector<VkPhysicalDevice> &instance);
 };
 
 class VulkanDeviceBuilder : public Builder
 {
-
 };
