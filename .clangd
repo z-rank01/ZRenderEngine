@@ -1,0 +1,153 @@
+---
+# 编译选项
+CompileFlags:
+  # 将当前目录添加到包含路径
+  Add: 
+    - -std=c++17
+    - -Wall
+    - -Ie:/Projects/ZRenderGraph/src
+    - -Ie:/Projects/ZRenderGraph/include
+  
+  # 忽略编译器特定警告
+  Remove: 
+    - -W*
+    - -fsanitize=*
+  
+  # 移除编译器中不需要的参数
+  Compiler: clang++
+
+# 诊断设置
+Diagnostics:
+  # clang-tidy 集成
+  ClangTidy:
+    Add: 
+      - clang-diagnostic-*
+      - clang-analyzer-*
+      - google-*
+      - modernize-*
+      - performance-*
+      - readability-*
+      - bugprone-*
+      - cppcoreguidelines-*
+      - misc-*
+    
+    Remove:
+      - google-readability-todo
+      - google-readability-braces-around-statements
+      - google-readability-casting
+      - google-build-using-namespace
+      - readability-braces-around-statements
+      - readability-magic-numbers
+      - readability-named-parameter
+      - readability-function-cognitive-complexity
+      - cppcoreguidelines-avoid-magic-numbers
+      - cppcoreguidelines-pro-type-reinterpret-cast
+      - cppcoreguidelines-pro-bounds-pointer-arithmetic
+      - cppcoreguidelines-pro-bounds-array-to-pointer-decay
+      - cppcoreguidelines-owning-memory
+      - misc-non-private-member-variables-in-classes
+      - modernize-use-trailing-return-type
+      - modernize-use-nodiscard
+    
+    # Google C++ 命名规范设置
+    CheckOptions:
+      # 类和结构体：PascalCase
+      readability-identifier-naming.ClassCase: CamelCase
+      readability-identifier-naming.StructCase: CamelCase
+      
+      # 函数和方法：snake_case (Google C++ 风格)
+      readability-identifier-naming.FunctionCase: lower_case
+      readability-identifier-naming.MethodCase: lower_case
+      
+      # 变量和参数：snake_case
+      readability-identifier-naming.VariableCase: lower_case
+      readability-identifier-naming.ParameterCase: lower_case
+      
+      # 成员变量：snake_case with trailing underscore
+      readability-identifier-naming.MemberCase: lower_case
+      readability-identifier-naming.MemberSuffix: '_'
+      readability-identifier-naming.PrivateMemberCase: lower_case
+      readability-identifier-naming.PrivateMemberSuffix: '_'
+      
+      # 常量：kCamelCase
+      readability-identifier-naming.ConstantCase: CamelCase
+      readability-identifier-naming.ConstantPrefix: 'k'
+      readability-identifier-naming.ConstantMemberCase: CamelCase
+      readability-identifier-naming.ConstantMemberPrefix: 'k'
+      
+      # 全局常量
+      readability-identifier-naming.GlobalConstantCase: CamelCase
+      readability-identifier-naming.GlobalConstantPrefix: 'k'
+      readability-identifier-naming.StaticConstantCase: CamelCase
+      readability-identifier-naming.StaticConstantPrefix: 'k'
+      
+      # 枚举
+      readability-identifier-naming.EnumCase: CamelCase
+      readability-identifier-naming.EnumConstantCase: CamelCase
+      readability-identifier-naming.EnumConstantPrefix: 'k'
+      
+      # 宏定义
+      readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
+      
+      # 命名空间
+      readability-identifier-naming.NamespaceCase: lower_case
+      
+      # 函数长度限制
+      readability-function-size.LineThreshold: 200
+      readability-function-size.StatementThreshold: 800
+      readability-function-size.BranchThreshold: 50
+      readability-function-size.ParameterThreshold: 8
+      readability-function-size.NestingThreshold: 6
+      readability-function-size.VariableThreshold: 200
+      
+      # 行长度
+      readability-line-length.LineLength: 100
+      
+      # 性能相关
+      performance-for-range-copy.WarnOnAllAutoCopies: true
+      performance-unnecessary-value-param.AllowedTypes: 'std::shared_ptr;std::unique_ptr;std::function'
+      
+      # 现代化相关
+      modernize-loop-convert.MaxCopySize: 16
+      modernize-loop-convert.MinConfidence: reasonable
+      modernize-use-nullptr.NullMacros: 'NULL'
+      
+      # Core Guidelines
+      cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor: true
+      cppcoreguidelines-special-member-functions.AllowMissingMoveFunctions: true
+  
+  # 过滤掉第三方库和依赖的头文件
+  Suppressed:
+    - path: 'build|external|third_party|thirdparty|3rdparty|vendor|deps|dependencies'
+      regex: '.*'
+  
+  # 头文件未包含检测
+  MissingIncludes: Strict
+
+# 代码完成设定
+Completion:
+  AllScopes: true
+  
+# 头文件包含路径
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+  Designators: true
+
+# 代码格式化设置
+Hover:
+  ShowAKA: true
+
+# 其他设置
+Index:
+  Background: Build
+  StandardLibrary: Yes
+
+# 格式化
+Style:
+  BasedOnStyle: Google
+  ColumnLimit: 80
+
+# 启用语义高亮
+SemanticHighlighting: true
