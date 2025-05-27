@@ -6,7 +6,6 @@
 
 #include "builder.h"
 
-
 typedef enum EPhysicalDeviceFeatures
 {
     RobustBufferAccess = 0,
@@ -85,7 +84,7 @@ struct SVulkanDeviceConfig
     std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
     // device extensions
     int device_extension_count;
-    std::vector<const char *> device_extensions;
+    std::vector<const char*> device_extensions;
 };
 
 class VulkanDeviceHelper
@@ -95,7 +94,7 @@ public:
     ~VulkanDeviceHelper();
 
     bool CreateLogicalDevice(SVulkanDeviceConfig config);
-    bool CreatePhysicalDevice(SVulkanPhysicalDeviceConfig config, const VkInstance &instance);
+    bool CreatePhysicalDevice(SVulkanPhysicalDeviceConfig config, const VkInstance& instance);
 
     VkPhysicalDevice GetPhysicalDevice() const { return vkPhysicalDevice_; }
     VkDevice GetLogicalDevice() const { return vkLogicalDevice_; }
@@ -107,8 +106,8 @@ private:
     VkPhysicalDeviceFeatures vkSupportedFeatures_;
     VkPhysicalDeviceProperties vkSupportedProperties_;
 
-    VkPhysicalDevice PickPhysicalDevice(const SVulkanPhysicalDeviceConfig &config,
-                                        const std::vector<VkPhysicalDevice> &instance);
+    VkPhysicalDevice PickPhysicalDevice(const SVulkanPhysicalDeviceConfig& config,
+                                        const std::vector<VkPhysicalDevice>& instance);
 };
 
 class VulkanDeviceBuilder : public Builder

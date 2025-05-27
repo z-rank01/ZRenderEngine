@@ -9,6 +9,7 @@
 #include "_templates/common.h"
 
 using namespace templates::common::instance;
+using namespace templates::common::physicaldevice;
 
 VulkanEngine* instance = nullptr;
 
@@ -131,6 +132,9 @@ VulkanEngine::~VulkanEngine()
     // destroy vkBootstrap resources
     vkb::destroy_device(vkb_device_);
     vkb::destroy_instance(vkb_instance_);
+
+    // destroy comm test data
+    release_common_templates_test_data();
 
     // 重置单例指针
     instance = nullptr;
@@ -666,9 +670,15 @@ bool VulkanEngine::CreateInstance()
     //   }
 
     //   vkb_instance_ = inst_ret.value();
-    auto instance_chain = create_context() | set_application_name("My Vulkan App") | set_engine_name("My Engine") |
-                          set_application_version(1, 3, 0) | add_validation_layers({"VK_LAYER_KHRONOS_validation"}) |
-                          add_extensions({"VK_EXT_debug_utils"}) | validate_context() | create_vk_instance();
+    auto extensions = vkWindowHelper_->GetWindowExtensions();
+    auto instance_chain = create_context() 
+                        | set_application_name("My Vulkan App") 
+                        | set_engine_name("My Engine") 
+                        | set_application_version(1, 3, 0) 
+                        | add_validation_layers({"VK_LAYER_KHRONOS_validation"}) 
+                        | add_extensions(extensions) 
+                        | validate_context() 
+                        | create_vk_instance();
 
     // 只有在调用 evaluate() 时才真正执行
     auto result = instance_chain.evaluate();
@@ -681,14 +691,15 @@ bool VulkanEngine::CreateInstance()
         return false;
     }
     auto context           = std::get<templates::common::CommVkInstanceContext>(result);
-    vkb_instance_.instance = context.vk_instance_;
+    comm_vk_instance_ = context.vk_instance_;
     std::cout << "Successfully created Vulkan instance." << '\n';
     return true;
 }
 
 bool VulkanEngine::CreateSurface()
 {
-    return vkWindowHelper_->CreateSurface(vkb_instance_.instance);
+    return vkWindowHelper_->CreateSurface(comm_vk_instance_);
+    // return vkWindowHelper_->CreateSurface(vkb_instance_.instance);
 }
 
 bool VulkanEngine::CreatePhysicalDevice()
@@ -697,21 +708,46 @@ bool VulkanEngine::CreatePhysicalDevice()
     VkPhysicalDeviceVulkan13Features features_13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     features_13.synchronization2 = true;
 
-    vkb::PhysicalDeviceSelector selector{vkb_instance_};
-    auto phys_ret = selector.set_surface(vkWindowHelper_->GetSurface())
-                        .set_minimum_version(1, 3)
-                        .set_required_features_13(features_13)
-                        .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
-                        .require_present()
-                        .select();
+    // vkb::PhysicalDeviceSelector selector{vkb_instance_};
+    // auto phys_ret = selector.set_surface(vkWindowHelper_->GetSurface())
+    //                     .set_minimum_version(1, 3)
+    //                     .set_required_features_13(features_13)
+    //                     .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
+    //                     .require_present()
+    //                     .select();
 
-    if (!phys_ret)
+    // if (!phys_ret)
+    // {
+    //     std::cout << "Failed to select Vulkan Physical Device. Error: " << phys_ret.error().message() << std::endl;
+    //     return false;
+    // }
+
+    // vkb_physical_device_ = phys_ret.value();
+    // return true;
+
+    auto physical_device_chain = create_physical_device_context(comm_vk_instance_) 
+                                | set_surface(vkWindowHelper_->GetSurface()) 
+                                | require_api_version(1, 3, 0) 
+                                | require_features_13(features_13) 
+                                | require_queue(VK_QUEUE_GRAPHICS_BIT, 
+                                              1, // minimum queue count
+                                              true) // require present support
+                                | prefer_discrete_gpu()
+                                | select_physical_device();
+
+    auto result = physical_device_chain.evaluate();
+
+    if (!callable::is_ok(result))
     {
-        std::cout << "Failed to select Vulkan Physical Device. Error: " << phys_ret.error().message() << std::endl;
+        // 处理错误
+        std::string error_msg = std::get<std::string>(result);
+        std::cerr << "Failed to create Vulkan physical device: " << error_msg << '\n';
         return false;
     }
 
-    vkb_physical_device_ = phys_ret.value();
+    auto context = std::get<templates::common::CommVkPhysicalDeviceContext>(result);
+    comm_vk_physical_device_ = context.vk_physical_device_;
+    std::cout << "Successfully created Vulkan physical device." << '\n';
     return true;
 }
 
@@ -1872,4 +1908,9 @@ void VulkanEngine::ReleaseTestData()
     // vkDestroyDescriptorPool(vkb_device_.device, test_descriptor_pool_,
     // nullptr); vkDestroyDescriptorSetLayout(vkb_device_.device,
     // test_descriptor_set_layout_, nullptr);
+}
+
+void VulkanEngine::release_common_templates_test_data()
+{
+    vkDestroyInstance(comm_vk_instance_, nullptr);
 }

@@ -261,6 +261,12 @@ private:
   void ProcessMouseScroll(float yoffset);
   void FocusOnObject(const glm::vec3 &object_position, float target_distance);
 
+  // --- Common Templates Test ---
+  VkInstance comm_vk_instance_;
+  VkPhysicalDevice comm_vk_physical_device_;
+
+  void release_common_templates_test_data();
+
   // --- test function and data ---
   std::unique_ptr<TestVulkanglTFModel> test_vulkan_gltf_model_;
   std::vector<gltf::PerDrawCallData> per_draw_call_data_list_;
