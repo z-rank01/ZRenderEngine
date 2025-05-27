@@ -38,13 +38,10 @@ bool VulkanDeviceHelper::CreateLogicalDevice(SVulkanDeviceConfig config)
     device_info.enabledLayerCount = 0;
     device_info.ppEnabledLayerNames = nullptr;
     device_info.pEnabledFeatures = nullptr; // Optional, can be set to nullptr if no specific features are required
-    if (!Logger::LogWithVkResult(
+    return Logger::LogWithVkResult(
         vkCreateDevice(vkPhysicalDevice_, &device_info, nullptr, &vkLogicalDevice_),
         "Failed to create logical device",
-        "Succeeded in creating logical device"))
-        return false;
-    else
-        return true;
+        "Succeeded in creating logical device");
 }
 
 bool VulkanDeviceHelper::CreatePhysicalDevice(SVulkanPhysicalDeviceConfig config, const VkInstance& instance)

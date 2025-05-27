@@ -31,6 +31,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <memory>
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 
 enum class EWindowState : std::uint8_t {
@@ -264,6 +265,11 @@ private:
   // --- Common Templates Test ---
   VkInstance comm_vk_instance_;
   VkPhysicalDevice comm_vk_physical_device_;
+  VkDevice comm_vk_logical_device_;
+  VkQueue comm_vk_graphics_queue_;
+  VkQueue comm_vk_transfer_queue_;
+  templates::common::CommVkPhysicalDeviceContext comm_vk_physical_device_context_;
+  templates::common::CommVkLogicalDeviceContext comm_vk_logical_device_context_;
 
   void release_common_templates_test_data();
 

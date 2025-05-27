@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <numeric>
 #include <optional>
 #include <ranges>
-#include <numeric>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "_callable/callable.h"
@@ -409,23 +411,20 @@ inline auto validate_device_requirements()
         }
 
         // Check required extensions
-        for (const char* required_ext : ctx.selection_criteria_.required_extensions_)
+        const auto kMissingExtensions = std::ranges::find_if(
+            ctx.selection_criteria_.required_extensions_,
+            [&ctx](const char* required_ext)
+            {
+                return !std::ranges::any_of(
+                    ctx.available_extensions_,
+                    [required_ext](const auto& available_ext)
+                    { return std::string_view(required_ext) == std::string_view(available_ext.extensionName); });
+            });
+
+        if (kMissingExtensions != std::end(ctx.selection_criteria_.required_extensions_))
         {
-            bool found = false;
-            for (const auto& available_ext : ctx.available_extensions_)
-            {
-                // 使用更安全的字符串比较方式
-                if (std::string_view(required_ext) == std::string_view(available_ext.extensionName))
-                {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found)
-            {
-                return callable::Chainable<CommVkPhysicalDeviceContext>(callable::error<CommVkPhysicalDeviceContext>(
-                    std::string("Required extension not available: ") + required_ext));
-            }
+            return callable::Chainable<CommVkPhysicalDeviceContext>(callable::error<CommVkPhysicalDeviceContext>(
+                std::string("Required extension not available: ") + *kMissingExtensions));
         }
 
         return callable::make_chain(std::move(ctx));
@@ -517,10 +516,8 @@ inline auto select_physical_device()
                                     ctx.selection_criteria_.surface_ != VK_NULL_HANDLE)
                                 {
                                     VkBool32 present_support = false;
-                                    vkGetPhysicalDeviceSurfaceSupportKHR(device,
-                                                                         idx,
-                                                                         ctx.selection_criteria_.surface_,
-                                                                         &present_support);
+                                    vkGetPhysicalDeviceSurfaceSupportKHR(
+                                        device, idx, ctx.selection_criteria_.surface_, &present_support);
                                     return present_support == VK_TRUE;
                                 }
                                 return true;
@@ -550,20 +547,21 @@ inline auto select_physical_device()
 
             // Memory score using ranges
             auto device_memory_heaps =
-                std::views::iota(0U, memory_props.memoryHeapCount) 
-                | std::views::transform([&memory_props](uint32_t idx) 
-                { 
-                    // Ensure index is within bounds
-                    assert(idx < VK_MAX_MEMORY_HEAPS && "Memory heap index out of bounds");
-                    return memory_props.memoryHeaps[idx]; 
-                }) 
-                | std::views::filter([](const auto& heap) { return heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT; });
+                std::views::iota(0U, memory_props.memoryHeapCount) |
+                std::views::transform(
+                    [&memory_props](uint32_t idx)
+                    {
+                        // Ensure index is within bounds
+                        assert(idx < VK_MAX_MEMORY_HEAPS && "Memory heap index out of bounds");
+                        return memory_props.memoryHeaps[idx];
+                    }) |
+                std::views::filter([](const auto& heap) { return heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT; });
 
-            VkDeviceSize total_memory = std::accumulate(
-                device_memory_heaps.begin(),
-                device_memory_heaps.end(),
-                VkDeviceSize{0},
-                [](VkDeviceSize sum, const auto& heap) { return sum + heap.size; });
+            VkDeviceSize total_memory =
+                std::accumulate(device_memory_heaps.begin(),
+                                device_memory_heaps.end(),
+                                VkDeviceSize{0},
+                                [](VkDeviceSize sum, const auto& heap) { return sum + heap.size; });
 
             score += static_cast<int>(total_memory / (static_cast<VkDeviceSize>(1024 * 1024)));
 
@@ -580,10 +578,9 @@ inline auto select_physical_device()
         };
 
         // Score all devices and find the best one
-        auto scored_devices = devices 
-                            | std::views::transform(score_device) 
-                            | std::views::filter([](const auto& opt) { return opt.has_value(); }) 
-                            | std::views::transform([](const auto& opt) { return opt.value(); });
+        auto scored_devices = devices | std::views::transform(score_device) |
+                              std::views::filter([](const auto& opt) { return opt.has_value(); }) |
+                              std::views::transform([](const auto& opt) { return opt.value(); });
 
         auto best_device_it = std::ranges::max_element(
             scored_devices, [](const auto& left, const auto& right) { return left.first < right.first; });
@@ -605,6 +602,469 @@ inline auto select_physical_device()
 }
 
 } // namespace physicaldevice
+
+/// -------------------------------------------------
+/// vulkan logical device templated functions: common
+/// -------------------------------------------------
+
+/// @brief Vulkan logical device context with lazy evaluation support
+struct CommVkLogicalDeviceContext
+{
+    // parent physical device context
+    VkPhysicalDevice vk_physical_device_ = VK_NULL_HANDLE;
+    VkPhysicalDeviceProperties device_properties_{};
+    VkPhysicalDeviceFeatures device_features_{};
+    std::vector<VkQueueFamilyProperties> queue_family_properties_;
+
+    // logical device creation info
+    struct DeviceInfo
+    {
+        std::vector<VkDeviceQueueCreateInfo> queue_create_infos_;
+        std::vector<const char*> required_extensions_;
+        VkPhysicalDeviceFeatures required_features_{};
+        VkPhysicalDeviceVulkan11Features required_features_11_{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
+        VkPhysicalDeviceVulkan12Features required_features_12_{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+        VkPhysicalDeviceVulkan13Features required_features_13_{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+        void* p_next_ = nullptr;
+    } device_info_;
+
+    // queue configuration
+    struct QueueInfo
+    {
+        uint32_t queue_family_index_;
+        uint32_t queue_count_;
+        std::vector<float> queue_priorities_;
+        VkQueueFlags queue_flags_;
+        std::string queue_name_; // for identification
+    };
+    std::vector<QueueInfo> queue_infos_;
+
+    // vulkan natives
+    VkDevice vk_logical_device_ = VK_NULL_HANDLE;
+    std::unordered_map<std::string, VkQueue> named_queues_;
+    std::unordered_map<uint32_t, std::vector<VkQueue>> family_queues_;
+};
+
+namespace logicaldevice
+{
+
+/// @brief Creates initial logical device context from physical device context
+inline auto create_logical_device_context(const CommVkPhysicalDeviceContext& physical_device_ctx)
+{
+    return callable::make_chain(
+        [physical_device_ctx]() -> CommVkLogicalDeviceContext
+        {
+            CommVkLogicalDeviceContext ctx;
+            ctx.vk_physical_device_      = physical_device_ctx.vk_physical_device_;
+            ctx.device_properties_       = physical_device_ctx.device_properties_;
+            ctx.device_features_         = physical_device_ctx.device_features_;
+            ctx.queue_family_properties_ = physical_device_ctx.queue_family_properties_;
+            return ctx;
+        }());
+}
+
+/// @brief Adds required device extensions
+inline auto require_extensions(const std::vector<const char*>& extensions)
+{
+    return [extensions](CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        ctx.device_info_.required_extensions_.insert(
+            ctx.device_info_.required_extensions_.end(), extensions.begin(), extensions.end());
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets required Vulkan 1.0 features
+inline auto require_features(const VkPhysicalDeviceFeatures& features)
+{
+    return [features](CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        ctx.device_info_.required_features_ = features;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets required Vulkan 1.1 features
+inline auto require_features_11(const VkPhysicalDeviceVulkan11Features& features)
+{
+    return [features](CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        ctx.device_info_.required_features_11_ = features;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets required Vulkan 1.2 features
+inline auto require_features_12(const VkPhysicalDeviceVulkan12Features& features)
+{
+    return [features](CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        ctx.device_info_.required_features_12_ = features;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets required Vulkan 1.3 features
+inline auto require_features_13(const VkPhysicalDeviceVulkan13Features& features)
+{
+    return [features](CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        ctx.device_info_.required_features_13_ = features;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Adds a queue request with name for easy identification
+inline auto add_queue(const std::string& queue_name,
+                      uint32_t queue_family_index,
+                      uint32_t queue_count                 = 1,
+                      const std::vector<float>& priorities = {1.0f})
+{
+    return [queue_name, queue_family_index, queue_count, priorities](
+               CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        // Validate queue family index
+        if (queue_family_index >= ctx.queue_family_properties_.size())
+        {
+            return callable::Chainable<CommVkLogicalDeviceContext>(
+                callable::error<CommVkLogicalDeviceContext>("Invalid queue family index"));
+        }
+
+        // Validate queue count
+        if (queue_count > ctx.queue_family_properties_[queue_family_index].queueCount)
+        {
+            return callable::Chainable<CommVkLogicalDeviceContext>(
+                callable::error<CommVkLogicalDeviceContext>("Requested queue count exceeds available queues"));
+        }
+
+        // Create queue info
+        CommVkLogicalDeviceContext::QueueInfo queue_info;
+        queue_info.queue_family_index_ = queue_family_index;
+        queue_info.queue_count_        = queue_count;
+        queue_info.queue_priorities_   = priorities.empty() ? std::vector<float>(queue_count, 1.0F) : priorities;
+        queue_info.queue_flags_        = ctx.queue_family_properties_[queue_family_index].queueFlags;
+        queue_info.queue_name_         = queue_name;
+
+        // Ensure priorities match queue count
+        if (queue_info.queue_priorities_.size() != queue_count)
+        {
+            queue_info.queue_priorities_.resize(queue_count, 1.0F);
+        }
+
+        ctx.queue_infos_.push_back(queue_info);
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Adds a graphics queue automatically finding suitable family
+inline auto add_graphics_queue(const std::string& queue_name = "graphics",
+                               VkSurfaceKHR surface          = VK_NULL_HANDLE,
+                               uint32_t queue_count          = 1)
+{
+    return [queue_name, surface, queue_count](
+               CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        // Find graphics queue family
+        std::optional<uint32_t> graphics_family;
+
+        auto graphics_families =
+            std::views::iota(0U, static_cast<uint32_t>(ctx.queue_family_properties_.size())) |
+            std::views::filter(
+                [&](uint32_t idx)
+                {
+                    const auto& family = ctx.queue_family_properties_[idx];
+
+                    // Check for graphics support
+                    if (!(family.queueFlags & VK_QUEUE_GRAPHICS_BIT))
+                        return false;
+
+                    // If surface provided, check for present support
+                    if (surface != VK_NULL_HANDLE)
+                    {
+                        VkBool32 present_support = false;
+                        vkGetPhysicalDeviceSurfaceSupportKHR(ctx.vk_physical_device_, idx, surface, &present_support);
+                        return present_support == VK_TRUE;
+                    }
+
+                    return true;
+                });
+
+        auto first_suitable_graphics = graphics_families.begin();
+        if (first_suitable_graphics != graphics_families.end()) {
+            graphics_family = *first_suitable_graphics;
+        }
+
+        if (!graphics_family.has_value()) {
+            return callable::Chainable<CommVkLogicalDeviceContext>(
+                callable::error<CommVkLogicalDeviceContext>("No suitable graphics queue family found"));
+        }
+
+        return add_queue(queue_name, graphics_family.value(), queue_count)(std::move(ctx));
+    };
+}
+
+/// @brief Adds a compute queue automatically finding suitable family
+/// @param queue_name Name for the compute queue (default is "compute")
+/// @param queue_count Number of compute queues to create (default is 1)
+inline auto add_compute_queue(const std::string& queue_name = "compute", uint32_t queue_count = 1)
+{
+    return [queue_name, queue_count](CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        // Use ranges::find_if find dedicated compute queue family first
+        auto dedicated_compute = std::ranges::find_if(
+            std::views::iota(0U, static_cast<uint32_t>(ctx.queue_family_properties_.size())),
+            [&](uint32_t idx) {
+                const auto& family = ctx.queue_family_properties_[idx];
+                return (family.queueFlags & VK_QUEUE_COMPUTE_BIT) &&
+                       !(family.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT));
+            });
+        
+        // If any dedicated compute queue family found, use it
+        if (dedicated_compute != std::ranges::end(
+            std::views::iota(0U, static_cast<uint32_t>(ctx.queue_family_properties_.size()))))
+        {
+            return add_queue(queue_name, *dedicated_compute, queue_count)(std::move(ctx));
+        }
+
+        // Otherwise find graphics queue that supports compute
+        auto compute_graphics = std::ranges::find_if(
+            std::views::iota(0U, static_cast<uint32_t>(ctx.queue_family_properties_.size())),
+            [&](uint32_t idx) {
+                const auto& family = ctx.queue_family_properties_[idx];
+                return (family.queueFlags & VK_QUEUE_COMPUTE_BIT) &&
+                       (family.queueFlags & VK_QUEUE_GRAPHICS_BIT);
+            });
+        
+        // If any compute-capable graphics queue family found, use it
+        if (compute_graphics != std::ranges::end(
+            std::views::iota(0U, static_cast<uint32_t>(ctx.queue_family_properties_.size()))))
+        {
+            return add_queue(queue_name, *compute_graphics, queue_count)(std::move(ctx));
+        }
+        
+        // fallback
+        return callable::Chainable<CommVkLogicalDeviceContext>(
+            callable::error<CommVkLogicalDeviceContext>("No suitable compute queue family found"));
+    };
+}
+
+/// @brief Adds a transfer queue automatically finding suitable family
+/// @param queue_name Name for the transfer queue (default is "transfer")
+/// @param queue_count Number of transfer queues to create (default is 1)
+inline auto add_transfer_queue(const std::string& queue_name = "transfer", uint32_t queue_count = 1)
+{
+    return [queue_name, queue_count](CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        // Use ranges::find_if find dedicated compute queue family first
+        auto dedicated_transfer = std::ranges::find_if(
+            std::views::iota(0U, static_cast<uint32_t>(ctx.queue_family_properties_.size())),
+            [&](uint32_t idx) {
+                const auto& family = ctx.queue_family_properties_[idx];
+                return (family.queueFlags & VK_QUEUE_TRANSFER_BIT) &&
+                       !(family.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT));
+            });
+
+        // If any dedicated transfer queue family found, use it
+        if (dedicated_transfer != std::ranges::end(
+            std::views::iota(0U, static_cast<uint32_t>(ctx.queue_family_properties_.size()))))
+        {
+            return add_queue(queue_name, *dedicated_transfer, queue_count)(std::move(ctx));
+        }
+
+        // Otherwise find graphics queue that supports transfer
+        auto transfer_graphics = std::ranges::find_if(
+            std::views::iota(0U, static_cast<uint32_t>(ctx.queue_family_properties_.size())),
+            [&](uint32_t idx) {
+                const auto& family = ctx.queue_family_properties_[idx];
+                return (family.queueFlags & VK_QUEUE_TRANSFER_BIT) &&
+                       (family.queueFlags & VK_QUEUE_GRAPHICS_BIT);
+            });
+
+        // If any transfer-capable graphics queue family found, use it
+        if (transfer_graphics != std::ranges::end(
+            std::views::iota(0U, static_cast<uint32_t>(ctx.queue_family_properties_.size()))))
+        {
+            return add_queue(queue_name, *transfer_graphics, queue_count)(std::move(ctx));
+        }
+        
+        // fallback
+        return callable::Chainable<CommVkLogicalDeviceContext>(
+            callable::error<CommVkLogicalDeviceContext>("No suitable transfer queue family found"));
+    };
+}
+
+/// @brief Validates device configuration
+inline auto validate_device_configuration()
+{
+    return [](CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        if (ctx.queue_infos_.empty())
+        {
+            return callable::Chainable<CommVkLogicalDeviceContext>(
+                callable::error<CommVkLogicalDeviceContext>("No queues specified for device creation"));
+        }
+
+        // Check for duplicate queue names
+        std::unordered_set<std::string> queue_names;
+        for (const auto& queue_info : ctx.queue_infos_)
+        {
+            if (!queue_names.insert(queue_info.queue_name_).second)
+            {
+                return callable::Chainable<CommVkLogicalDeviceContext>(
+                    callable::error<CommVkLogicalDeviceContext>("Duplicate queue name: " + queue_info.queue_name_));
+            }
+        }
+
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Creates the logical device and retrieves queues
+inline auto create_logical_device()
+{
+    return [](CommVkLogicalDeviceContext ctx) -> callable::Chainable<CommVkLogicalDeviceContext>
+    {
+        // Consolidate queue create infos by family
+        std::unordered_map<uint32_t, VkDeviceQueueCreateInfo> family_queue_infos;
+        std::unordered_map<uint32_t, std::vector<float>> family_priorities;
+
+        for (const auto& queue_info : ctx.queue_infos_)
+        {
+            uint32_t family_index = queue_info.queue_family_index_;
+
+            if (family_queue_infos.find(family_index) == family_queue_infos.end())
+            {
+                // First queue for this family
+                VkDeviceQueueCreateInfo queue_create_info{};
+                queue_create_info.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+                queue_create_info.queueFamilyIndex = family_index;
+                queue_create_info.queueCount       = queue_info.queue_count_;
+
+                family_queue_infos[family_index] = queue_create_info;
+                family_priorities[family_index]  = queue_info.queue_priorities_;
+            }
+            else
+            {
+                // Additional queues for existing family
+                auto& existing_info   = family_queue_infos[family_index];
+                auto& existing_priorities       = family_priorities[family_index];
+
+                existing_info.queueCount += queue_info.queue_count_;
+                existing_priorities.insert(existing_priorities.end(),
+                                           queue_info.queue_priorities_.begin(),
+                                           queue_info.queue_priorities_.end());
+            }
+        }
+
+        // Update priority pointers
+        for (auto& [family_index, queue_info] : family_queue_infos)
+        {
+            queue_info.pQueuePriorities = family_priorities[family_index].data();
+        }
+
+        // Convert to vector for device creation
+        std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
+        for (const auto& [family_index, queue_info] : family_queue_infos)
+        {
+            queue_create_infos.push_back(queue_info);
+        }
+
+        // Setup feature chain
+        void* feature_chain = nullptr;
+        if (ctx.device_info_.required_features_13_.sType != 0)
+        {
+            ctx.device_info_.required_features_13_.pNext = feature_chain;
+            feature_chain                                = &ctx.device_info_.required_features_13_;
+        }
+        if (ctx.device_info_.required_features_12_.sType != 0)
+        {
+            ctx.device_info_.required_features_12_.pNext = feature_chain;
+            feature_chain                                = &ctx.device_info_.required_features_12_;
+        }
+        if (ctx.device_info_.required_features_11_.sType != 0)
+        {
+            ctx.device_info_.required_features_11_.pNext = feature_chain;
+            feature_chain                                = &ctx.device_info_.required_features_11_;
+        }
+
+        // Create device
+        VkDeviceCreateInfo device_create_info{};
+        device_create_info.sType                 = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        device_create_info.pNext                 = feature_chain;
+        device_create_info.queueCreateInfoCount  = static_cast<uint32_t>(queue_create_infos.size());
+        device_create_info.pQueueCreateInfos     = queue_create_infos.data();
+        device_create_info.enabledExtensionCount = static_cast<uint32_t>(ctx.device_info_.required_extensions_.size());
+        device_create_info.ppEnabledExtensionNames =
+            ctx.device_info_.required_extensions_.empty() ? nullptr : ctx.device_info_.required_extensions_.data();
+        device_create_info.pEnabledFeatures = &ctx.device_info_.required_features_;
+
+        VkResult result =
+            vkCreateDevice(ctx.vk_physical_device_, &device_create_info, nullptr, &ctx.vk_logical_device_);
+        if (result != VK_SUCCESS)
+        {
+            return callable::Chainable<CommVkLogicalDeviceContext>(callable::error<CommVkLogicalDeviceContext>(
+                "Failed to create logical device. Error: " + std::to_string(result)));
+        }
+
+        // Retrieve queues
+        std::unordered_map<uint32_t, uint32_t> family_queue_counters;
+        for (const auto& queue_info : ctx.queue_infos_)
+        {
+            uint32_t family_index = queue_info.queue_family_index_;
+            uint32_t& counter     = family_queue_counters[family_index];
+
+            for (uint32_t i = 0; i < queue_info.queue_count_; ++i)
+            {
+                VkQueue queue;
+                vkGetDeviceQueue(ctx.vk_logical_device_, family_index, counter, &queue);
+
+                // Store in named queues (use index suffix for multiple queues)
+                std::string queue_name = queue_info.queue_name_;
+                if (queue_info.queue_count_ > 1)
+                {
+                    queue_name += "_" + std::to_string(i);
+                }
+                ctx.named_queues_[queue_name] = queue;
+
+                // Store in family queues
+                ctx.family_queues_[family_index].push_back(queue);
+
+                ++counter;
+            }
+        }
+
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Helper function to get queue by name
+inline VkQueue get_queue(const CommVkLogicalDeviceContext& ctx, const std::string& queue_name)
+{
+    auto it = ctx.named_queues_.find(queue_name);
+    return (it != ctx.named_queues_.end()) ? it->second : VK_NULL_HANDLE;
+}
+
+/// @brief Helper function to get queue family index by queue flags
+inline std::optional<uint32_t> find_queue_family(const CommVkLogicalDeviceContext& ctx, VkQueueFlags queue_flags)
+{
+    for (uint32_t i = 0; i < ctx.queue_family_properties_.size(); i++)
+    {
+        if ((ctx.queue_family_properties_[i].queueFlags & queue_flags) == queue_flags)
+        {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+/// @brief Helper function to get all queues from a family
+inline std::vector<VkQueue> get_family_queues(const CommVkLogicalDeviceContext& ctx, uint32_t family_index)
+{
+    auto it = ctx.family_queues_.find(family_index);
+    return (it != ctx.family_queues_.end()) ? it->second : std::vector<VkQueue>{};
+}
+
+} // namespace logicaldevice
 
 } // namespace templates::common
 
