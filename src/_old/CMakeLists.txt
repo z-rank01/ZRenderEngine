@@ -23,9 +23,6 @@ add_library(vulkan_old_class STATIC
     vulkan_commandbuffer.h
 )
 
-# 设置编译器标准和选项
-target_compile_features(vulkan_old_class PRIVATE cxx_std_20)
-
 # 设置头文件包含目录
 target_include_directories(vulkan_old_class
     PUBLIC

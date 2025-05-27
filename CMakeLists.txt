@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(VulkanEngine LANGUAGES CXX)
 
-# 启用 C++20 标准
-set(CMAKE_CXX_STANDARD 20)
+# 启用 C++23 标准
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)  # 避免使用编译器特定扩展
 
 # 设置 vcpkg 工具链文件（如果未通过命令行指定）
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
@@ -96,9 +97,17 @@ source_group(
 
 # 查询 Vulkan SDK 路径
 if (Vulkan_FOUND)
-    message(STATUS "Vulkan SDK found at: ${Vulkan_INCLUDE_DIRS}")
-    message(STATUS "Vulkan Libraries: ${Vulkan_LIBRARIES}")
-    message(STATUS "Vulkan Version: ${Vulkan_VERSION}")
+    message(STATUS "Vulkan SDK 位置: ${Vulkan_INCLUDE_DIRS}")
+    message(STATUS "Vulkan Libraries 位置: ${Vulkan_LIBRARIES}")
+    message(STATUS "Vulkan 版本: ${Vulkan_VERSION}")
 else()
     message(FATAL_ERROR "Vulkan SDK not found. Please install the Vulkan SDK.")
 endif()
+
+# 查询 CXX 版本信息
+message(STATUS "C++ 编译器: ${CMAKE_CXX_COMPILER}")
+message(STATUS "C++ 编译器 ID: ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "C++ 编译器版本: ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "C++ 标准: ${CMAKE_CXX_STANDARD}")
+message(STATUS "C++ 标准是否必需: ${CMAKE_CXX_STANDARD_REQUIRED}")
+message(STATUS "C++ 扩展是否启用: ${CMAKE_CXX_EXTENSIONS}")

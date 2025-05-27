@@ -9,17 +9,6 @@ add_library(gltf_helper STATIC
     test.cpp
 )
 
-# 设置编译器标准和选项
-target_compile_features(gltf_helper PRIVATE cxx_std_20)
-
-# 设置 tiny_gltf 的定义
-# target_compile_definitions(gltf_helper 
-#     PRIVATE 
-#         TINYGLTF_IMPLEMENTATION
-#         STB_IMAGE_IMPLEMENTATION
-#         TINYGLTF_NO_STB_IMAGE_WRITE
-# )
-
 # 设置头文件包含目录
 target_include_directories(gltf_helper
     PUBLIC

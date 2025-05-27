@@ -3,9 +3,6 @@ add_library(callable STATIC
     callable.cpp
 )
 
-# 设置编译器标准和选项
-target_compile_features(callable PRIVATE cxx_std_20)
-
 # 设置头文件包含目录
 target_include_directories(callable
     PUBLIC
