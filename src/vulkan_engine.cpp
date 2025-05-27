@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan_core.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <thread>
@@ -244,26 +245,26 @@ void VulkanEngine::InitializeCamera()
         std::vector<SMvpMatrix>(engine_config_.frame_count, {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f)});
 
     // initialize camera
-    camera_.position          = glm::vec3(0.0f, 0.0f, 10.0f); // 更远的初始距离
-    camera_.yaw               = -90.0f;                       // look at origin
-    camera_.pitch             = 0.0f;                         // horizontal view
-    camera_.wheel_speed       = 0.1f;                         // 降低滚轮速度，避免变化太剧烈
-    camera_.movement_speed    = 5.0f;                         // 调整移动速度
-    camera_.mouse_sensitivity = 0.2f;                         // 降低鼠标灵敏度
-    camera_.zoom              = 45.0f;
-    camera_.world_up          = glm::vec3(0.0f, 1.0f, 0.0f); // Y-axis is up in Vulkan
+    camera_.position          = glm::vec3(0.0F, 0.0F, 10.0F); // 更远的初始距离
+    camera_.yaw               = -90.0F;                       // look at origin
+    camera_.pitch             = 0.0F;                         // horizontal view
+    camera_.wheel_speed       = 0.1F;                         // 降低滚轮速度，避免变化太剧烈
+    camera_.movement_speed    = 5.0F;                         // 调整移动速度
+    camera_.mouse_sensitivity = 0.2F;                         // 降低鼠标灵敏度
+    camera_.zoom              = 45.0F;
+    camera_.world_up          = glm::vec3(0.0F, 1.0F, 0.0F); // Y-axis is up in Vulkan
 
     // initialize camera vectors
-    camera_.front = glm::vec3(0.0f, 0.0f, -1.0f); // look at -z direction
-    camera_.right = glm::vec3(1.0f, 0.0f, 0.0f);  // right direction is +x
-    camera_.up    = glm::vec3(0.0f, 1.0f, 0.0f);  // up direction is +y (because Y-axis is up in Vulkan)
+    camera_.front = glm::vec3(0.0F, 0.0F, -1.0F); // look at -z direction
+    camera_.right = glm::vec3(1.0F, 0.0F, 0.0F);  // right direction is +x
+    camera_.up    = glm::vec3(0.0F, 1.0F, 0.0F);  // up direction is +y (because Y-axis is up in Vulkan)
 
     // initialize focus point related parameters
-    camera_.focus_point        = glm::vec3(0.0f); // default focus on origin
+    camera_.focus_point        = glm::vec3(0.0F); // default focus on origin
     camera_.has_focus_point    = true;            // default enable focus point
-    camera_.focus_distance     = 10.0f;           // 增加默认焦距
-    camera_.min_focus_distance = 0.5f;            // minimum focus distance
-    camera_.max_focus_distance = 10000.0f;        // maximum focus distance
+    camera_.focus_distance     = 10.0F;           // 增加默认焦距
+    camera_.min_focus_distance = 0.5F;            // minimum focus distance
+    camera_.max_focus_distance = 10000.0F;        // maximum focus distance
 }
 
 // Main loop
@@ -274,14 +275,14 @@ void VulkanEngine::Run()
     SDL_Event event;
 
     Uint64 last_time = SDL_GetTicks();
-    float delta_time = 0.0f;
+    float delta_time = 0.0F;
 
     // main loop
     while (engine_state_ != EWindowState::kStopped)
     {
         // calculate the time difference between frames
         Uint64 current_time = SDL_GetTicks();
-        delta_time          = (current_time - last_time) / 1000.0f; // convert to seconds
+        delta_time          = (current_time - last_time) / 1000.0F; // convert to seconds
         last_time           = current_time;
 
         // handle events on queue
@@ -411,7 +412,7 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
         {
             // Calculate mouse sensitivity scale based on distance to focus point if
             // constraint is enabled
-            float sensitivity_scale = 1.0f;
+            float sensitivity_scale = 1.0F;
             if (camera_.has_focus_point && camera_.focus_constraint_enabled_)
             {
                 float current_distance = glm::length(camera_.position - camera_.focus_point);
@@ -430,10 +431,8 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
             camera_.pitch += actual_y_offset; // Changed from -= to +=
 
             // limit the pitch angle
-            if (camera_.pitch > 89.0f)
-                camera_.pitch = 89.0f;
-            if (camera_.pitch < -89.0f)
-                camera_.pitch = -89.0f;
+            camera_.pitch = std::min(camera_.pitch, 89.0F);
+            camera_.pitch = std::max(camera_.pitch, -89.0F);
 
             // calculate the new camera direction and update vectors
             camera_.UpdateCameraVectors();
@@ -450,7 +449,7 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
                                               camera_.min_focus_distance / camera_.focus_distance,
                                               camera_.max_focus_distance / camera_.focus_distance);
 
-            float pan_speed_multiplier = 0.005f;
+            float pan_speed_multiplier = 0.005F;
             // Apply distance scaling to pan speed if focus constraint is enabled
             float actual_pan_speed_multiplier =
                 camera_.focus_constraint_enabled_ ? pan_speed_multiplier / distance_scale : pan_speed_multiplier;
@@ -473,14 +472,14 @@ void VulkanEngine::ProcessInput(SDL_Event& event)
 
         if (event.wheel.y > 0)
         {
-            if (distance > 0.5f)
+            if (distance > 0.5F)
             {
-                camera_.position *= (1.0f - zoom_factor);
+                camera_.position *= (1.0F - zoom_factor);
             }
         }
         else if (event.wheel.y < 0)
         {
-            camera_.position *= (1.0f + zoom_factor);
+            camera_.position *= (1.0F + zoom_factor);
         }
 
         ProcessMouseScroll(static_cast<float>(event.wheel.y));
@@ -500,7 +499,7 @@ void VulkanEngine::ProcessKeyboardInput(float delta_time)
     {
         // Calculate movement speed scale based on distance to focus point if
         // constraint is enabled
-        float distance_scale = 1.0f;
+        float distance_scale = 1.0F;
         if (camera_.has_focus_point && camera_.focus_constraint_enabled_)
         {
             float current_distance = glm::length(camera_.position - camera_.focus_point);
@@ -511,7 +510,7 @@ void VulkanEngine::ProcessKeyboardInput(float delta_time)
         float current_velocity = velocity / distance_scale; // Slower when closer
 
         // move in the screen space
-        glm::vec3 movement(0.0f);
+        glm::vec3 movement(0.0F);
 
         // move front/back (Z-axis relative to camera)
         if (keyboard_state[SDL_SCANCODE_W] || keyboard_state[SDL_SCANCODE_UP])
@@ -549,7 +548,7 @@ void VulkanEngine::ProcessKeyboardInput(float delta_time)
     else // Original screen space movement logic
     {
         // move in the screen space
-        glm::vec3 movement(0.0f);
+        glm::vec3 movement(0.0F);
 
         // move up (Y-axis)
         if (keyboard_state[SDL_SCANCODE_W] || keyboard_state[SDL_SCANCODE_UP])
@@ -594,7 +593,7 @@ void VulkanEngine::ProcessMouseScroll(float yoffset)
     if (camera_.has_focus_point && camera_.focus_constraint_enabled_)
     {
         // Zoom by moving along the camera's front vector
-        float zoom_step = camera_.movement_speed * 0.5f; // Adjust zoom speed
+        float zoom_step = camera_.movement_speed * 0.5F; // Adjust zoom speed
 
         // Calculate distance scale
         float current_distance = glm::length(camera_.position - camera_.focus_point);
@@ -620,10 +619,8 @@ void VulkanEngine::ProcessMouseScroll(float yoffset)
     {
         // Original FOV zoom logic when focus constraint is disabled
         camera_.zoom -= yoffset;
-        if (camera_.zoom < 1.0f)
-            camera_.zoom = 1.0f;
-        if (camera_.zoom > 45.0f)
-            camera_.zoom = 45.0f;
+        camera_.zoom = std::max(camera_.zoom, 1.0F);
+        camera_.zoom = std::min(camera_.zoom, 45.0F);
     }
 }
 
@@ -777,7 +774,7 @@ bool VulkanEngine::CreateLogicalDevice()
         return false;
     }
     comm_vk_logical_device_context_ = std::get<common::CommVkLogicalDeviceContext>(result);
-    comm_vk_logical_device_ = comm_vk_logical_device_context_.vk_logical_device_;
+    comm_vk_logical_device_         = comm_vk_logical_device_context_.vk_logical_device_;
     comm_vk_graphics_queue_ = common::logicaldevice::get_queue(comm_vk_logical_device_context_, "main_graphics");
     comm_vk_transfer_queue_ = common::logicaldevice::get_queue(comm_vk_logical_device_context_, "upload");
     std::cout << "Successfully created Vulkan logical device." << '\n';
@@ -787,7 +784,8 @@ bool VulkanEngine::CreateLogicalDevice()
 bool VulkanEngine::CreateSwapChain()
 {
     // vkb::SwapchainBuilder swapchain_builder{vkb_device_};
-    // auto swap_ret = swapchain_builder.set_desired_format({VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
+    // auto swap_ret = swapchain_builder.set_desired_format({VK_FORMAT_B8G8R8A8_UNORM,
+    // VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
     //                     .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
     //                     .set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height)
     //                     .set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
@@ -802,15 +800,13 @@ bool VulkanEngine::CreateSwapChain()
     // vkb_swapchain_ = swap_ret.value();
 
     // create swapchain
-    auto swapchain_chain = common::swapchain::create_swapchain_context(comm_vk_logical_device_context_, vkWindowHelper_->GetSurface()) |
-                           common::swapchain::set_surface_format(VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) |
-                           common::swapchain::set_present_mode(VK_PRESENT_MODE_FIFO_KHR) |
-                           common::swapchain::set_image_count(2, 3) | 
-                           common::swapchain::set_desired_extent(engine_config_.window_config.width,
-                                                                 engine_config_.window_config.height) |
-                           common::swapchain::query_surface_support() |
-                           common::swapchain::select_swapchain_settings() |
-                           common::swapchain::create_swapchain();
+    auto swapchain_chain =
+        common::swapchain::create_swapchain_context(comm_vk_logical_device_context_, vkWindowHelper_->GetSurface()) |
+        common::swapchain::set_surface_format(VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) |
+        common::swapchain::set_present_mode(VK_PRESENT_MODE_FIFO_KHR) | common::swapchain::set_image_count(2, 3) |
+        common::swapchain::set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height) |
+        common::swapchain::query_surface_support() | common::swapchain::select_swapchain_settings() |
+        common::swapchain::create_swapchain();
 
     auto result = swapchain_chain.evaluate();
     if (!callable::is_ok(result))
@@ -825,7 +821,7 @@ bool VulkanEngine::CreateSwapChain()
 
     // create swapchain images and image views
     auto swapchain_image_related_chain = callable::make_chain(std::move(tmp_swapchain_ctx)) |
-                                         common::swapchain::get_swapchain_images() | 
+                                         common::swapchain::get_swapchain_images() |
                                          common::swapchain::create_image_views();
     auto swapchain_image_result = swapchain_image_related_chain.evaluate();
     if (!callable::is_ok(swapchain_image_result))
@@ -839,14 +835,15 @@ bool VulkanEngine::CreateSwapChain()
 
     // get final swapchain context
     comm_vk_swapchain_context_ = std::get<common::CommVkSwapchainContext>(swapchain_image_result);
-    comm_vk_swapchain_ = comm_vk_swapchain_context_.vk_swapchain_;
+    comm_vk_swapchain_         = comm_vk_swapchain_context_.vk_swapchain_;
 
     // fill in swapchain config
-    swapchain_config_.target_surface_format_.format     = comm_vk_swapchain_context_.swapchain_info_.surface_format_.format;
-    swapchain_config_.target_surface_format_.colorSpace = comm_vk_swapchain_context_.swapchain_info_.surface_format_.colorSpace;
-    swapchain_config_.target_present_mode_              = comm_vk_swapchain_context_.swapchain_info_.present_mode_;
-    swapchain_config_.target_swap_extent_               = comm_vk_swapchain_context_.swapchain_info_.extent_;
-    swapchain_config_.target_image_count_               = comm_vk_swapchain_context_.swapchain_info_.image_count_;
+    swapchain_config_.target_surface_format_.format = comm_vk_swapchain_context_.swapchain_info_.surface_format_.format;
+    swapchain_config_.target_surface_format_.colorSpace =
+        comm_vk_swapchain_context_.swapchain_info_.surface_format_.colorSpace;
+    swapchain_config_.target_present_mode_ = comm_vk_swapchain_context_.swapchain_info_.present_mode_;
+    swapchain_config_.target_swap_extent_  = comm_vk_swapchain_context_.swapchain_info_.extent_;
+    swapchain_config_.target_image_count_  = comm_vk_swapchain_context_.swapchain_info_.image_count_;
     swapchain_config_.device_extensions_.clear();
     swapchain_config_.device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
