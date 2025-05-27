@@ -239,6 +239,12 @@ struct CommVkPhysicalDeviceContext
     VkPhysicalDeviceMemoryProperties memory_properties_{};
     std::vector<VkQueueFamilyProperties> queue_family_properties_;
     std::vector<VkExtensionProperties> available_extensions_;
+
+    // swapchain support info (added for swapchain creation)
+    VkSurfaceCapabilitiesKHR surface_capabilities_{};
+    std::vector<VkSurfaceFormatKHR> surface_formats_;
+    std::vector<VkPresentModeKHR> present_modes_;
+    bool swapchain_support_queried_ = false;
 };
 
 namespace physicaldevice
@@ -1065,6 +1071,520 @@ inline std::vector<VkQueue> get_family_queues(const CommVkLogicalDeviceContext& 
 }
 
 } // namespace logicaldevice
+
+/// -------------------------------------
+/// swapchain templated functions: common
+/// -------------------------------------
+
+/// @brief Vulkan swapchain context with lazy evaluation support
+struct CommVkSwapchainContext
+{
+    // parent contexts
+    VkDevice vk_logical_device_     = VK_NULL_HANDLE;
+    VkPhysicalDevice vk_physical_device_ = VK_NULL_HANDLE;
+    VkSurfaceKHR vk_surface_        = VK_NULL_HANDLE;
+
+    // swapchain configuration
+    struct SwapchainConfig
+    {
+        // surface preferences
+        VkSurfaceFormatKHR preferred_surface_format_{VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+        VkPresentModeKHR preferred_present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
+        
+        // extent configuration
+        VkExtent2D desired_extent_{800, 600};
+        bool use_current_extent_ = true; // use surface's current extent
+        
+        // image configuration
+        uint32_t min_image_count_ = 2;
+        uint32_t desired_image_count_ = 3; // triple buffering
+        VkImageUsageFlags image_usage_ = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        
+        // sharing mode
+        VkSharingMode sharing_mode_ = VK_SHARING_MODE_EXCLUSIVE;
+        std::vector<uint32_t> queue_family_indices_;
+        
+        // transform and alpha
+        VkSurfaceTransformFlagBitsKHR pre_transform_ = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        VkCompositeAlphaFlagBitsKHR composite_alpha_ = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        
+        // misc
+        VkBool32 clipped_ = VK_TRUE;
+        VkSwapchainKHR old_swapchain_ = VK_NULL_HANDLE;
+        
+        // fallback options
+        std::vector<VkSurfaceFormatKHR> fallback_surface_formats_;
+        std::vector<VkPresentModeKHR> fallback_present_modes_;
+    } swapchain_config_;
+
+    // surface support info
+    VkSurfaceCapabilitiesKHR surface_capabilities_{};
+    std::vector<VkSurfaceFormatKHR> available_surface_formats_;
+    std::vector<VkPresentModeKHR> available_present_modes_;
+
+    // final swapchain info
+    struct SwapchainInfo
+    {
+        VkSurfaceFormatKHR surface_format_{};
+        VkPresentModeKHR present_mode_{};
+        VkExtent2D extent_{};
+        uint32_t image_count_ = 0;
+    } swapchain_info_;
+
+    // vulkan natives
+    VkSwapchainKHR vk_swapchain_ = VK_NULL_HANDLE;
+    std::vector<VkImage> swapchain_images_;
+    std::vector<VkImageView> swapchain_image_views_;
+};
+
+namespace swapchain
+{
+
+/// @brief Creates initial swapchain context from logical device context
+inline auto create_swapchain_context(const CommVkLogicalDeviceContext& logical_device_ctx, VkSurfaceKHR surface)
+{
+    return callable::make_chain(
+        [logical_device_ctx, surface]() -> CommVkSwapchainContext
+        {
+            CommVkSwapchainContext ctx;
+            ctx.vk_logical_device_ = logical_device_ctx.vk_logical_device_;
+            ctx.vk_physical_device_ = logical_device_ctx.vk_physical_device_;
+            ctx.vk_surface_ = surface;
+            return ctx;
+        }());
+}
+
+/// @brief Sets preferred surface format
+inline auto set_surface_format(VkFormat format, VkColorSpaceKHR color_space)
+{
+    return [format, color_space](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.preferred_surface_format_.format = format;
+        ctx.swapchain_config_.preferred_surface_format_.colorSpace = color_space;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets preferred present mode
+inline auto set_present_mode(VkPresentModeKHR present_mode)
+{
+    return [present_mode](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.preferred_present_mode_ = present_mode;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets desired extent (only used if use_current_extent is false)
+inline auto set_desired_extent(uint32_t width, uint32_t height)
+{
+    return [width, height](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.desired_extent_ = {.width=width, .height=height};
+        ctx.swapchain_config_.use_current_extent_ = false;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets whether to use surface's current extent
+inline auto use_current_extent(bool use_current = true)
+{
+    return [use_current](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.use_current_extent_ = use_current;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets desired image count
+inline auto set_image_count(uint32_t min_images, uint32_t desired_images = 0)
+{
+    return [min_images, desired_images](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.min_image_count_ = min_images;
+        ctx.swapchain_config_.desired_image_count_ = (desired_images == 0) ? min_images : desired_images;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets image usage flags
+inline auto set_image_usage(VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+{
+    return [usage](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.image_usage_ = usage;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets sharing mode and queue family indices
+inline auto set_sharing_mode(VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE, const std::vector<uint32_t>& queue_family_indices = {})
+{
+    return [sharing_mode, queue_family_indices](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.sharing_mode_ = sharing_mode;
+        ctx.swapchain_config_.queue_family_indices_ = queue_family_indices;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets composite alpha
+inline auto set_composite_alpha(VkCompositeAlphaFlagBitsKHR composite_alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+{
+    return [composite_alpha](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.composite_alpha_ = composite_alpha;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Sets old swapchain for recreation
+inline auto set_old_swapchain(VkSwapchainKHR old_swapchain)
+{
+    return [old_swapchain](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.old_swapchain_ = old_swapchain;
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Adds fallback surface formats
+inline auto add_fallback_surface_formats(const std::vector<VkSurfaceFormatKHR>& formats)
+{
+    return [formats](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.fallback_surface_formats_.insert(
+            ctx.swapchain_config_.fallback_surface_formats_.end(), formats.begin(), formats.end());
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Adds fallback present modes
+inline auto add_fallback_present_modes(const std::vector<VkPresentModeKHR>& present_modes)
+{
+    return [present_modes](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_config_.fallback_present_modes_.insert(
+            ctx.swapchain_config_.fallback_present_modes_.end(), present_modes.begin(), present_modes.end());
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Queries surface support capabilities
+inline auto query_surface_support()
+{
+    return [](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        // Query surface capabilities
+        VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+            ctx.vk_physical_device_, ctx.vk_surface_, &ctx.surface_capabilities_);
+        if (result != VK_SUCCESS)
+        {
+            return callable::Chainable<CommVkSwapchainContext>(
+                callable::error<CommVkSwapchainContext>("Failed to query surface capabilities"));
+        }
+
+        // Query surface formats
+        uint32_t format_count = 0;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(ctx.vk_physical_device_, ctx.vk_surface_, &format_count, nullptr);
+        if (format_count != 0)
+        {
+            ctx.available_surface_formats_.resize(format_count);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(
+                ctx.vk_physical_device_, ctx.vk_surface_, &format_count, ctx.available_surface_formats_.data());
+        }
+
+        // Query present modes
+        uint32_t present_mode_count = 0;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(
+            ctx.vk_physical_device_, ctx.vk_surface_, &present_mode_count, nullptr);
+        if (present_mode_count != 0)
+        {
+            ctx.available_present_modes_.resize(present_mode_count);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(
+                ctx.vk_physical_device_, ctx.vk_surface_, &present_mode_count, ctx.available_present_modes_.data());
+        }
+
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Selects optimal swapchain settings
+inline auto select_swapchain_settings()
+{
+    return [](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        // Select surface format
+        auto select_surface_format = [&ctx]() -> VkSurfaceFormatKHR
+        {
+            // Check preferred format
+            auto preferred_format = std::ranges::find_if(
+                ctx.available_surface_formats_,
+                [&ctx](const VkSurfaceFormatKHR& format)
+                {
+                    return format.format == ctx.swapchain_config_.preferred_surface_format_.format &&
+                           format.colorSpace == ctx.swapchain_config_.preferred_surface_format_.colorSpace;
+                });
+
+            if (preferred_format != ctx.available_surface_formats_.end())
+            {
+                return *preferred_format;
+            }
+
+            // Check fallback formats
+            for (const auto& fallback : ctx.swapchain_config_.fallback_surface_formats_)
+            {
+                auto fallback_format = std::ranges::find_if(
+                    ctx.available_surface_formats_,
+                    [&fallback](const VkSurfaceFormatKHR& format)
+                    {
+                        return format.format == fallback.format && format.colorSpace == fallback.colorSpace;
+                    });
+
+                if (fallback_format != ctx.available_surface_formats_.end())
+                {
+                    return *fallback_format;
+                }
+            }
+
+            // Use very default format or first available format
+            return ctx.available_surface_formats_.empty() 
+                ? VkSurfaceFormatKHR{VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}
+                : ctx.available_surface_formats_[0];
+        };
+
+        // Select present mode
+        auto select_present_mode = [&ctx]() -> VkPresentModeKHR
+        {
+            // Check preferred mode
+            auto preferred_mode = std::ranges::find(ctx.available_present_modes_, ctx.swapchain_config_.preferred_present_mode_);
+            if (preferred_mode != ctx.available_present_modes_.end())
+            {
+                return *preferred_mode;
+            }
+
+            // Check fallback modes
+            for (const auto& fallback : ctx.swapchain_config_.fallback_present_modes_)
+            {
+                auto fallback_mode = std::ranges::find(ctx.available_present_modes_, fallback);
+                if (fallback_mode != ctx.available_present_modes_.end())
+                {
+                    return *fallback_mode;
+                }
+            }
+
+            // FIFO is guaranteed to be available
+            return VK_PRESENT_MODE_FIFO_KHR;
+        };
+
+        // Select extent
+        auto select_extent = [&ctx]() -> VkExtent2D
+        {
+            if (ctx.surface_capabilities_.currentExtent.width != UINT32_MAX)
+            {
+                return ctx.surface_capabilities_.currentExtent;
+            }
+            else
+            {
+                VkExtent2D actual_extent = ctx.swapchain_config_.use_current_extent_ 
+                    ? ctx.surface_capabilities_.currentExtent 
+                    : ctx.swapchain_config_.desired_extent_;
+
+                actual_extent.width = std::clamp(actual_extent.width,
+                                                ctx.surface_capabilities_.minImageExtent.width,
+                                                ctx.surface_capabilities_.maxImageExtent.width);
+                actual_extent.height = std::clamp(actual_extent.height,
+                                                 ctx.surface_capabilities_.minImageExtent.height,
+                                                 ctx.surface_capabilities_.maxImageExtent.height);
+                return actual_extent;
+            }
+        };
+
+        // Select image count
+        auto select_image_count = [&ctx]() -> uint32_t
+        {
+            uint32_t image_count = std::max(ctx.swapchain_config_.min_image_count_, 
+                                           ctx.swapchain_config_.desired_image_count_);
+            
+            if (ctx.surface_capabilities_.maxImageCount > 0)
+            {
+                image_count = std::min(image_count, ctx.surface_capabilities_.maxImageCount);
+            }
+            
+            return std::max(image_count, ctx.surface_capabilities_.minImageCount);
+        };
+
+        ctx.swapchain_info_.surface_format_ = select_surface_format();
+        ctx.swapchain_info_.present_mode_ = select_present_mode();
+        ctx.swapchain_info_.extent_ = select_extent();
+        ctx.swapchain_info_.image_count_ = select_image_count();
+
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Creates the swapchain
+inline auto create_swapchain()
+{
+    return [](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        VkSwapchainCreateInfoKHR create_info{};
+        create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        create_info.surface = ctx.vk_surface_;
+        create_info.minImageCount = ctx.swapchain_info_.image_count_;
+        create_info.imageFormat = ctx.swapchain_info_.surface_format_.format;
+        create_info.imageColorSpace = ctx.swapchain_info_.surface_format_.colorSpace;
+        create_info.imageExtent = ctx.swapchain_info_.extent_;
+        create_info.imageArrayLayers = 1;
+        create_info.imageUsage = ctx.swapchain_config_.image_usage_;
+
+        // Configure sharing mode
+        if (ctx.swapchain_config_.sharing_mode_ == VK_SHARING_MODE_CONCURRENT && 
+            !ctx.swapchain_config_.queue_family_indices_.empty())
+        {
+            create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+            create_info.queueFamilyIndexCount = static_cast<uint32_t>(ctx.swapchain_config_.queue_family_indices_.size());
+            create_info.pQueueFamilyIndices = ctx.swapchain_config_.queue_family_indices_.data();
+        }
+        else
+        {
+            create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            create_info.queueFamilyIndexCount = 0;
+            create_info.pQueueFamilyIndices = nullptr;
+        }
+
+        create_info.preTransform = (ctx.swapchain_config_.pre_transform_ == VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) 
+            ? ctx.surface_capabilities_.currentTransform 
+            : ctx.swapchain_config_.pre_transform_;
+        create_info.compositeAlpha = ctx.swapchain_config_.composite_alpha_;
+        create_info.presentMode = ctx.swapchain_info_.present_mode_;
+        create_info.clipped = ctx.swapchain_config_.clipped_;
+        create_info.oldSwapchain = ctx.swapchain_config_.old_swapchain_;
+
+        VkResult result = vkCreateSwapchainKHR(ctx.vk_logical_device_, &create_info, nullptr, &ctx.vk_swapchain_);
+        if (result != VK_SUCCESS)
+        {
+            return callable::Chainable<CommVkSwapchainContext>(
+                callable::error<CommVkSwapchainContext>("Failed to create swapchain. Error: " + std::to_string(result)));
+        }
+
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Retrieves swapchain images
+inline auto get_swapchain_images()
+{
+    return [](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        uint32_t image_count = 0;
+        vkGetSwapchainImagesKHR(ctx.vk_logical_device_, ctx.vk_swapchain_, &image_count, nullptr);
+        
+        ctx.swapchain_images_.resize(image_count);
+        VkResult result = vkGetSwapchainImagesKHR(ctx.vk_logical_device_, ctx.vk_swapchain_, &image_count, ctx.swapchain_images_.data());
+        
+        if (result != VK_SUCCESS)
+        {
+            return callable::Chainable<CommVkSwapchainContext>(
+                callable::error<CommVkSwapchainContext>("Failed to get swapchain images. Error: " + std::to_string(result)));
+        }
+
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Creates swapchain image views
+inline auto create_image_views()
+{
+    return [](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        ctx.swapchain_image_views_.resize(ctx.swapchain_images_.size());
+
+        for (size_t i = 0; i < ctx.swapchain_images_.size(); i++)
+        {
+            VkImageViewCreateInfo view_info{};
+            view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            view_info.image = ctx.swapchain_images_[i];
+            view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            view_info.format = ctx.swapchain_info_.surface_format_.format;
+            view_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            view_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            view_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            view_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            view_info.subresourceRange.baseMipLevel = 0;
+            view_info.subresourceRange.levelCount = 1;
+            view_info.subresourceRange.baseArrayLayer = 0;
+            view_info.subresourceRange.layerCount = 1;
+
+            VkResult result = vkCreateImageView(ctx.vk_logical_device_, &view_info, nullptr, &ctx.swapchain_image_views_[i]);
+            if (result != VK_SUCCESS)
+            {
+                return callable::Chainable<CommVkSwapchainContext>(
+                    callable::error<CommVkSwapchainContext>("Failed to create image view " + std::to_string(i) + ". Error: " + std::to_string(result)));
+            }
+        }
+
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Validates swapchain configuration
+inline auto validate_swapchain()
+{
+    return [](CommVkSwapchainContext ctx) -> callable::Chainable<CommVkSwapchainContext>
+    {
+        if (ctx.vk_swapchain_ == VK_NULL_HANDLE)
+        {
+            return callable::Chainable<CommVkSwapchainContext>(
+                callable::error<CommVkSwapchainContext>("Swapchain not created"));
+        }
+
+        if (ctx.swapchain_images_.empty())
+        {
+            return callable::Chainable<CommVkSwapchainContext>(
+                callable::error<CommVkSwapchainContext>("No swapchain images available"));
+        }
+
+        if (ctx.swapchain_image_views_.size() != ctx.swapchain_images_.size())
+        {
+            return callable::Chainable<CommVkSwapchainContext>(
+                callable::error<CommVkSwapchainContext>("Image view count mismatch"));
+        }
+
+        return callable::make_chain(std::move(ctx));
+    };
+}
+
+/// @brief Helper function to get swapchain extent
+inline VkExtent2D get_swapchain_extent(const CommVkSwapchainContext& ctx)
+{
+    return ctx.swapchain_info_.extent_;
+}
+
+/// @brief Helper function to get swapchain format
+inline VkFormat get_swapchain_format(const CommVkSwapchainContext& ctx)
+{
+    return ctx.swapchain_info_.surface_format_.format;
+}
+
+/// @brief Helper function to get image count
+inline uint32_t get_image_count(const CommVkSwapchainContext& ctx)
+{
+    return static_cast<uint32_t>(ctx.swapchain_images_.size());
+}
+
+/// @brief Helper function to acquire next image
+inline VkResult acquire_next_image(const CommVkSwapchainContext& ctx, 
+                                 uint64_t timeout,
+                                 VkSemaphore semaphore,
+                                 VkFence fence,
+                                 uint32_t* image_index)
+{
+    return vkAcquireNextImageKHR(ctx.vk_logical_device_, ctx.vk_swapchain_, timeout, semaphore, fence, image_index);
+}
+
+} // namespace swapchain
 
 } // namespace templates::common
 

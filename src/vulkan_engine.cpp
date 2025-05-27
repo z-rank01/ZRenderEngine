@@ -6,6 +6,7 @@
 #include <iostream>
 #include <thread>
 
+#include "_callable/callable.h"
 #include "_templates/common.h"
 
 using namespace templates;
@@ -785,27 +786,67 @@ bool VulkanEngine::CreateLogicalDevice()
 
 bool VulkanEngine::CreateSwapChain()
 {
-    vkb::SwapchainBuilder swapchain_builder{vkb_device_};
-    auto swap_ret = swapchain_builder.set_desired_format({VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
-                        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-                        .set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height)
-                        .set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
-                        .build();
+    // vkb::SwapchainBuilder swapchain_builder{vkb_device_};
+    // auto swap_ret = swapchain_builder.set_desired_format({VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
+    //                     .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+    //                     .set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height)
+    //                     .set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+    //                     .build();
 
-    if (!swap_ret)
+    // if (!swap_ret)
+    // {
+    //     std::cout << "Failed to create Vulkan swapchain. Error: " << swap_ret.error().message() << '\n';
+    //     return false;
+    // }
+
+    // vkb_swapchain_ = swap_ret.value();
+
+    // create swapchain
+    auto swapchain_chain = common::swapchain::create_swapchain_context(comm_vk_logical_device_context_, vkWindowHelper_->GetSurface()) |
+                           common::swapchain::set_surface_format(VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) |
+                           common::swapchain::set_present_mode(VK_PRESENT_MODE_FIFO_KHR) |
+                           common::swapchain::set_image_count(2, 3) | 
+                           common::swapchain::set_desired_extent(engine_config_.window_config.width,
+                                                                 engine_config_.window_config.height) |
+                           common::swapchain::query_surface_support() |
+                           common::swapchain::select_swapchain_settings() |
+                           common::swapchain::create_swapchain();
+
+    auto result = swapchain_chain.evaluate();
+    if (!callable::is_ok(result))
     {
-        std::cout << "Failed to create Vulkan swapchain. Error: " << swap_ret.error().message() << '\n';
+        // 处理错误
+        std::string error_msg = std::get<std::string>(result);
+        std::cerr << "Failed to create Vulkan swapchain: " << error_msg << '\n';
         return false;
     }
+    std::cout << "Successfully created Vulkan swapchain." << '\n';
+    auto tmp_swapchain_ctx = std::get<common::CommVkSwapchainContext>(result);
 
-    vkb_swapchain_ = swap_ret.value();
+    // create swapchain images and image views
+    auto swapchain_image_related_chain = callable::make_chain(std::move(tmp_swapchain_ctx)) |
+                                         common::swapchain::get_swapchain_images() | 
+                                         common::swapchain::create_image_views();
+    auto swapchain_image_result = swapchain_image_related_chain.evaluate();
+    if (!callable::is_ok(swapchain_image_result))
+    {
+        // 处理错误
+        std::string error_msg = std::get<std::string>(swapchain_image_result);
+        std::cerr << "Failed to create Vulkan swapchain image views: " << error_msg << '\n';
+        return false;
+    }
+    std::cout << "Successfully created Vulkan swapchain image views." << '\n';
+
+    // get final swapchain context
+    comm_vk_swapchain_context_ = std::get<common::CommVkSwapchainContext>(swapchain_image_result);
+    comm_vk_swapchain_ = comm_vk_swapchain_context_.vk_swapchain_;
 
     // fill in swapchain config
-    swapchain_config_.target_surface_format_.format     = vkb_swapchain_.image_format;
-    swapchain_config_.target_surface_format_.colorSpace = vkb_swapchain_.color_space;
-    swapchain_config_.target_present_mode_              = vkb_swapchain_.present_mode;
-    swapchain_config_.target_swap_extent_               = vkb_swapchain_.extent;
-    swapchain_config_.target_image_count_               = vkb_swapchain_.image_count;
+    swapchain_config_.target_surface_format_.format     = comm_vk_swapchain_context_.swapchain_info_.surface_format_.format;
+    swapchain_config_.target_surface_format_.colorSpace = comm_vk_swapchain_context_.swapchain_info_.surface_format_.colorSpace;
+    swapchain_config_.target_present_mode_              = comm_vk_swapchain_context_.swapchain_info_.present_mode_;
+    swapchain_config_.target_swap_extent_               = comm_vk_swapchain_context_.swapchain_info_.extent_;
+    swapchain_config_.target_image_count_               = comm_vk_swapchain_context_.swapchain_info_.image_count_;
     swapchain_config_.device_extensions_.clear();
     swapchain_config_.device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
@@ -1930,6 +1971,7 @@ void VulkanEngine::ReleaseTestData()
 
 void VulkanEngine::release_common_templates_test_data()
 {
-    vkDestroyInstance(comm_vk_instance_, nullptr);
+    vkDestroySwapchainKHR(comm_vk_logical_device_, comm_vk_swapchain_, nullptr);
     vkDestroyDevice(comm_vk_logical_device_, nullptr);
+    vkDestroyInstance(comm_vk_instance_, nullptr);
 }

@@ -268,8 +268,11 @@ private:
   VkDevice comm_vk_logical_device_;
   VkQueue comm_vk_graphics_queue_;
   VkQueue comm_vk_transfer_queue_;
+  VkSwapchainKHR comm_vk_swapchain_;
+  templates::common::CommVkInstanceContext comm_vk_instance_context_;
   templates::common::CommVkPhysicalDeviceContext comm_vk_physical_device_context_;
   templates::common::CommVkLogicalDeviceContext comm_vk_logical_device_context_;
+  templates::common::CommVkSwapchainContext comm_vk_swapchain_context_;
 
   void release_common_templates_test_data();
 
