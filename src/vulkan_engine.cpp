@@ -32,12 +32,6 @@ void VulkanEngine::Initialize()
     InitializeSDL();
     InitializeCamera();
     InitializeVulkan();
-
-    // test gltf model
-    // test_vulkan_gltf_model_ =
-    // std::make_unique<TestVulkanglTFModel>(vkb_device_.device,
-    // vkb_device_.get_queue(vkb::QueueType::graphics).value());
-    // test_vulkan_gltf_model_->LoadGLTF("E:\\Assets\\Sponza\\SponzaBase\\NewSponza_Main_glTF_003.gltf");
 }
 
 void VulkanEngine::GetVertexIndexData(std::vector<gltf::PerDrawCallData> per_draw_call_data,
@@ -118,8 +112,8 @@ VulkanEngine::~VulkanEngine()
         vma_allocator_ = VK_NULL_HANDLE;
     }
 
-    // destroy vkBootstrap swapchain
-    // vkb::destroy_swapchain(vkb_swapchain_);
+    // destroy swapchain related resources
+
     for (auto *image_view : comm_vk_swapchain_context_.swapchain_image_views_)
     {
         vkDestroyImageView(comm_vk_logical_device_, image_view, nullptr);
@@ -127,6 +121,7 @@ VulkanEngine::~VulkanEngine()
     vkDestroySwapchainKHR(comm_vk_logical_device_, comm_vk_swapchain_, nullptr);
 
     // release unique pointer
+
     vkShaderHelper_.reset();
     vkWindowHelper_.reset();
     vkRenderpassHelper_.reset();
@@ -134,10 +129,6 @@ VulkanEngine::~VulkanEngine()
     vkFrameBufferHelper_.reset();
     vkCommandBufferHelper_.reset();
     vkSynchronizationHelper_.reset();
-
-    // destroy vkBootstrap resources
-    // vkb::destroy_device(vkb_device_);
-    // vkb::destroy_instance(vkb_instance_);
 
     // destroy comm test data
     
@@ -1385,9 +1376,7 @@ void VulkanEngine::ResizeSwapChain()
     vkDeviceWaitIdle(comm_vk_logical_device_);
 
     // destroy old vulkan objects
-    // vkb::destroy_swapchain(vkb_swapchain_);
-    
-    // Destroy image views first
+
     for (auto *image_view : comm_vk_swapchain_context_.swapchain_image_views_)
     {
         vkDestroyImageView(comm_vk_logical_device_, image_view, nullptr);

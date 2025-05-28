@@ -167,12 +167,6 @@ private:
   std::unordered_map<std::string, std::vector<VkDeviceSize>>
       mesh_index_offsets_;
 
-  // vulkan bootstrap members
-  // vkb::Instance vkb_instance_;
-  // vkb::PhysicalDevice vkb_physical_device_;
-  // vkb::Device vkb_device_;
-  // vkb::Swapchain vkb_swapchain_;
-
   // vra and vma members
   VmaAllocator vma_allocator_;
   VmaAllocation local_buffer_allocation_;
