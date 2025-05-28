@@ -60,37 +60,37 @@ VulkanEngine::~VulkanEngine()
     ReleaseTestData();
 
     // 等待设备空闲，确保没有正在进行的操作
-    vkDeviceWaitIdle(vkb_device_.device);
+    vkDeviceWaitIdle(comm_vk_logical_device_);
 
     // 销毁深度资源
     if (depth_image_view_ != VK_NULL_HANDLE)
     {
-        vkDestroyImageView(vkb_device_.device, depth_image_view_, nullptr);
+        vkDestroyImageView(comm_vk_logical_device_, depth_image_view_, nullptr);
         depth_image_view_ = VK_NULL_HANDLE;
     }
 
     if (depth_image_ != VK_NULL_HANDLE)
     {
-        vkDestroyImage(vkb_device_.device, depth_image_, nullptr);
+        vkDestroyImage(comm_vk_logical_device_, depth_image_, nullptr);
         depth_image_ = VK_NULL_HANDLE;
     }
 
     if (depth_memory_ != VK_NULL_HANDLE)
     {
-        vkFreeMemory(vkb_device_.device, depth_memory_, nullptr);
+        vkFreeMemory(comm_vk_logical_device_, depth_memory_, nullptr);
         depth_memory_ = VK_NULL_HANDLE;
     }
 
     // 销毁描述符相关资源
     if (descriptor_pool_ != VK_NULL_HANDLE)
     {
-        vkDestroyDescriptorPool(vkb_device_.device, descriptor_pool_, nullptr);
+        vkDestroyDescriptorPool(comm_vk_logical_device_, descriptor_pool_, nullptr);
         descriptor_pool_ = VK_NULL_HANDLE;
     }
 
     if (descriptor_set_layout_ != VK_NULL_HANDLE)
     {
-        vkDestroyDescriptorSetLayout(vkb_device_.device, descriptor_set_layout_, nullptr);
+        vkDestroyDescriptorSetLayout(comm_vk_logical_device_, descriptor_set_layout_, nullptr);
         descriptor_set_layout_ = VK_NULL_HANDLE;
     }
 
@@ -119,7 +119,12 @@ VulkanEngine::~VulkanEngine()
     }
 
     // destroy vkBootstrap swapchain
-    vkb::destroy_swapchain(vkb_swapchain_);
+    // vkb::destroy_swapchain(vkb_swapchain_);
+    for (auto *image_view : comm_vk_swapchain_context_.swapchain_image_views_)
+    {
+        vkDestroyImageView(comm_vk_logical_device_, image_view, nullptr);
+    }
+    vkDestroySwapchainKHR(comm_vk_logical_device_, comm_vk_swapchain_, nullptr);
 
     // release unique pointer
     vkShaderHelper_.reset();
@@ -131,11 +136,13 @@ VulkanEngine::~VulkanEngine()
     vkSynchronizationHelper_.reset();
 
     // destroy vkBootstrap resources
-    vkb::destroy_device(vkb_device_);
-    vkb::destroy_instance(vkb_instance_);
+    // vkb::destroy_device(vkb_device_);
+    // vkb::destroy_instance(vkb_instance_);
 
     // destroy comm test data
-    release_common_templates_test_data();
+    
+    vkDestroyDevice(comm_vk_logical_device_, nullptr);
+    vkDestroyInstance(comm_vk_instance_, nullptr);
 
     // 重置单例指针
     instance = nullptr;
@@ -334,7 +341,7 @@ void VulkanEngine::Run()
     }
 
     // wait until the GPU is completely idle before cleaning up
-    vkDeviceWaitIdle(vkb_device_.device);
+    vkDeviceWaitIdle(comm_vk_logical_device_);
 }
 
 void VulkanEngine::ProcessInput(SDL_Event& event)
@@ -630,9 +637,9 @@ void VulkanEngine::Draw()
     DrawFrame();
 }
 
-// ------------------------------------
+// -------------------------------------
 // private function to create the engine
-// ------------------------------------
+// -------------------------------------
 
 void VulkanEngine::GenerateFrameStructs()
 {
@@ -650,23 +657,6 @@ void VulkanEngine::GenerateFrameStructs()
 
 bool VulkanEngine::CreateInstance()
 {
-    //   vkb::InstanceBuilder builder;
-
-    //   auto inst_ret =
-    //       builder.set_app_name(engine_config_.window_config.title.c_str())
-    //           .set_engine_name("Vulkan Engine")
-    //           .require_api_version(1, 3, 0)
-    //           .use_default_debug_messenger()
-    //           .enable_validation_layers(engine_config_.use_validation_layers)
-    //           .build();
-
-    //   if (!inst_ret) {
-    //     std::cout << "Failed to create Vulkan instance. Error: "
-    //               << inst_ret.error().message() << std::endl;
-    //     return false;
-    //   }
-
-    //   vkb_instance_ = inst_ret.value();
     auto extensions     = vkWindowHelper_->GetWindowExtensions();
     auto instance_chain = common::instance::create_context() | common::instance::set_application_name("My Vulkan App") |
                           common::instance::set_engine_name("My Engine") |
@@ -675,12 +665,10 @@ bool VulkanEngine::CreateInstance()
                           common::instance::add_extensions(extensions) | common::instance::validate_context() |
                           common::instance::create_vk_instance();
 
-    // 只有在调用 evaluate() 时才真正执行
     auto result = instance_chain.evaluate();
 
     if (!callable::is_ok(result))
     {
-        // 处理错误
         std::string error_msg = std::get<std::string>(result);
         std::cerr << "Failed to create Vulkan instance: " << error_msg << '\n';
         return false;
@@ -694,47 +682,26 @@ bool VulkanEngine::CreateInstance()
 bool VulkanEngine::CreateSurface()
 {
     return vkWindowHelper_->CreateSurface(comm_vk_instance_);
-    // return vkWindowHelper_->CreateSurface(vkb_instance_.instance);
 }
 
 bool VulkanEngine::CreatePhysicalDevice()
 {
-    // vulkan 1.3 features
+    // vulkan 1.3 features - 用于检查硬件支持
     VkPhysicalDeviceVulkan13Features features_13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
-    features_13.synchronization2 = 1U;
-
-    // vkb::PhysicalDeviceSelector selector{vkb_instance_};
-    // auto phys_ret = selector.set_surface(vkWindowHelper_->GetSurface())
-    //                     .set_minimum_version(1, 3)
-    //                     .set_required_features_13(features_13)
-    //                     .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
-    //                     .require_present()
-    //                     .select();
-
-    // if (!phys_ret)
-    // {
-    //     std::cout << "Failed to select Vulkan Physical Device. Error: " << phys_ret.error().message() << std::endl;
-    //     return false;
-    // }
-
-    // vkb_physical_device_ = phys_ret.value();
-    // return true;
+    features_13.synchronization2 = VK_TRUE;
 
     auto physical_device_chain = common::physicaldevice::create_physical_device_context(comm_vk_instance_) |
                                  common::physicaldevice::set_surface(vkWindowHelper_->GetSurface()) |
                                  common::physicaldevice::require_api_version(1, 3, 0) |
                                  common::physicaldevice::require_features_13(features_13) |
-                                 common::physicaldevice::require_queue(VK_QUEUE_GRAPHICS_BIT,
-                                                                       1,    // minimum queue count
-                                                                       true) // require present support
-                                 | common::physicaldevice::prefer_discrete_gpu() |
+                                 common::physicaldevice::require_queue(VK_QUEUE_GRAPHICS_BIT, 1, true) |
+                                 common::physicaldevice::prefer_discrete_gpu() |
                                  common::physicaldevice::select_physical_device();
 
     auto result = physical_device_chain.evaluate();
 
     if (!callable::is_ok(result))
     {
-        // 处理错误
         std::string error_msg = std::get<std::string>(result);
         std::cerr << "Failed to create Vulkan physical device: " << error_msg << '\n';
         return false;
@@ -748,16 +715,6 @@ bool VulkanEngine::CreatePhysicalDevice()
 
 bool VulkanEngine::CreateLogicalDevice()
 {
-    // vkb::DeviceBuilder device_builder{vkb_physical_device_};
-    // auto dev_ret = device_builder.build();
-    // if (!dev_ret)
-    // {
-    //     std::cout << "Failed to create Vulkan device. Error: " << dev_ret.error().message() << '\n';
-    //     return false;
-    // }
-
-    // vkb_device_ = dev_ret.value();
-    // return true;
     auto device_chain = common::logicaldevice::create_logical_device_context(comm_vk_physical_device_context_) |
                         common::logicaldevice::require_extensions({VK_KHR_SWAPCHAIN_EXTENSION_NAME}) |
                         common::logicaldevice::add_graphics_queue("main_graphics", vkWindowHelper_->GetSurface()) |
@@ -768,7 +725,6 @@ bool VulkanEngine::CreateLogicalDevice()
     auto result = device_chain.evaluate();
     if (!callable::is_ok(result))
     {
-        // 处理错误
         std::string error_msg = std::get<std::string>(result);
         std::cerr << "Failed to create Vulkan logical device: " << error_msg << '\n';
         return false;
@@ -783,35 +739,22 @@ bool VulkanEngine::CreateLogicalDevice()
 
 bool VulkanEngine::CreateSwapChain()
 {
-    // vkb::SwapchainBuilder swapchain_builder{vkb_device_};
-    // auto swap_ret = swapchain_builder.set_desired_format({VK_FORMAT_B8G8R8A8_UNORM,
-    // VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
-    //                     .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-    //                     .set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height)
-    //                     .set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
-    //                     .build();
-
-    // if (!swap_ret)
-    // {
-    //     std::cout << "Failed to create Vulkan swapchain. Error: " << swap_ret.error().message() << '\n';
-    //     return false;
-    // }
-
-    // vkb_swapchain_ = swap_ret.value();
-
     // create swapchain
+
     auto swapchain_chain =
         common::swapchain::create_swapchain_context(comm_vk_logical_device_context_, vkWindowHelper_->GetSurface()) |
         common::swapchain::set_surface_format(VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) |
-        common::swapchain::set_present_mode(VK_PRESENT_MODE_FIFO_KHR) | common::swapchain::set_image_count(2, 3) |
-        common::swapchain::set_desired_extent(engine_config_.window_config.width, engine_config_.window_config.height) |
-        common::swapchain::query_surface_support() | common::swapchain::select_swapchain_settings() |
+        common::swapchain::set_present_mode(VK_PRESENT_MODE_FIFO_KHR) | 
+        common::swapchain::set_image_count(2, 3) |
+        common::swapchain::set_desired_extent(static_cast<uint32_t>(engine_config_.window_config.width),
+                                              static_cast<uint32_t>(engine_config_.window_config.height)) |
+        common::swapchain::query_surface_support() | 
+        common::swapchain::select_swapchain_settings() |
         common::swapchain::create_swapchain();
 
     auto result = swapchain_chain.evaluate();
     if (!callable::is_ok(result))
     {
-        // 处理错误
         std::string error_msg = std::get<std::string>(result);
         std::cerr << "Failed to create Vulkan swapchain: " << error_msg << '\n';
         return false;
@@ -820,13 +763,13 @@ bool VulkanEngine::CreateSwapChain()
     auto tmp_swapchain_ctx = std::get<common::CommVkSwapchainContext>(result);
 
     // create swapchain images and image views
+
     auto swapchain_image_related_chain = callable::make_chain(std::move(tmp_swapchain_ctx)) |
                                          common::swapchain::get_swapchain_images() |
                                          common::swapchain::create_image_views();
     auto swapchain_image_result = swapchain_image_related_chain.evaluate();
     if (!callable::is_ok(swapchain_image_result))
     {
-        // 处理错误
         std::string error_msg = std::get<std::string>(swapchain_image_result);
         std::cerr << "Failed to create Vulkan swapchain image views: " << error_msg << '\n';
         return false;
@@ -837,50 +780,47 @@ bool VulkanEngine::CreateSwapChain()
     comm_vk_swapchain_context_ = std::get<common::CommVkSwapchainContext>(swapchain_image_result);
     comm_vk_swapchain_         = comm_vk_swapchain_context_.vk_swapchain_;
 
-    // fill in swapchain config
-    swapchain_config_.target_surface_format_.format = comm_vk_swapchain_context_.swapchain_info_.surface_format_.format;
-    swapchain_config_.target_surface_format_.colorSpace =
-        comm_vk_swapchain_context_.swapchain_info_.surface_format_.colorSpace;
-    swapchain_config_.target_present_mode_ = comm_vk_swapchain_context_.swapchain_info_.present_mode_;
-    swapchain_config_.target_swap_extent_  = comm_vk_swapchain_context_.swapchain_info_.extent_;
-    swapchain_config_.target_image_count_  = comm_vk_swapchain_context_.swapchain_info_.image_count_;
-    swapchain_config_.device_extensions_.clear();
-    swapchain_config_.device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-
     return true;
 }
 
 bool VulkanEngine::CreateCommandPool()
 {
     vkCommandBufferHelper_ = std::make_unique<VulkanCommandBufferHelper>();
-    return vkCommandBufferHelper_->CreateCommandPool(vkb_device_.device,
-                                                     vkb_device_.get_queue_index(vkb::QueueType::graphics).value());
+
+    auto queue_family_index =
+        common::logicaldevice::find_optimal_queue_family(comm_vk_logical_device_context_, VK_QUEUE_GRAPHICS_BIT);
+    if (!queue_family_index.has_value())
+    {
+        std::cerr << "Failed to find any suitable graphics queue family." << '\n';
+        return false;
+    }
+    return vkCommandBufferHelper_->CreateCommandPool(comm_vk_logical_device_, queue_family_index.value());
 }
 
 bool VulkanEngine::CreateVertexInputBuffers()
 {
     struct Vertex
     {
-        glm::vec2 pos;
-        glm::vec3 color;
+        glm::vec2 pos_;
+        glm::vec3 color_;
     };
 
     // raw data
-    const std::vector<Vertex> vertices = {
-        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}}, // 顶点 - 红色
-        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},  // 右下 - 绿色
-        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}  // 左下 - 蓝色
+    const std::vector<Vertex> kVertices = {
+        {.pos_ = {0.0F, -0.5F}, .color_ = {1.0F, 0.0F, 0.0F}}, // 顶点 - 红色
+        {.pos_ = {0.5F, 0.5F}, .color_ = {0.0F, 1.0F, 0.0F}},  // 右下 - 绿色
+        {.pos_ = {-0.5F, 0.5F}, .color_ = {0.0F, 0.0F, 1.0F}}  // 左下 - 蓝色
     };
-    const std::vector<uint16_t> indices = {
+    const std::vector<uint16_t> kIndices = {
         0, 1, 2 // 逆时针顺序
     };
     vra::VraRawData vertex_raw_data{
-        vertices.data(),                 // pData_
-        vertices.size() * sizeof(Vertex) // size_
+        .pData_ = kVertices.data(),                 // pData_
+        .size_  = kVertices.size() * sizeof(Vertex) // size_
     };
     vra::VraRawData index_raw_data{
-        indices.data(),                   // pData_
-        indices.size() * sizeof(uint16_t) // size_
+        .pData_ = kIndices.data(),                   // pData_
+        .size_  = kIndices.size() * sizeof(uint16_t) // size_
     };
 
     // vertex buffer create info
@@ -983,7 +923,7 @@ bool VulkanEngine::CreateUniformBuffers()
 {
     for (int i = 0; i < engine_config_.frame_count; ++i)
     {
-        auto current_mvp_matrix               = mvp_matrices_[i];
+        auto current_mvp_matrix   = mvp_matrices_[i];
         VkBufferCreateInfo buffer_create_info = {};
         buffer_create_info.sType              = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         buffer_create_info.usage              = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
@@ -991,9 +931,9 @@ bool VulkanEngine::CreateUniformBuffers()
         buffer_create_info.size               = sizeof(SMvpMatrix);
         vra::VraDataDesc data_desc{
             vra::VraDataMemoryPattern::CPU_GPU, vra::VraDataUpdateRate::Frequent, buffer_create_info};
-        vra::VraRawData raw_data{&current_mvp_matrix, sizeof(SMvpMatrix)};
+        vra::VraRawData raw_data{.pData_ = &current_mvp_matrix, .size_ = sizeof(SMvpMatrix)};
         uniform_buffer_id_.push_back(0);
-        vra_data_batcher_->Collect(data_desc, std::move(raw_data), uniform_buffer_id_.back());
+        vra_data_batcher_->Collect(data_desc, raw_data, uniform_buffer_id_.back());
     }
 
     uniform_batch_handle_ = vra_data_batcher_->Batch();
@@ -1007,17 +947,14 @@ bool VulkanEngine::CreateUniformBuffers()
     allocation_create_info.flags = vra_data_batcher_->GetSuggestVmaMemoryFlags(vra::VraDataMemoryPattern::CPU_GPU,
                                                                                vra::VraDataUpdateRate::Frequent);
     allocation_create_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    if (!Logger::LogWithVkResult(vmaCreateBuffer(vma_allocator_,
-                                                 &uniform_buffer_create_info,
-                                                 &allocation_create_info,
-                                                 &uniform_buffer_,
-                                                 &uniform_buffer_allocation_,
-                                                 &uniform_buffer_allocation_info_),
-                                 "Failed to create uniform buffer",
-                                 "Succeeded in creating uniform buffer"))
-        return false;
-
-    return true;
+    return Logger::LogWithVkResult(vmaCreateBuffer(vma_allocator_,
+                                                   &uniform_buffer_create_info,
+                                                   &allocation_create_info,
+                                                   &uniform_buffer_,
+                                                   &uniform_buffer_allocation_,
+                                                   &uniform_buffer_allocation_info_),
+                                   "Failed to create uniform buffer",
+                                   "Succeeded in creating uniform buffer");
 }
 
 bool VulkanEngine::CreateAndWriteDescriptorRelatives()
@@ -1035,7 +972,7 @@ bool VulkanEngine::CreateAndWriteDescriptorRelatives()
     pool_info.pPoolSizes    = &pool_size;
     pool_info.maxSets       = 1;
 
-    if (!Logger::LogWithVkResult(vkCreateDescriptorPool(vkb_device_.device, &pool_info, nullptr, &descriptor_pool_),
+    if (!Logger::LogWithVkResult(vkCreateDescriptorPool(comm_vk_logical_device_, &pool_info, nullptr, &descriptor_pool_),
                                  "Failed to create descriptor pool",
                                  "Succeeded in creating descriptor pool"))
         return false;
@@ -1054,7 +991,7 @@ bool VulkanEngine::CreateAndWriteDescriptorRelatives()
     layout_info.pBindings    = &layout_binding;
 
     if (!Logger::LogWithVkResult(
-            vkCreateDescriptorSetLayout(vkb_device_.device, &layout_info, nullptr, &descriptor_set_layout_),
+            vkCreateDescriptorSetLayout(comm_vk_logical_device_, &layout_info, nullptr, &descriptor_set_layout_),
             "Failed to create descriptor set layout",
             "Succeeded in creating descriptor set layout"))
         return false;
@@ -1067,7 +1004,7 @@ bool VulkanEngine::CreateAndWriteDescriptorRelatives()
     alloc_info.descriptorSetCount = 1;
     alloc_info.pSetLayouts        = &descriptor_set_layout_;
 
-    if (!Logger::LogWithVkResult(vkAllocateDescriptorSets(vkb_device_.device, &alloc_info, &descriptor_set_),
+    if (!Logger::LogWithVkResult(vkAllocateDescriptorSets(comm_vk_logical_device_, &alloc_info, &descriptor_set_),
                                  "Failed to allocate descriptor set",
                                  "Succeeded in allocating descriptor set"))
         return false;
@@ -1087,7 +1024,7 @@ bool VulkanEngine::CreateAndWriteDescriptorRelatives()
     descriptor_write.descriptorCount = 1;
     descriptor_write.pBufferInfo     = &buffer_info;
 
-    vkUpdateDescriptorSets(vkb_device_.device, 1, &descriptor_write, 0, nullptr);
+    vkUpdateDescriptorSets(comm_vk_logical_device_, 1, &descriptor_write, 0, nullptr);
 
     return true;
 }
@@ -1095,21 +1032,18 @@ bool VulkanEngine::CreateAndWriteDescriptorRelatives()
 bool VulkanEngine::CreateVmaVraObjects()
 {
     // vra and vma members
-    vra_data_batcher_ = std::make_unique<vra::VraDataBatcher>(vkb_physical_device_.physical_device);
+    vra_data_batcher_ = std::make_unique<vra::VraDataBatcher>(comm_vk_physical_device_);
 
     VmaAllocatorCreateInfo allocatorCreateInfo = {};
     allocatorCreateInfo.flags                  = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
     allocatorCreateInfo.vulkanApiVersion       = VK_API_VERSION_1_3;
-    allocatorCreateInfo.physicalDevice         = vkb_physical_device_.physical_device;
-    allocatorCreateInfo.device                 = vkb_device_.device;
-    allocatorCreateInfo.instance               = vkb_instance_.instance;
+    allocatorCreateInfo.physicalDevice         = comm_vk_physical_device_;
+    allocatorCreateInfo.device                 = comm_vk_logical_device_;
+    allocatorCreateInfo.instance               = comm_vk_instance_;
 
-    if (!Logger::LogWithVkResult(vmaCreateAllocator(&allocatorCreateInfo, &vma_allocator_),
-                                 "Failed to create Vulkan vra and vma objects",
-                                 "Succeeded in creating Vulkan vra and vma objects"))
-        return false;
-
-    return true;
+    return Logger::LogWithVkResult(vmaCreateAllocator(&allocatorCreateInfo, &vma_allocator_),
+                                   "Failed to create Vulkan vra and vma objects",
+                                   "Succeeded in creating Vulkan vra and vma objects");
 }
 
 // 查找支持的深度格式
@@ -1122,7 +1056,7 @@ VkFormat VulkanEngine::FindSupportedDepthFormat()
     for (VkFormat format : candidates)
     {
         VkFormatProperties props;
-        vkGetPhysicalDeviceFormatProperties(vkb_physical_device_.physical_device, format, &props);
+        vkGetPhysicalDeviceFormatProperties(comm_vk_physical_device_, format, &props);
 
         // 检查该格式是否支持作为深度附件的最佳平铺格式
         if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
@@ -1144,8 +1078,8 @@ bool VulkanEngine::CreateDepthResources()
     VkImageCreateInfo image_info{};
     image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     image_info.imageType     = VK_IMAGE_TYPE_2D;
-    image_info.extent.width  = swapchain_config_.target_swap_extent_.width;
-    image_info.extent.height = swapchain_config_.target_swap_extent_.height;
+    image_info.extent.width  = comm_vk_swapchain_context_.swapchain_info_.extent_.width;
+    image_info.extent.height = comm_vk_swapchain_context_.swapchain_info_.extent_.height;
     image_info.extent.depth  = 1;
     image_info.mipLevels     = 1;
     image_info.arrayLayers   = 1;
@@ -1157,7 +1091,7 @@ bool VulkanEngine::CreateDepthResources()
     image_info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
 
     // 创建图像
-    if (vkCreateImage(vkb_device_.device, &image_info, nullptr, &depth_image_) != VK_SUCCESS)
+    if (vkCreateImage(comm_vk_logical_device_, &image_info, nullptr, &depth_image_) != VK_SUCCESS)
     {
         Logger::LogError("Failed to create depth image");
         return false;
@@ -1165,7 +1099,7 @@ bool VulkanEngine::CreateDepthResources()
 
     // 获取内存需求
     VkMemoryRequirements mem_requirements;
-    vkGetImageMemoryRequirements(vkb_device_.device, depth_image_, &mem_requirements);
+    vkGetImageMemoryRequirements(comm_vk_logical_device_, depth_image_, &mem_requirements);
 
     // 分配内存
     VkMemoryAllocateInfo alloc_info{};
@@ -1175,12 +1109,12 @@ bool VulkanEngine::CreateDepthResources()
     // 查找适合的内存类型
     uint32_t memory_type_index = 0;
     VkPhysicalDeviceMemoryProperties mem_properties;
-    vkGetPhysicalDeviceMemoryProperties(vkb_physical_device_.physical_device, &mem_properties);
+    vkGetPhysicalDeviceMemoryProperties(comm_vk_physical_device_, &mem_properties);
 
     for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++)
     {
         if ((mem_requirements.memoryTypeBits & (1 << i)) &&
-            (mem_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            ((mem_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0U))
         {
             memory_type_index = i;
             break;
@@ -1190,14 +1124,14 @@ bool VulkanEngine::CreateDepthResources()
     alloc_info.memoryTypeIndex = memory_type_index;
 
     // 分配内存
-    if (vkAllocateMemory(vkb_device_.device, &alloc_info, nullptr, &depth_memory_) != VK_SUCCESS)
+    if (vkAllocateMemory(comm_vk_logical_device_, &alloc_info, nullptr, &depth_memory_) != VK_SUCCESS)
     {
         Logger::LogError("Failed to allocate depth image memory");
         return false;
     }
 
     // 绑定内存到图像
-    if (vkBindImageMemory(vkb_device_.device, depth_image_, depth_memory_, 0) != VK_SUCCESS)
+    if (vkBindImageMemory(comm_vk_logical_device_, depth_image_, depth_memory_, 0) != VK_SUCCESS)
     {
         Logger::LogError("Failed to bind depth image memory");
         return false;
@@ -1215,7 +1149,7 @@ bool VulkanEngine::CreateDepthResources()
     view_info.subresourceRange.baseArrayLayer = 0;
     view_info.subresourceRange.layerCount     = 1;
 
-    if (vkCreateImageView(vkb_device_.device, &view_info, nullptr, &depth_image_view_) != VK_SUCCESS)
+    if (vkCreateImageView(comm_vk_logical_device_, &view_info, nullptr, &depth_image_view_) != VK_SUCCESS)
     {
         Logger::LogError("Failed to create depth image view");
         return false;
@@ -1233,13 +1167,12 @@ bool VulkanEngine::CreateFrameBuffer()
     }
 
     // 创建帧缓冲
-    auto swapchain_config      = &swapchain_config_;
-    auto swapchain_image_views = vkb_swapchain_.get_image_views().value();
-
     SVulkanFrameBufferConfig framebuffer_config(
-        swapchain_config->target_swap_extent_, swapchain_image_views, depth_image_view_);
+        comm_vk_swapchain_context_.swapchain_info_.extent_, 
+        comm_vk_swapchain_context_.swapchain_image_views_, 
+        depth_image_view_);
 
-    vkFrameBufferHelper_ = std::make_unique<VulkanFrameBufferHelper>(vkb_device_.device, framebuffer_config);
+    vkFrameBufferHelper_ = std::make_unique<VulkanFrameBufferHelper>(comm_vk_logical_device_, framebuffer_config);
 
     return vkFrameBufferHelper_->CreateFrameBuffer(vkRenderpassHelper_->GetRenderpass());
 }
@@ -1247,7 +1180,7 @@ bool VulkanEngine::CreateFrameBuffer()
 bool VulkanEngine::CreatePipeline()
 {
     // create shader
-    vkShaderHelper_ = std::make_unique<VulkanShaderHelper>(vkb_device_.device);
+    vkShaderHelper_ = std::make_unique<VulkanShaderHelper>(comm_vk_logical_device_);
 
     std::vector<SVulkanShaderConfig> configs;
     std::string shader_path = engine_config_.general_config.working_directory + "src\\shader\\";
@@ -1255,8 +1188,8 @@ bool VulkanEngine::CreatePipeline()
     // std::string fragment_shader_path = shader_path + "triangle.frag.spv";
     std::string vertex_shader_path   = shader_path + "gltf.vert.spv";
     std::string fragment_shader_path = shader_path + "gltf.frag.spv";
-    configs.push_back({EShaderType::kVertexShader, vertex_shader_path.c_str()});
-    configs.push_back({EShaderType::kFragmentShader, fragment_shader_path.c_str()});
+    configs.push_back({.shader_type = EShaderType::kVertexShader, .shader_path = vertex_shader_path.c_str()});
+    configs.push_back({.shader_type = EShaderType::kFragmentShader, .shader_path = fragment_shader_path.c_str()});
 
     for (const auto& config : configs)
     {
@@ -1267,7 +1200,7 @@ bool VulkanEngine::CreatePipeline()
             return false;
         }
 
-        if (!vkShaderHelper_->CreateShaderModule(vkb_device_.device, shader_code, config.shader_type))
+        if (!vkShaderHelper_->CreateShaderModule(comm_vk_logical_device_, shader_code, config.shader_type))
         {
             Logger::LogError("Failed to create shader module for " + std::string(config.shader_path));
             return false;
@@ -1275,19 +1208,19 @@ bool VulkanEngine::CreatePipeline()
     }
 
     // create renderpass
-    SVulkanRenderpassConfig renderpass_config;
-    renderpass_config.color_format = vkb_swapchain_.image_format;
+    SVulkanRenderpassConfig renderpass_config{};
+    renderpass_config.color_format = comm_vk_swapchain_context_.swapchain_info_.surface_format_.format;
     renderpass_config.depth_format = VK_FORMAT_D32_SFLOAT;  // TODO: Make configurable
     renderpass_config.sample_count = VK_SAMPLE_COUNT_1_BIT; // TODO: Make configurable
     vkRenderpassHelper_            = std::make_unique<VulkanRenderpassHelper>(renderpass_config);
-    if (!vkRenderpassHelper_->CreateRenderpass(vkb_device_.device))
+    if (!vkRenderpassHelper_->CreateRenderpass(comm_vk_logical_device_))
     {
         return false;
     }
 
     // create pipeline
     SVulkanPipelineConfig pipeline_config;
-    pipeline_config.swap_chain_config = &swapchain_config_;
+    pipeline_config.swap_chain_extent = comm_vk_swapchain_context_.swapchain_info_.extent_;
     pipeline_config.shader_module_map = {
         {EShaderType::kVertexShader, vkShaderHelper_->GetShaderModule(EShaderType::kVertexShader)},
         {EShaderType::kFragmentShader, vkShaderHelper_->GetShaderModule(EShaderType::kFragmentShader)}};
@@ -1300,15 +1233,16 @@ bool VulkanEngine::CreatePipeline()
     pipeline_config.vertex_input_attribute_descriptions = test_vertex_input_attributes_;
     pipeline_config.descriptor_set_layouts.push_back(descriptor_set_layout_);
     vkPipelineHelper_ = std::make_unique<VulkanPipelineHelper>(pipeline_config);
-    return vkPipelineHelper_->CreatePipeline(vkb_device_.device);
+    return vkPipelineHelper_->CreatePipeline(comm_vk_logical_device_);
 }
 
 bool VulkanEngine::AllocatePerFrameCommandBuffer()
 {
     for (int i = 0; i < engine_config_.frame_count; ++i)
     {
-        if (!vkCommandBufferHelper_->AllocateCommandBuffer({VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1},
-                                                           output_frames_[i].command_buffer_id))
+        if (!vkCommandBufferHelper_->AllocateCommandBuffer(
+                {.command_buffer_level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .command_buffer_count = 1},
+                output_frames_[i].command_buffer_id))
         {
             Logger::LogError("Failed to allocate command buffer for frame " + std::to_string(i));
             return false;
@@ -1319,7 +1253,7 @@ bool VulkanEngine::AllocatePerFrameCommandBuffer()
 
 bool VulkanEngine::CreateSynchronizationObjects()
 {
-    vkSynchronizationHelper_ = std::make_unique<VulkanSynchronizationHelper>(vkb_device_.device);
+    vkSynchronizationHelper_ = std::make_unique<VulkanSynchronizationHelper>(comm_vk_logical_device_);
     // create synchronization objects
     for (int i = 0; i < engine_config_.frame_count; ++i)
     {
@@ -1356,9 +1290,9 @@ void VulkanEngine::DrawFrame()
     auto* in_flight_fence           = vkSynchronizationHelper_->GetFence(current_fence_id);
 
     // acquire next image
-    uint32_t image_index;
-    VkResult acquire_result = vkAcquireNextImageKHR(vkb_device_.device,
-                                                    vkb_swapchain_.swapchain,
+    uint32_t image_index    = 0;
+    VkResult acquire_result = vkAcquireNextImageKHR(comm_vk_logical_device_,
+                                                    comm_vk_swapchain_,
                                                     UINT64_MAX,
                                                     image_available_semaphore,
                                                     VK_NULL_HANDLE,
@@ -1408,7 +1342,7 @@ void VulkanEngine::DrawFrame()
     submit_info.signalSemaphoreInfoCount = 1;
     submit_info.pSignalSemaphoreInfos    = &signal_semaphore_info;
     if (!Logger::LogWithVkResult(
-            vkQueueSubmit2(vkb_device_.get_queue(vkb::QueueType::graphics).value(), 1, &submit_info, in_flight_fence),
+            vkQueueSubmit2(comm_vk_graphics_queue_, 1, &submit_info, in_flight_fence),
             "Failed to submit command buffer",
             "Succeeded in submitting command buffer"))
     {
@@ -1418,7 +1352,7 @@ void VulkanEngine::DrawFrame()
     // present the image
     SVulkanQueuePresentConfig present_config;
     present_config.queue_id = current_queue_id;
-    present_config.swapchains.push_back(vkb_swapchain_.swapchain);
+    present_config.swapchains.push_back(comm_vk_swapchain_);
     present_config.image_indices.push_back(image_index);
     present_config.wait_semaphores.push_back(render_finished_semaphore);
 
@@ -1427,9 +1361,9 @@ void VulkanEngine::DrawFrame()
     present_info.waitSemaphoreCount = 1;
     present_info.pWaitSemaphores    = &render_finished_semaphore;
     present_info.swapchainCount     = 1;
-    present_info.pSwapchains        = &vkb_swapchain_.swapchain;
+    present_info.pSwapchains        = &comm_vk_swapchain_;
     present_info.pImageIndices      = &image_index;
-    VkResult present_result = vkQueuePresentKHR(vkb_device_.get_queue(vkb::QueueType::graphics).value(), &present_info);
+    VkResult present_result = vkQueuePresentKHR(comm_vk_graphics_queue_, &present_info);
     if (present_result == VK_ERROR_OUT_OF_DATE_KHR || present_result == VK_SUBOPTIMAL_KHR)
     {
         resize_request_ = true;
@@ -1448,14 +1382,22 @@ void VulkanEngine::DrawFrame()
 void VulkanEngine::ResizeSwapChain()
 {
     // wait for the device to be idle
-    vkDeviceWaitIdle(vkb_device_.device);
+    vkDeviceWaitIdle(comm_vk_logical_device_);
 
     // destroy old vulkan objects
-    vkb::destroy_swapchain(vkb_swapchain_);
+    // vkb::destroy_swapchain(vkb_swapchain_);
+    
+    // Destroy image views first
+    for (auto *image_view : comm_vk_swapchain_context_.swapchain_image_views_)
+    {
+        vkDestroyImageView(comm_vk_logical_device_, image_view, nullptr);
+    }
+    // Note: Don't destroy swapchain images as they are owned by the swapchain
+    vkDestroySwapchainKHR(comm_vk_logical_device_, comm_vk_swapchain_, nullptr);
     vkFrameBufferHelper_.reset();
 
     // reset window size
-    auto current_extent                 = vkWindowHelper_->GetCurrentWindowExtent();
+    auto current_extent     = vkWindowHelper_->GetCurrentWindowExtent();
     engine_config_.window_config.width  = current_extent.width;
     engine_config_.window_config.height = current_extent.height;
 
@@ -1474,7 +1416,7 @@ void VulkanEngine::ResizeSwapChain()
     resize_request_ = false;
 }
 
-bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffer_id)
+bool VulkanEngine::RecordCommand(uint32_t image_index, const std::string& command_buffer_id)
 {
     // 更新当前帧的 Uniform Buffer
     UpdateUniformBuffer(image_index);
@@ -1485,8 +1427,7 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
         return false;
 
     // collect needed objects
-    auto command_buffer   = vkCommandBufferHelper_->GetCommandBuffer(command_buffer_id);
-    auto swapchain_config = &swapchain_config_;
+    auto command_buffer = vkCommandBufferHelper_->GetCommandBuffer(command_buffer_id);
 
     // 从暂存缓冲区复制到本地缓冲区
     VkBufferCopy buffer_copy_info{};
@@ -1514,21 +1455,21 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
 
     // begin renderpass
     VkClearValue clear_color     = {};
-    clear_color.color.float32[0] = 0.1f;
-    clear_color.color.float32[1] = 0.1f;
-    clear_color.color.float32[2] = 0.1f;
-    clear_color.color.float32[3] = 1.0f;
+    clear_color.color.float32[0] = 0.1F;
+    clear_color.color.float32[1] = 0.1F;
+    clear_color.color.float32[2] = 0.1F;
+    clear_color.color.float32[3] = 1.0F;
 
     VkClearValue clear_values[2];
-    clear_values[0].color        = {{0.1f, 0.1f, 0.1f, 1.0f}};
-    clear_values[1].depthStencil = {1.0f, 0}; // 设置深度清除值为1.0（远面）
+    clear_values[0].color        = {{0.1F, 0.1F, 0.1F, 1.0F}};
+    clear_values[1].depthStencil = {.depth = 1.0F, .stencil = 0}; // 设置深度清除值为1.0（远面）
 
     VkRenderPassBeginInfo renderpass_info{};
     renderpass_info.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderpass_info.renderPass        = vkRenderpassHelper_->GetRenderpass();
     renderpass_info.framebuffer       = (*vkFrameBufferHelper_->GetFramebuffers())[image_index];
-    renderpass_info.renderArea.offset = {0, 0};
-    renderpass_info.renderArea.extent = swapchain_config->target_swap_extent_;
+    renderpass_info.renderArea.offset = {.x = 0, .y = 0};
+    renderpass_info.renderArea.extent = comm_vk_swapchain_context_.swapchain_info_.extent_;
     renderpass_info.clearValueCount   = 2;
     renderpass_info.pClearValues      = clear_values;
 
@@ -1552,17 +1493,17 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
 
     // dynamic state update
     VkViewport viewport{};
-    viewport.x        = 0.0f;
-    viewport.y        = 0.0f;
-    viewport.width    = static_cast<float>(swapchain_config->target_swap_extent_.width);
-    viewport.height   = static_cast<float>(swapchain_config->target_swap_extent_.height);
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
+    viewport.x        = 0.0F;
+    viewport.y        = 0.0F;
+    viewport.width    = static_cast<float>(comm_vk_swapchain_context_.swapchain_info_.extent_.width);
+    viewport.height   = static_cast<float>(comm_vk_swapchain_context_.swapchain_info_.extent_.height);
+    viewport.minDepth = 0.0F;
+    viewport.maxDepth = 1.0F;
     vkCmdSetViewport(command_buffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = swapchain_config->target_swap_extent_;
+    scissor.offset = {.x=0, .y=0};
+    scissor.extent = comm_vk_swapchain_context_.swapchain_info_.extent_;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
     // 绑定顶点和索引缓冲区
@@ -1611,16 +1552,13 @@ bool VulkanEngine::RecordCommand(uint32_t image_index, std::string command_buffe
     vkCmdEndRenderPass(command_buffer);
 
     // end command recording
-    if (!vkCommandBufferHelper_->EndCommandBufferRecording(command_buffer_id))
-        return false;
-
-    return true;
+    return vkCommandBufferHelper_->EndCommandBufferRecording(command_buffer_id);
 }
 
 void VulkanEngine::UpdateUniformBuffer(uint32_t current_frame_index)
 {
     // update the model matrix (添加适当的缩放)
-    mvp_matrices_[current_frame_index].model = glm::mat4(1.0f);
+    mvp_matrices_[current_frame_index].model = glm::mat4(1.0F);
 
     // update the view matrix
     mvp_matrices_[current_frame_index].view = glm::lookAt(camera_.position,                 // camera position
@@ -1631,10 +1569,10 @@ void VulkanEngine::UpdateUniformBuffer(uint32_t current_frame_index)
     // update the projection matrix
     mvp_matrices_[current_frame_index].projection =
         glm::perspective(glm::radians(camera_.zoom), // FOV
-                         swapchain_config_.target_swap_extent_.width /
-                             (float)swapchain_config_.target_swap_extent_.height, // aspect ratio
-                         0.1f,                                                    // near plane
-                         1000.0f // 增加远平面距离，确保能看到远处的物体
+                         comm_vk_swapchain_context_.swapchain_info_.extent_.width /
+                             (float)comm_vk_swapchain_context_.swapchain_info_.extent_.height, // aspect ratio
+                         0.1F,                                                                 // near plane
+                         1000.0F // 增加远平面距离，确保能看到远处的物体
         );
 
     // reverse the Y-axis in Vulkan's NDC coordinate system
@@ -1968,7 +1906,5 @@ void VulkanEngine::ReleaseTestData()
 
 void VulkanEngine::release_common_templates_test_data()
 {
-    vkDestroySwapchainKHR(comm_vk_logical_device_, comm_vk_swapchain_, nullptr);
-    vkDestroyDevice(comm_vk_logical_device_, nullptr);
-    vkDestroyInstance(comm_vk_instance_, nullptr);
+    
 }

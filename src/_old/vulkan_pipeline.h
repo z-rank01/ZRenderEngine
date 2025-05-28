@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 #include <vector>
 #include <string>
 #include <map>
@@ -11,7 +12,7 @@
 
 struct SVulkanPipelineConfig
 {
-    const SVulkanSwapChainConfig* swap_chain_config;
+    VkExtent2D swap_chain_extent;
     std::map<EShaderType, VkShaderModule> shader_module_map;
     VkRenderPass renderpass;
     VkVertexInputBindingDescription vertex_input_binding_description;

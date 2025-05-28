@@ -34,17 +34,16 @@ bool VulkanPipelineHelper::CreatePipeline(VkDevice device)
 
     // viewport and scissor
     VkViewport viewport{};
-    auto swapchain_config = config_.swap_chain_config;
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)swapchain_config->target_swap_extent_.width;
-    viewport.height = (float)swapchain_config->target_swap_extent_.height;
+    viewport.width = (float)config_.swap_chain_extent.width;
+    viewport.height = (float)config_.swap_chain_extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = { 0, 0 };
-    scissor.extent = swapchain_config->target_swap_extent_;
+    scissor.extent = config_.swap_chain_extent;
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;

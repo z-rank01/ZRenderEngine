@@ -11,17 +11,6 @@ VulkanFrameBufferHelper::~VulkanFrameBufferHelper()
         }
         framebuffers_.clear();
     }
-
-    if (!config_.swapchain_image_views_.empty())
-    {
-        for (auto image_view : config_.swapchain_image_views_)
-        {
-            vkDestroyImageView(device_, image_view, nullptr);
-        }
-        config_.swapchain_image_views_.clear();
-    }
-
-    // 不再需要销毁深度图像和视图，这将由引擎类负责
 }
 
 bool VulkanFrameBufferHelper::CreateFrameBuffer(VkRenderPass renderpass)

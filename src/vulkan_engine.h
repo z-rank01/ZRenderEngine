@@ -168,12 +168,10 @@ private:
       mesh_index_offsets_;
 
   // vulkan bootstrap members
-  vkb::Instance vkb_instance_;
-  vkb::PhysicalDevice vkb_physical_device_;
-  vkb::Device vkb_device_;
-  vkb::Swapchain vkb_swapchain_;
-
-  SVulkanSwapChainConfig swapchain_config_;
+  // vkb::Instance vkb_instance_;
+  // vkb::PhysicalDevice vkb_physical_device_;
+  // vkb::Device vkb_device_;
+  // vkb::Swapchain vkb_swapchain_;
 
   // vra and vma members
   VmaAllocator vma_allocator_;
@@ -252,7 +250,7 @@ private:
   // --- Vulkan Draw Steps ---
   void DrawFrame();
   void ResizeSwapChain();
-  bool RecordCommand(uint32_t image_index, std::string command_buffer_id);
+  bool RecordCommand(uint32_t image_index, const std::string &command_buffer_id);
   void UpdateUniformBuffer(uint32_t current_frame_index);
   // -------------------------
 
