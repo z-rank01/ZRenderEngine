@@ -1210,12 +1210,6 @@ void VulkanSample::draw_frame()
     }
 
     // present the image
-    SVulkanQueuePresentConfig present_config;
-    present_config.queue_id = current_queue_id;
-    present_config.swapchains.push_back(comm_vk_swapchain_);
-    present_config.image_indices.push_back(image_index);
-    present_config.wait_semaphores.push_back(render_finished_semaphore);
-
     VkPresentInfoKHR present_info{};
     present_info.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present_info.waitSemaphoreCount = 1;

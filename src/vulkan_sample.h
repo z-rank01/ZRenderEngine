@@ -11,15 +11,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <memory>
 
-#include "_callable/callable.h"
 #include "_gltf/gltf_data.h"
-#include "_gltf/test.h"
 #include "_old/vulkan_commandbuffer.h"
-#include "_old/vulkan_device.h"
 #include "_old/vulkan_framebuffer.h"
-#include "_old/vulkan_instance.h"
 #include "_old/vulkan_pipeline.h"
-#include "_old/vulkan_queue.h"
 #include "_old/vulkan_renderpass.h"
 #include "_old/vulkan_shader.h"
 #include "_old/vulkan_synchronization.h"
@@ -27,7 +22,6 @@
 #include "_templates/common.h"
 #include "_vra/vra.h"
 #include "utility/config_reader.h"
-#include "utility/logger.h"
 
 enum class EWindowState : std::uint8_t
 {
