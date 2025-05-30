@@ -53,7 +53,7 @@
       "type": "promptString",
       "id": "executableName",
       "description": "Enter executable name (without .exe)",
-      "default": "VulkanEngine"
+      "default": "VulkanSample"
     },
     {
       "type": "pickString",

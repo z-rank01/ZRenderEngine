@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(VulkanEngine LANGUAGES CXX)
+project(VulkanSample LANGUAGES CXX)
 
 # 启用 C++23 标准
 set(CMAKE_CXX_STANDARD 20)
@@ -36,19 +36,19 @@ add_subdirectory(src/_templates)
 # 设置源文件
 set(SOURCES
     src/main.cpp
-    src/vulkan_engine.cpp
+    src/vulkan_sample.cpp
 )
 
 # 设置头文件
 set(HEADERS
-    src/vulkan_engine.h
+    src/vulkan_sample.h
 )
 
 # 添加可执行文件
-add_executable(VulkanEngine ${SOURCES} ${HEADERS})
+add_executable(VulkanSample ${SOURCES} ${HEADERS})
 
 # 链接库
-target_link_libraries(VulkanEngine
+target_link_libraries(VulkanSample
   PRIVATE
     Vulkan::Vulkan
     GPUOpen::VulkanMemoryAllocator
@@ -65,7 +65,7 @@ target_link_libraries(VulkanEngine
 )
 
 # 包含目录
-target_include_directories(VulkanEngine
+target_include_directories(VulkanSample
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/build/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/include
@@ -75,13 +75,13 @@ target_include_directories(VulkanEngine
 # 设置特定于编译器的警告选项
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Clang 可能的 ID 包括 "Clang", "AppleClang" 等
-    target_compile_options(VulkanEngine PRIVATE -Wall)
+    target_compile_options(VulkanSample PRIVATE -Wall)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(VulkanEngine PRIVATE /W4)
+    target_compile_options(VulkanSample PRIVATE /W4)
 endif()
 
 # 使用生成器表达式为 Debug 构建添加调试信息选项
-target_compile_options(VulkanEngine PRIVATE
+target_compile_options(VulkanSample PRIVATE
     $<$<CONFIG:Debug>:$<$<CXX_COMPILER_ID:GNU,Clang>:-g -O0>>
     $<$<CONFIG:Debug>:$<$<CXX_COMPILER_ID:MSVC>:/Zi /Od>>
     $<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang>:-O3>>

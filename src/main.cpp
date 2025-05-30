@@ -7,49 +7,25 @@
 #include "_gltf/gltf_parser.h"
 #include "utility/config_reader.h"
 #include "utility/logger.h"
-#include "vulkan_engine.h"
+#include "vulkan_sample.h"
 
 
 int main()
 {
     std::cout << "Hello, World!" << '\n';
-    std::cout << "This is a Vulkan Engine" << '\n';
+    std::cout << "This is a Vulkan Sample" << '\n';
 
     // read gltf file
+
     auto loader = gltf::GltfLoader();
     auto asset  = loader(R"(E:\Assets\Sponza\SponzaBase\NewSponza_Main_glTF_003.gltf)");
     // auto asset = loader("E:\\Assets\\Sponza\\SponzaCurtains\\NewSponza_Curtains_glTF.gltf");
 
     // parse gltf file
+
     gltf::GltfParser parser;
     auto mesh_list = parser(asset, gltf::RequestMeshList{});
-    // Get a mutable copy of draw_call_data_list to transform vertex positions
     auto draw_call_data_list = parser(asset, gltf::RequestDrawCallList{});
-
-    // Transform vertex positions using the draw call's transform matrix (functional expression)
-    // std::for_each(
-    //     mesh_list.begin(),
-    //     mesh_list.end(),
-    //     [](gltf::PerMeshData& mesh)
-    //     {
-    //         // 遍历每个 primitive
-    //         std::for_each(
-    //             mesh.primitives.begin(),
-    //             mesh.primitives.end(),
-    //             [&](gltf::PerDrawCallData& primitive)
-    //             {
-    //                 const glm::mat4& transform = primitive.transform;
-    //                 std::for_each(
-    //                     primitive.vertices.begin(),
-    //                     primitive.vertices.end(),
-    //                     [&](gltf::Vertex& vertex)
-    //                     {
-    //                         glm::vec4 transformed_position = transform * glm::vec4(vertex.position, 1.0f);
-    //                         vertex.position = glm::vec3(transformed_position) / transformed_position.w;
-    //                     });
-    //             });
-    //     });
-
     // Transform vertex positions using the draw call's transform matrix (functional expression)
     std::ranges::for_each(draw_call_data_list,
                           [](gltf::PerDrawCallData& primitive)
@@ -59,16 +35,18 @@ int main()
                                                     [&](gltf::Vertex& vertex)
                                                     {
                                                         glm::vec4 transformed_position =
-                                                            transform * glm::vec4(vertex.position, 1.0f);
+                                                            transform * glm::vec4(vertex.position, 1.0F);
                                                         vertex.position = glm::vec3(transformed_position);
                                                     });
                           });
 
     // collect all indices
+
     std::vector<uint32_t> indices;
     std::vector<gltf::Vertex> vertices;
 
     // reserve memory
+
     auto index_capacity  = std::accumulate(draw_call_data_list.begin(),
                                           draw_call_data_list.end(),
                                           0,
@@ -83,43 +61,15 @@ int main()
     vertices.reserve(vertex_capacity);
 
     // collect all indices and vertices
+
     for (const auto& draw_call_data : draw_call_data_list)
     {
         indices.insert(indices.end(), draw_call_data.indices.begin(), draw_call_data.indices.end());
         vertices.insert(vertices.end(), draw_call_data.vertices.begin(), draw_call_data.vertices.end());
     }
 
-    // // per material data
-    // std::unordered_set<uint32_t> material_indices;
-    // std::vector<std::vector<uint32_t>> indices_per_material;
-    // std::vector<std::vector<gltf::VertexInput>> vertices_per_material;
-
-    // // collect all indices of materials
-    // std::transform(draw_call_data_list.begin(), draw_call_data_list.end(),
-    //               std::inserter(material_indices, material_indices.begin()),
-    //               [](const auto &draw_call_data) { return draw_call_data.material_index; });
-
-    // // generate per material data
-    // indices_per_material.resize(material_indices.size());
-    // vertices_per_material.resize(material_indices.size());
-    // gltf::DrawCalls2Indices draw_calls2indices;
-    // gltf::DrawCalls2Vertices draw_calls2vertices;
-    // std::for_each(material_indices.begin(), material_indices.end(), [&](const auto &material_index)
-    // {
-    //     // filter draw call data by material index
-    //     std::vector<gltf::PerDrawCallData> draw_call_data_per_material;
-    //     std::copy_if(draw_call_data_list.begin(), draw_call_data_list.end(),
-    //     std::back_inserter(draw_call_data_per_material), [&](const auto &draw_call_data)
-    //     {
-    //         return draw_call_data.material_index == material_index;
-    //     });
-
-    //     // generate indices and vertices of current material
-    //     indices_per_material[material_index] = draw_calls2indices(draw_call_data_per_material);
-    //     vertices_per_material[material_index] = draw_calls2vertices(draw_call_data_per_material);
-    // });
-
     // window config
+
     SWindowConfig window_config;
     const auto window_width  = 800;
     const auto window_height = 600;
@@ -130,6 +80,7 @@ int main()
     window_config.title  = window_name;
 
     // general config
+
     ConfigReader config_reader(R"(E:\Projects\ZRenderGraph\config\win64\app_config.json)");
     SGeneralConfig general_config;
     if (!config_reader.TryParseGeneralConfig(general_config))
@@ -139,6 +90,7 @@ int main()
     }
 
     // engine config
+
     SEngineConfig config;
     config.window_config         = window_config;
     config.general_config        = general_config;
@@ -146,11 +98,12 @@ int main()
     config.use_validation_layers = true;
 
     // main loop
-    VulkanEngine engine(config);
-    engine.GetVertexIndexData(draw_call_data_list, indices, vertices);
-    engine.GetMeshList(mesh_list);
-    engine.Initialize();
-    engine.Run();
+
+    VulkanSample sample(config);
+    sample.GetVertexIndexData(draw_call_data_list, indices, vertices);
+    sample.GetMeshList(mesh_list);
+    sample.Initialize();
+    sample.Run();
 
     std::cout << "Goodbye" << '\n';
 
