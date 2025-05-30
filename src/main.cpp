@@ -71,17 +71,17 @@ int main()
     // window config
 
     SWindowConfig window_config;
-    const auto window_width  = 800;
-    const auto window_height = 600;
+    const auto kWindowWidth  = 800;
+    const auto kWindowHeight = 600;
     const auto* window_name  = "Vulkan Engine";
 
-    window_config.width  = window_width;
-    window_config.height = window_height;
+    window_config.width  = kWindowWidth;
+    window_config.height = kWindowHeight;
     window_config.title  = window_name;
 
     // general config
 
-    ConfigReader config_reader(R"(E:\Projects\ZRenderGraph\config\win64\app_config.json)");
+    ConfigReader config_reader(R"(E:\Projects\ZRenderEngine\config\win64\app_config.json)");
     SGeneralConfig general_config;
     if (!config_reader.TryParseGeneralConfig(general_config))
     {

@@ -1,5 +1,6 @@
 #include "vulkan_sample.h"
 
+#include <cmath>
 #include <vulkan/vulkan_core.h>
 
 #include <algorithm>
@@ -12,7 +13,7 @@
 
 using namespace templates;
 
-VulkanSample* instance = nullptr;
+static VulkanSample* instance = nullptr;
 
 VulkanSample& VulkanSample::GetInstance()
 {
@@ -141,7 +142,7 @@ void VulkanSample::initialize_sdl()
 {
     vk_window_helper_ = std::make_unique<VulkanSDLWindowHelper>();
     if (!vk_window_helper_->GetWindowBuilder()
-             .SetWindowName(engine_config_.window_config.title.c_str())
+             .SetWindowName(engine_config_.window_config.title)
              .SetWindowSize(engine_config_.window_config.width, engine_config_.window_config.height)
              .SetWindowFlags(SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN)
              .SetInitFlags(SDL_INIT_VIDEO | SDL_INIT_EVENTS)
@@ -229,7 +230,7 @@ void VulkanSample::initialize_camera()
 {
     // initialize mvp matrices
     mvp_matrices_ =
-        std::vector<SMvpMatrix>(engine_config_.frame_count, {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f)});
+        std::vector<SMvpMatrix>(engine_config_.frame_count, {.model=glm::mat4(1.0F), .view=glm::mat4(1.0F), .projection=glm::mat4(1.0F)});
 
     // initialize camera
     camera_.position          = glm::vec3(0.0F, 0.0F, 10.0F); // 更远的初始距离
@@ -303,8 +304,8 @@ void VulkanSample::Run()
         if (render_state_ == ERenderState::kFalse)
         {
             // throttle the speed to avoid the endless spinning
-            constexpr auto sleep_duration_ms = 100;
-            std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration_ms));
+            constexpr auto kSleepDurationMs = 100;
+            std::this_thread::sleep_for(std::chrono::milliseconds(kSleepDurationMs));
             continue;
         }
 
@@ -346,7 +347,8 @@ void VulkanSample::process_input(SDL_Event& event)
     // mouse button down event
     if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
-        float mouse_x, mouse_y;
+        float mouse_x = NAN;
+        float mouse_y = NAN;
         SDL_GetMouseState(&mouse_x, &mouse_y);
         last_x_ = mouse_x;
         last_y_ = mouse_y;
@@ -388,8 +390,8 @@ void VulkanSample::process_input(SDL_Event& event)
             return; // Do nothing if no camera control mode is active
         }
 
-        float x_pos    = static_cast<float>(event.motion.x);
-        float y_pos    = static_cast<float>(event.motion.y);
+        float x_pos    = event.motion.x;
+        float y_pos    = event.motion.y;
         float x_offset = x_pos - last_x_;
         float y_offset = last_y_ - y_pos; // Invert y-offset as screen y increases downwards
         last_x_        = x_pos;
@@ -469,7 +471,7 @@ void VulkanSample::process_input(SDL_Event& event)
             camera_.position *= (1.0F + zoom_factor);
         }
 
-        process_mouse_scroll(static_cast<float>(event.wheel.y));
+        process_mouse_scroll(event.wheel.y);
     }
 }
 
@@ -892,14 +894,14 @@ bool VulkanSample::create_vma_vra_objects()
     // vra and vma members
     vra_data_batcher_ = std::make_unique<vra::VraDataBatcher>(comm_vk_physical_device_);
 
-    VmaAllocatorCreateInfo allocatorCreateInfo = {};
-    allocatorCreateInfo.flags                  = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
-    allocatorCreateInfo.vulkanApiVersion       = VK_API_VERSION_1_3;
-    allocatorCreateInfo.physicalDevice         = comm_vk_physical_device_;
-    allocatorCreateInfo.device                 = comm_vk_logical_device_;
-    allocatorCreateInfo.instance               = comm_vk_instance_;
+    VmaAllocatorCreateInfo allocator_create_info = {};
+    allocator_create_info.flags                  = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+    allocator_create_info.vulkanApiVersion       = VK_API_VERSION_1_3;
+    allocator_create_info.physicalDevice         = comm_vk_physical_device_;
+    allocator_create_info.device                 = comm_vk_logical_device_;
+    allocator_create_info.instance               = comm_vk_instance_;
 
-    return Logger::LogWithVkResult(vmaCreateAllocator(&allocatorCreateInfo, &vma_allocator_),
+    return Logger::LogWithVkResult(vmaCreateAllocator(&allocator_create_info, &vma_allocator_),
                                    "Failed to create Vulkan vra and vma objects",
                                    "Succeeded in creating Vulkan vra and vma objects");
 }
@@ -917,7 +919,7 @@ VkFormat VulkanSample::find_supported_depth_format()
         vkGetPhysicalDeviceFormatProperties(comm_vk_physical_device_, format, &props);
 
         // 检查该格式是否支持作为深度附件的最佳平铺格式
-        if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+        if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0U)
         {
             return format;
         }
@@ -971,7 +973,7 @@ bool VulkanSample::create_depth_resources()
 
     for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++)
     {
-        if ((mem_requirements.memoryTypeBits & (1 << i)) &&
+        if (((mem_requirements.memoryTypeBits & (1 << i)) != 0U) &&
             ((mem_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0U))
         {
             memory_type_index = i;
@@ -1160,7 +1162,7 @@ void VulkanSample::draw_frame()
         resize_request_ = true;
         return;
     }
-    else if (acquire_result != VK_SUCCESS)
+    if (acquire_result != VK_SUCCESS)
     {
         Logger::LogWithVkResult(acquire_result, "Failed to acquire next image", "Succeeded in acquiring next image");
         return;
@@ -1227,7 +1229,7 @@ void VulkanSample::draw_frame()
         resize_request_ = true;
         return;
     }
-    else if (present_result != VK_SUCCESS)
+    if (present_result != VK_SUCCESS)
     {
         Logger::LogWithVkResult(present_result, "Failed to present image", "Succeeded in presenting image");
         return;
@@ -1283,7 +1285,7 @@ bool VulkanSample::record_command(uint32_t image_index, const std::string& comma
         return false;
 
     // collect needed objects
-    auto command_buffer = vk_command_buffer_helper_->GetCommandBuffer(command_buffer_id);
+    auto *command_buffer = vk_command_buffer_helper_->GetCommandBuffer(command_buffer_id);
 
     // 从暂存缓冲区复制到本地缓冲区
     VkBufferCopy buffer_copy_info{};
@@ -1337,7 +1339,7 @@ bool VulkanSample::record_command(uint32_t image_index, const std::string& comma
     // bind descriptor set
     auto offset =
         uniform_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Frequently].offsets[uniform_buffer_id_[frame_index_]];
-    uint32_t dynamic_offset = static_cast<uint32_t>(offset);
+    auto dynamic_offset = static_cast<uint32_t>(offset);
     vkCmdBindDescriptorSets(command_buffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             vk_pipeline_helper_->GetPipelineLayout(),
@@ -1415,8 +1417,8 @@ void VulkanSample::update_uniform_buffer(uint32_t current_frame_index)
     // update the projection matrix
     mvp_matrices_[current_frame_index].projection =
         glm::perspective(glm::radians(camera_.zoom), // FOV
-                         comm_vk_swapchain_context_.swapchain_info_.extent_.width /
-                             (float)comm_vk_swapchain_context_.swapchain_info_.extent_.height, // aspect ratio
+                         static_cast<float>(comm_vk_swapchain_context_.swapchain_info_.extent_.width) /
+                             static_cast<float>(comm_vk_swapchain_context_.swapchain_info_.extent_.height), // aspect ratio
                          0.1F,                                                                 // near plane
                          1000.0F // 增加远平面距离，确保能看到远处的物体
         );
@@ -1545,7 +1547,7 @@ void VulkanSample::create_drawcall_list_buffer()
 
     // 复制数据到暂存缓冲区
     auto consolidate_data = test_local_host_batch_handle_[vra::VraBuiltInBatchIds::CPU_GPU_Rarely].consolidated_data;
-    void* data;
+    void* data = nullptr;
     vmaInvalidateAllocation(vma_allocator_, test_staging_buffer_allocation_, 0, VK_WHOLE_SIZE);
     vmaMapMemory(vma_allocator_, test_staging_buffer_allocation_, &data);
     memcpy(data, consolidate_data.data(), consolidate_data.size());
